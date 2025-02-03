@@ -1,0 +1,142 @@
+[
+  {
+    "objectID": "price.html",
+    "href": "price.html",
+    "title": "Token price API",
+    "section": "",
+    "text": "source\n\nPrice\n\n Price (token:sugar.token.Token, price:float)\n\n*Data class for Token Price\nbased on: https://github.com/velodrome-finance/oracle/blob/main/contracts/VeloOracle.sol*",
+    "crumbs": [
+      "Token price API"
+    ]
+  },
+  {
+    "objectID": "helpers.html",
+    "href": "helpers.html",
+    "title": "Assorted helpers",
+    "section": "",
+    "text": "source\n\namount_to_m_string\n\n amount_to_m_string (amount:float)\n\nTurns 2000000 to “2M”\n\nsource\n\n\nformat_percentage\n\n format_percentage (value:float)\n\n\nsource\n\n\nformat_currency\n\n format_currency (value:float, symbol:str='$', prefix:bool=True)\n\n\nsource\n\n\namount_to_k_string\n\n amount_to_k_string (amount:float)\n\nTurns 2000 to “2K”\n\nsource\n\n\nchunk\n\n chunk (list_to_chunk:List, n:int)\n\n\nsource\n\n\nnormalize_address\n\n normalize_address (address:str)\n\n\nsource\n\n\nfloat_to_uint256\n\n float_to_uint256 (amount:float, decimals:int=18)\n\nConvert float to uint256 with decimal scaling\n\nfloat_to_uint256(1.0, 18)\n\n1000000000000000000\n\n\n\nsource\n\n\nget_future_timestamp\n\n get_future_timestamp (deadline_minutes:float)\n\nConvert minutes from now to future unix timestamp\n\nget_future_timestamp(5)\n\n1738580567\n\n\n\nsource\n\n\napply_slippage\n\n apply_slippage (amount:int, slippage:float)",
+    "crumbs": [
+      "Assorted helpers"
+    ]
+  },
+  {
+    "objectID": "abi.html#router-abi",
+    "href": "abi.html#router-abi",
+    "title": "ABI definitions",
+    "section": "Router ABI",
+    "text": "Router ABI",
+    "crumbs": [
+      "ABI definitions"
+    ]
+  },
+  {
+    "objectID": "config.html",
+    "href": "config.html",
+    "title": "Configure Sugar",
+    "section": "",
+    "text": "source\n\n\n\n SugarConfig (rpc_uri:str, sugar_pk:Optional[str],\n              sugar_contract_addr:str, price_oracle_contract_addr:str,\n              router_contract_addr:str, token_addr:str,\n              stable_token_addr:str, connector_tokens_addrs:List[str],\n              price_batch_size:int, price_threshold_filter:int,\n              protocol_name:Literal['velo','aero'], pagination_limit:int,\n              pool_page_size:int,\n              account:Optional[eth_account.account.Account],\n              web3:web3.main.AsyncWeb3,\n              sugar:web3.contract.async_contract.AsyncContract,\n              router:web3.contract.async_contract.AsyncContract)",
+    "crumbs": [
+      "Configure Sugar"
+    ]
+  },
+  {
+    "objectID": "config.html#default-settings",
+    "href": "config.html#default-settings",
+    "title": "Configure Sugar",
+    "section": "",
+    "text": "source\n\n\n\n SugarConfig (rpc_uri:str, sugar_pk:Optional[str],\n              sugar_contract_addr:str, price_oracle_contract_addr:str,\n              router_contract_addr:str, token_addr:str,\n              stable_token_addr:str, connector_tokens_addrs:List[str],\n              price_batch_size:int, price_threshold_filter:int,\n              protocol_name:Literal['velo','aero'], pagination_limit:int,\n              pool_page_size:int,\n              account:Optional[eth_account.account.Account],\n              web3:web3.main.AsyncWeb3,\n              sugar:web3.contract.async_contract.AsyncContract,\n              router:web3.contract.async_contract.AsyncContract)",
+    "crumbs": [
+      "Configure Sugar"
+    ]
+  },
+  {
+    "objectID": "pool.html",
+    "href": "pool.html",
+    "title": "Liquidity pools",
+    "section": "",
+    "text": "source\n\nPrice\n\n Price (token:sugar.token.Token, price:float)\n\n*Data class for Token Price\nbased on: https://github.com/velodrome-finance/oracle/blob/main/contracts/VeloOracle.sol*\n\nsource\n\n\nAmount\n\n Amount (token:sugar.token.Token, amount:float, price:__main__.Price)\n\n\nsource\n\n\nLiquidityPool\n\n LiquidityPool (lp:str, factory:str, symbol:str, is_stable:bool,\n                total_supply:float, decimals:int,\n                token0:sugar.token.Token, reserve0:__main__.Amount,\n                token1:sugar.token.Token, reserve1:__main__.Amount,\n                token0_fees:__main__.Amount, token1_fees:__main__.Amount,\n                pool_fee:float, gauge_total_supply:float,\n                emissions:__main__.Amount,\n                emissions_token:sugar.token.Token,\n                weekly_emissions:__main__.Amount, nfpm:str, alm:str)\n\n*Data class for Liquidity Pool\nbased on: https://github.com/velodrome-finance/sugar/blob/v2/contracts/LpSugar.vy#L31*\n\nsource\n\n\nLiquidityPoolEpoch\n\n LiquidityPoolEpoch (pool_address:str, bribes:List[__main__.Amount],\n                     fees:List[__main__.Amount])\n\n*Data class for Liquidity Pool\nbased on: https://github.com/velodrome-finance/sugar/blob/v2/contracts/LpSugar.vy#L69*",
+    "crumbs": [
+      "Liquidity pools"
+    ]
+  },
+  {
+    "objectID": "deposit.html",
+    "href": "deposit.html",
+    "title": "Deposits",
+    "section": "",
+    "text": "source\n\nDeposit\n\n Deposit (pool:sugar.pool.LiquidityPool, amount_token0:float)\n\nData class for Deposits",
+    "crumbs": [
+      "Deposits"
+    ]
+  },
+  {
+    "objectID": "token.html",
+    "href": "token.html",
+    "title": "Token API",
+    "section": "",
+    "text": "source",
+    "crumbs": [
+      "Token API"
+    ]
+  },
+  {
+    "objectID": "token.html#tests",
+    "href": "token.html#tests",
+    "title": "Token API",
+    "section": "Tests",
+    "text": "Tests\n\nfrom fastcore.test import test_eq\n\ntokens = await Token.get_all_tokens()\n\ntest_eq(len(tokens) &gt; 0, True)",
+    "crumbs": [
+      "Token API"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Sugar SDK",
+    "section": "",
+    "text": "pip install git+https://github.com/velodrome-finance/sugar-sdk\nTODO: push to pypi\n\n# load env\nfrom dotenv import load_dotenv\nload_dotenv()\n\nTrue",
+    "crumbs": [
+      "Sugar SDK"
+    ]
+  },
+  {
+    "objectID": "index.html#using-sugar",
+    "href": "index.html#using-sugar",
+    "title": "Sugar SDK",
+    "section": "",
+    "text": "pip install git+https://github.com/velodrome-finance/sugar-sdk\nTODO: push to pypi\n\n# load env\nfrom dotenv import load_dotenv\nload_dotenv()\n\nTrue",
+    "crumbs": [
+      "Sugar SDK"
+    ]
+  },
+  {
+    "objectID": "index.html#aero-quickstart",
+    "href": "index.html#aero-quickstart",
+    "title": "Sugar SDK",
+    "section": "Aero quickstart",
+    "text": "Aero quickstart\n\nfrom sugar.token import Token\nfrom sugar.price import Price\nfrom sugar.config import SugarConfig\n\nSugarConfig.aero()\n\n# listing first 5 tokens for brevity\n\n(await Token.get_all_tokens())[:5]\n\n# let's grab aero token and figure out what it's worth\n\naero = [t for t in await Token.get_all_listed_tokens() if t.symbol == 'AERO']\nawait Price.get_prices(aero)\n\n[Price(token=Token(token_address='0x940181a94A35A4569E4529A3CDfB74e38FD98631', symbol='AERO', decimals=18, listed=True), price=0.0)]",
+    "crumbs": [
+      "Sugar SDK"
+    ]
+  },
+  {
+    "objectID": "index.html#deposits",
+    "href": "index.html#deposits",
+    "title": "Sugar SDK",
+    "section": "Deposits",
+    "text": "Deposits\nIn order to deposit, make sure spender’s account’s private key is provided via SUGAR_PK env var. Here’s how you can deposit vAMM-USDC/AERO\n\nfrom sugar.config import SugarConfig\nfrom sugar.pool import LiquidityPool\n\nSugarConfig.aero()\n\npools = list(filter(lambda x: \"vAMM-USDC\" in x.symbol and \"AERO\" in x.symbol, await LiquidityPool.get_pools()))\n\n# 0.02 USDC \ndeposit = Deposit(pools[0], 0.02)\nawait deposit.deposit()\n\nConfiguration\nSugar configuration is available through sugar.config module. Here’s what default config looks like\n\nfrom sugar.config import  SugarConfig\n\nSugarConfig.get_config()\n\nSugarConfig(rpc_uri='https://optimism-mainnet.wallet.coinbase.com', sugar_contract_addr='0x3B919747B46B13CFfd9f16629cFf951C0b7ea1e2', price_oracle_contract_addr='0x59114D308C6DE4A84F5F8cD80485a5481047b99f', token_addr='0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', stable_token_addr='0x7F5c764cBc14f9669B88837ca1490cCa17c31607', connector_tokens_addrs=['0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', '0x4200000000000000000000000000000000000042', '0x4200000000000000000000000000000000000006', '0x9Bcef72be871e61ED4fBbc7630889beE758eb81D', '0x2E3D870790dC77A83DD1d18184Acc7439A53f475', '0x8c6f28f2F1A3C87F0f938b96d27520d9751ec8d9', '0x1F32b1c2345538c0c6f582fCB022739c4A194Ebb', '0xbfD291DA8A403DAAF7e5E9DC1ec0aCEaCd4848B9', '0xc3864f98f2a61A7cAeb95b039D031b4E2f55e0e9', '0x9485aca5bbBE1667AD97c7fE7C4531a624C8b1ED', '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1', '0x73cb180bf0521828d8849bc8CF2B920918e23032', '0x6806411765Af15Bddd26f8f544A34cC40cb9838B', '0x6c2f7b6110a37b3B0fbdd811876be368df02E8B0', '0xc5b001DC33727F8F26880B184090D3E252470D45', '0x6c84a8f1c29108F47a79964b5Fe888D4f4D0dE40', '0xc40F949F8a4e094D1b49a23ea9241D289B7b2819', '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58', '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85'], protocol_name='velo', price_batch_size=40, pagination_limit=2000, web3=&lt;web3.main.AsyncWeb3 object&gt;)\n\n\nSugar can be configured using env variables:\n\n\n\n\n\n\n\n\nconfig\nenv\ndefault value\n\n\n\n\nrpc_uri\nSUGAR_RPC_URI\nhttps://optimism-mainnet.wallet.coinbase.com\n\n\nsugar_contract_addr\nSUGAR_CONTRACT_ADDR\n0x3B919747B46B13CFfd9f16629cFf951C0b7ea1e2\n\n\nprice_oracle_contract_addr\nSUGAR_PRICE_ORACLE_ADDR\n0xcA97e5653d775cA689BED5D0B4164b7656677011\n\n\ntoken_addr\nSUGAR_TOKEN_ADDR\n0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db\n\n\nstable_token_addr\nSUGAR_STABLE_TOKEN_ADDR\n0x7F5c764cBc14f9669B88837ca1490cCa17c31607\n\n\nconnector_tokens_addrs\nSUGAR_CONNECTOR_TOKENS_ADDRS\n0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db,0x4200000000000000000000000000000000000042,0x4200000000000000000000000000000000000006,0x9bcef72be871e61ed4fbbc7630889bee758eb81d,0x2e3d870790dc77a83dd1d18184acc7439a53f475,0x8c6f28f2f1a3c87f0f938b96d27520d9751ec8d9,0x1f32b1c2345538c0c6f582fcb022739c4a194ebb,0xbfd291da8a403daaf7e5e9dc1ec0aceacd4848b9,0xc3864f98f2a61a7caeb95b039d031b4e2f55e0e9,0x9485aca5bbbe1667ad97c7fe7c4531a624c8b1ed,0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1,0x73cb180bf0521828d8849bc8cf2b920918e23032,0x6806411765af15bddd26f8f544a34cc40cb9838b,0x6c2f7b6110a37b3b0fbdd811876be368df02e8b0,0xc5b001dc33727f8f26880b184090d3e252470d45,0x6c84a8f1c29108f47a79964b5fe888d4f4d0de40,0xc40f949f8a4e094d1b49a23ea9241d289b7b2819,0x94b008aa00579c1307b0ef2c499ad98a8ce58e58,0x0b2c639c533813f4aa9d7837caf62653d097ff85\n\n\nprice_batch_size\nSUGAR_PRICE_BATCH_SIZE\n40\n\n\nprotocol_name\nSUGAR_PROTOCOL_NAME\nvelo\n\n\npagination_limit\nSUGAR_PAGINATION_LIMIT\n2000",
+    "crumbs": [
+      "Sugar SDK"
+    ]
+  },
+  {
+    "objectID": "index.html#contributing-to-sugar",
+    "href": "index.html#contributing-to-sugar",
+    "title": "Sugar SDK",
+    "section": "Contributing to Sugar",
+    "text": "Contributing to Sugar\n\nSet up and acivate python virtual env\npython3 -m venv env\nsource env/bin/activate\n\n\nInstall dependencies\npip install nbdev pre-commit\npip install -e '.[dev]'\n\n\nInstall pre-commit hooks for nbdev prep and cleanup\npre-commit install",
+    "crumbs": [
+      "Sugar SDK"
+    ]
+  }
+]
