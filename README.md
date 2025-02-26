@@ -22,322 +22,74 @@ load_dotenv()
 ## Base quickstart
 
 ``` python
-from sugar.chains import BaseChain
+from sugar.chains import BaseChain, AsyncBaseChain
 
-async with BaseChain() as chain:
-    for p in await chain.get_prices(await chain.get_all_tokens()):
+# async version
+async with AsyncBaseChain() as chain:
+    prices = await chain.get_prices(await chain.get_all_tokens())
+    for p in prices[:5]:
+        print(f"{p.token.symbol} price: {p.price}")
+
+# sync version
+with BaseChain() as chain:
+    for p in chain.get_prices(chain.get_all_tokens())[:5]:
         print(f"{p.token.symbol} price: {p.price}")
 ```
 
-    ETH price: 2642.5439209854894
-    tBTC price: 93712.3058171029
-    USDbC price: 0.9941934913695427
-    WETH price: 2642.5439209854894
-    T price: 0.019472750382423926
-    EXTRA price: 0.03749633194139506
-    DOLA price: 0.9865170025625905
-    MAI price: 0.9923312532613203
-    STG price: 0.24612561899100485
-    TAROT price: 0.12206291130500585
-    HOP price: 0.007459254864287236
-    DAI+ price: 1.0009606310549084
-    USD+ price: 0.9898456366764607
-    DEUS price: 13.147870289466908
-    DAI price: 0.9943053876852019
-    AERO price: 0.71751133376825
-    DOG price: 0.000361376080749583
-    cbETH price: 2885.4919828535762
-    wUSDR price: 0.25886059125811145
-    fBOMB price: 0.030851913724268584
-    WELL price: 0.031381848772017835
-    THALES price: 0.15217913086412932
-    EURA price: 1.0036982658358096
-    SONNE price: 0.00099386567882257
-    USX price: 0.9931518202914652
-    STAR price: 0.9955711055620619
-    USDC price: 1.0
-    axlUSDC price: 0.9981652543811879
-    OVN price: 1.5317906477144694
-    KRAV price: 0.003107739979947239
-    ZOOMER price: 1.1562717218065e-05
-    XEN price: 4.3742294890975e-05
-    JARVIS price: 0.033609951479604744
-    MST price: 0.002597696233733933
-    MTA price: 0.030557705545376956
-    eUSD price: 0.9931727853813714
-    hyUSD price: 1.0512043042025028
-    wstETH price: 3148.7036238312576
-    LUSD price: 0.9925172288235525
-    VELA price: 0.008434810064089932
-    SEAM price: 0.5404311509932458
-    SNX price: 0.9437289614208367
-    DEGEN price: 0.004257438164201887
-    TYBG price: 0.000103089008372766
-    NPC price: 0.009817818462237643
-    wBaseDOGE price: 2.81738852657e-07
-    TKN price: 0.009858337735243009
-    TOSHI price: 0.000601645131392151
-    BETS price: 0.000198160536200819
-    suUSD price: 0.9928899113275274
-    eMTRG price: 0.14650171674080076
-    MET price: 0.26210747149638464
-    DOG price: 0.001268931398070702
-    DHT price: 0.11983310629487302
-    rETH price: 2925.793550954146
-    WELS price: 0.005677785476017044
-    bsdETH price: 2692.1572058874663
-    L2VE price: 0.000243498057345795
-    BMX price: 3.8382212835204648
-    doginme price: 0.000448247103813148
-    FARM price: 31.880534351670008
-    HPC price: 0.00028094683808522
-    GROW price: 0.42876032286195176
-    KWENTA price: 10.575386875525867
-    VITA price: 1.6135538750363647
-    SPX price: 0.6590102671458132
-    BRETT price: 0.04341046388097168
-    wBLT price: 1.1529032347739212
-    MAVIA price: 0.26080960812800213
-    TOWER price: 0.000684824335810288
-    TN100x price: 0.00048589382057106
-    CHAD price: 2.8879738362074e-05
-    WELL price: 0.03156234378164914
-    ElonRWA price: 5.5683657661163e-05
-    RSR price: 0.008023103676653825
-    SEXY price: 0.03839168722522277
-    PRIME price: 4.9181384420890915
-    sFRAX price: 1.0562997644445657
-    FXS price: 1.662430800013316
-    sfrxETH price: 2930.8664907602706
-    QI price: 0.01676722551389748
-    Mog price: 7.14011905717e-07
-    VIRTUAL price: 1.0606387472759569
-    HIGHER price: 0.011341921956112323
-    LUCHA price: 0.020177781504963063
-    ANIME price: 0.000166986207662009
-    ezETH price: 2736.0771890055967
-    BITCOIN price: 0.08489426471288375
-    REGEN price: 0.000818508988368071
-    BENJI price: 0.02456636323468702
-    USDA price: 0.9948626932954379
-    POOL price: 0.5898773782170724
-    GENOME price: 0.009938911373298552
-    crvUSD price: 0.9906291609861864
-    PRE price: 0.006772621290325512
-    GHST price: 0.5186273130664434
-    NORMILIO price: 0.001389758223900522
-    GNUS price: 26.613300381122546
-    KLIMA price: 0.4336781514768971
-    WAI price: 0.1652377601081462
-    wrsETH price: 2740.0343202128856
-    PAL price: 0.1563940521123732
-    XCAD price: 0.09124756597050811
-    HLSp price: 0.7972939307546999
-    weETH price: 2796.4823652061405
-    SAM price: 0.005467962768943515
-    BET price: 0.010831819654061594
-    RSC price: 0.3207832000157042
-    rgUSD price: 0.9837960752883186
-    LBM price: 0.014049845341380046
-    pwBLT price: 1.1506786098070054
-    ATH price: 0.48894126255000026
-    XSWAP price: 0.0657998968944176
-    Bonk price: 1.4735133251295e-05
-    PEAS price: 3.816824875194439
-    stTAO price: 487.48435602476917
-    HBR price: 0.003719505628546975
-    zunUSD price: 0.8898292319437542
-    CRYO price: 0.7377997978857291
-    sUSDCy price: 1.0752948734591385
-    PSTAKE price: 0.02301451211834751
-    pHAM price: 10.618266410946005
-    SKI price: 0.06626765687064949
-    KEYCAT price: 0.002397858272683148
-    SPEC price: 2.227889026570065
-    USDz price: 0.98642043598404
-    weirdo price: 2.0526213040822e-05
-    APX price: 6.4416241040928e-05
-    RWAX price: 0.12784367257217522
-    OX price: 0.006105116700211861
-    BCT price: 0.1853030816149924
-    wXCH price: 12.881829897474944
-    OKAYEG price: 3.179931932866e-06
-    XPRT price: 0.11406565823611904
-    SKR price: 0.004547518320941262
-    CTX price: 2.709687236315219
-    msETH price: 2625.2288494035524
-    msUSD price: 0.9895000325699417
-    nARS price: 0.000817594142178327
-    CHEX price: 0.38531113201572775
-    OGN price: 0.07497333661078873
-    CHOMP price: 0.0610398778650204
-    RFL price: 0.1433990926073189
-    W price: 0.14640873916395916
-    jEUR price: 1.0427818598814937
-    ZRO price: 2.6846187182694616
-    EMT price: 0.016751549118432615
-    USDT price: 0.9944882897669453
-    FUSE price: 0.020607485645509724
-    ION price: 0.002142628137767428
-    ZUN price: 0.005388552866416683
-    BTCB price: 0.191130517099841
-    sUSDz price: 1.096652681352893
-    MOZ price: 0.00019977957583978
-    MIGGLES price: 0.05179826781074565
-    RDNT price: 0.030885760583383975
-    JOJO price: 0.13969151178781195
-    PDT price: 0.06330927901023153
-    MOXIE price: 0.003757002786829474
-    YFI price: 5751.151388877164
-    MOJO price: 0.007942912153490826
-    TIMI price: 0.000328244913413006
-    EURC price: 1.0419325787150784
-    IBTC price: 94279.19765962653
-    superOETHb price: 2642.545694058801
-    MODE price: 0.007179991988314545
-    COMP price: 53.238383021112156
-    uSOL price: 151.59088969538752
-    PEPE price: 5.5126285786e-08
-    POKT price: 0.01902818308439424
-    WIF price: 0.5997826140270488
-    zunETH price: 1972.3724866095672
-    RECORD price: 0.004742131193477115
-    PEGG price: 0.4491503544697074
-    uDOGE price: 0.22388286220429804
-    TRVL price: 0.013901948559486945
+    ETH price: 2493.730879871026
+    tBTC price: 89224.39116374683
+    USDbC price: 1.0017660536011292
+    WETH price: 2493.730879871026
+    T price: 0.017866263433246897
+    ETH price: 2493.740797040875
+    tBTC price: 89224.74599491524
+    USDbC price: 1.0017697172914204
+    WETH price: 2493.740797040875
+    T price: 0.01786632641861627
 
 ## OP quickstart
 
 ``` python
-from sugar.chains import OPChain
+from sugar.chains import AsyncOPChain, OPChain
 
-async with OPChain() as chain:
-    for p in await chain.get_prices(await chain.get_all_tokens()):
+async with AsyncOPChain() as chain:
+    prices = await chain.get_prices(await chain.get_all_tokens())
+    for p in prices[:5]:
+        print(f"{p.token.symbol} price: {p.price}")
+
+with OPChain() as chain:
+    for p in chain.get_prices(chain.get_all_tokens())[:5]:
         print(f"{p.token.symbol} price: {p.price}")
 ```
 
-    ETH price: 2718.8213341162477
-    VELO price: 0.07096807069579711
-    RED price: 0.12808874871537426
+    ETH price: 2553.3386872068204
+    VELO price: 0.06543596476209321
+    RED price: 0.12055408976396115
     USDC price: 1.0
-    WETH price: 2718.8213341162477
-    alETH price: 2579.1227049472914
-    frxETH price: 2719.642426738666
-    wstETH price: 3243.9539426381793
-    LDO price: 1.563479089940541
-    LUSD price: 1.019084244736765
-    DAI price: 1.0232427320876032
-    ERN price: 0.9814419955339708
-    MAI price: 0.17127290707260662
-    OP price: 1.0928723849543098
-    EURA price: 1.0686911807769686
-    alUSD price: 1.0066649022773604
-    FRAX price: 1.0223638504135173
-    USD+ price: 1.02541938324402
-    DOLA price: 1.0001579382640111
-    USDT price: 1.0219359351508746
-    KWENTA price: 13.744573904450663
-    SNX price: 0.9649528112999614
-    SONNE price: 0.001023737666942966
-    msETH price: 2697.521782950845
-    DF price: 0.07797100950685135
-    USX price: 1.0204750476321582
-    rETH price: 3059.662580052119
-    TAROT price: 0.014903021419678265
-    PERP price: 0.4469310170150097
-    jEUR price: 0.9546321311412093
-    DHT price: 0.11843834446420153
-    sfrxETH price: 3005.9232872248467
-    THALES price: 0.15613240840346626
-    STG price: 0.25833628668147623
-    HOP price: 0.007636303625985872
-    MTA price: 0.02573013602391162
-    BLU price: 0.000142458287375373
-    sUSD price: 1.007760942423077
-    sEUR price: 0.0
-    sETH price: 2590.978469357961
-    FOX price: 0.02710892828131045
-    OPP price: 0.000318705838038286
-    wOptiDoge price: 4.71847097859e-07
-    fBOMB price: 0.03179482696904703
-    JARVIS price: 0.07529348224850138
-    OpenX price: 0.031942971807064145
-    MET price: 0.2670214224876364
-    IB price: 0.37439281041449407
-    FXS price: 1.5432107376811721
-    opxVELO price: 0.06116349254497934
-    POOL price: 0.5978685751090821
-    WBTC price: 96576.69049987348
-    tBTC price: 96471.98725826757
-    EXTRA price: 0.03878318030485241
-    GNode price: 0.03974660811945838
-    KUJI price: 0.34544311090422875
-    EXA price: 1.436720686758596
-    WLD price: 1.1817587954621465
-    T price: 0.021034472502048523
-    TAROT price: 0.12636333787615028
-    wUSDR price: 0.273220561091054
-    axlUSDC price: 0.862472247677115
-    GRAI price: 0.9880439169427879
-    PENDLE price: 3.153651623422778
-    HAUS price: 0.5070444012990614
-    ACX price: 0.27619909700284895
-    stERN price: 1.0227258468575566
-    OS price: 0.16015173692043813
-    msOP price: 1.0769637869153135
-    msUSD price: 0.9680265015514666
-    USDC price: 1.0255944141594544
-    CLEAR price: 0.03406497160154012
-    RING price: 0.008371153127900861
-    ALCX price: 12.330200569991048
-    JARVIS price: 0.03514684889275467
-    mooBIFI price: 280.11931878014633
-    UTS price: 0.0
-    USDV price: 0.2592406937959391
-    TKN price: 0.01062843492014953
-    USDGLO price: 0.8503803255451411
-    sFRAX price: 1.0959014755942131
-    mpETH price: 2742.344637870012
-    CYBER price: 1.536928570360667
-    sDAI price: 1.1634599503323075
-    MOLTEN price: 0.43397679640552467
-    pxETH price: 2711.94792417728
-    HAI price: 1.1782971535016782
-    KITE price: 1.4846640625239669
-    2192 price: 9.578129598673e-06
-    FOAM price: 0.001206728299790152
-    IPT price: 0.01243829216574305
-    USDA price: 0.9877734295025521
-    TLX price: 0.05602572587112174
-    wrsETH price: 2799.277765587123
-    SYN price: 0.32810995042644164
-    ITP price: 0.021915766469258947
-    ETH1S price: 0.27395513629088886
-    weETH price: 2875.678049345452
-    SAIL price: 0.001501051718939287
-    ezETH price: 2819.0939406520583
-    USDy price: 1.1807419935195196
-    USDpy price: 1.125342182976891
-    MODE price: 0.007513617833062101
-    ZUN price: 0.005068786231348458
-    uniBTC price: 87786.13985794259
-    WELL price: 0.03172944066624512
-    COMP price: 0.0
-    wUSDM price: 1.0792832115769209
-    DINERO price: 0.045948425293721486
-    cbETH price: 2967.819993549215
-    MONEY price: 1.019874279404575
-    TRUMP price: 15.553160418621957
-    Bold price: 1.017708804447942
-    kBTC price: 0.0
+    WETH price: 2553.3386872068204
+    ETH price: 2553.3386872068204
+    VELO price: 0.06543596476209321
+    RED price: 0.12055408976396115
+    USDC price: 1.0
+    WETH price: 2553.3386872068204
 
 ## Pools
 
 ``` python
-from sugar.chains import OPChain
+from sugar.chains import AsyncOPChain, OPChain
 
-async with OPChain() as chain:
+async with AsyncOPChain() as chain:
     pools = await chain.get_pools()
+    usdc_velo = next(iter([p for p in pools if p.token0.token_address == OPChain.usdc and p.token1.token_address == OPChain.velo]), None)
+    print(f"{usdc_velo.symbol}")
+    print("-----------------------")
+    print(f"Volume: {usdc_velo.token0_volume} {usdc_velo.token0.symbol} | {usdc_velo.token1_volume} {usdc_velo.token1.symbol} | ${usdc_velo.volume}")
+    print(f"Fees: {usdc_velo.token0_fees.amount} {usdc_velo.token0.symbol} | {usdc_velo.token1_fees.amount} {usdc_velo.token1.symbol} | ${usdc_velo.total_fees}")
+    print(f"TVL: {usdc_velo.reserve0.amount} {usdc_velo.token0.symbol} | {usdc_velo.reserve1.amount} {usdc_velo.token1.symbol} | ${usdc_velo.tvl}")
+    print(f"APR: {usdc_velo.apr}%")
+
+with OPChain() as chain:
+    pools = chain.get_pools()
     usdc_velo = next(iter([p for p in pools if p.token0.token_address == OPChain.usdc and p.token1.token_address == OPChain.velo]), None)
     print(f"{usdc_velo.symbol}")
     print("-----------------------")
@@ -349,22 +101,28 @@ async with OPChain() as chain:
 
     vAMM-USDC/VELO
     -----------------------
-    Volume: 36915.687300000005 USDC | 523910.25576955045 VELO | $74096.5873697066
-    Fees: 369.156873 USDC | 5239.102557695504 VELO | $740.965873697066
-    TVL: 212864.452603 USDC | 3065778.8408988323 VELO | $430436.86212158727
-    APR: 23.206111943600714%
+    Volume: 756749.1011111111 USDC | 13151147.940511389 VELO | $1637676.1540950162
+    Fees: 6810.74191 USDC | 118360.3314646025 VELO | $14739.085386855146
+    TVL: 2286090.488682 USDC | 35949447.85712064 VELO | $4700011.161312506
+    APR: 28.920762224848183%
+    vAMM-USDC/VELO
+    -----------------------
+    Volume: 756749.1011111111 USDC | 13151147.940511389 VELO | $1637675.781948628
+    Fees: 6810.74191 USDC | 118360.3314646025 VELO | $14739.082037537652
+    TVL: 2286090.488682 USDC | 35949447.85712064 VELO | $4700010.093279505
+    APR: 28.92076222484818%
 
-## Deposits
+## Deposits - WIP
 
 In order to deposit, make sure spender’s account’s private key is
 provided via `SUGAR_PK` env var. Here’s how you can deposit
 [vAMM-USDC/AERO](https://aerodrome.finance/deposit?token0=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&token1=0x940181a94A35A4569E4529A3CDfB74e38FD98631&type=-1)
 
 ``` python
-from sugar.chains import BaseChain
+from sugar.chains import AsyncBaseChain
 from sugar.deposit import Deposit
 
-async with BaseChain() as chain:
+async with AsyncBaseChain() as chain:
     pools = await chain.get_pools()
     pools = list(filter(lambda x: "vAMM-USDC" in x.symbol and "AERO" in x.symbol, pools))
     # 0.02 USDC 
