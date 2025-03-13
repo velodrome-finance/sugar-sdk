@@ -54,6 +54,7 @@ class LiquidityPool:
     lp: str
     factory: str
     symbol: str
+    type: int
     is_stable: bool
     # concentrated liquidity pools
     is_cl: bool
@@ -162,6 +163,7 @@ class LiquidityPool:
             lp=normalize_address(t[0]),
             factory=normalize_address(t[18]),
             symbol=symbol,
+            type=pool_type,
             # stable pools have type set to 0
             is_stable=pool_type == 0,
             is_cl=pool_type > 0,

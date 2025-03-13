@@ -6,15 +6,16 @@ __all__ = ['T', 'require_context', 'require_async_context', 'CommonChain', 'Asyn
 
 # %% ../src/chains.ipynb 3
 import asyncio, web3, os
+from dataclasses import dataclass
 from functools import wraps, reduce
-from typing import List, TypeVar, Callable, Optional, Tuple, Dict
+from typing import List, TypeVar, Callable, Optional, Tuple, Dict, Union
 from fastcore.utils import patch
 from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account
 from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp
-from .abi import sugar, slipstream, price_oracle, router
+from .abi import sugar, slipstream, price_oracle, router, quoter
 from .token import Token
 from .pool import LiquidityPool
 from .price import Price
@@ -83,7 +84,11 @@ class CommonChain:
 class AsyncChain(CommonChain):
     web3: AsyncWeb3
     sugar: AsyncContract
+    slipstream: AsyncContract
     router: AsyncContract
+    prices: AsyncContract
+    quoter: AsyncContract
+
 
     async def __aenter__(self):
         """Async context manager entry"""
@@ -93,6 +98,7 @@ class AsyncChain(CommonChain):
         self.slipstream = self.web3.eth.contract(address=self.settings.slipstream_contract_addr, abi=slipstream)
         self.prices = self.web3.eth.contract(address=self.settings.price_oracle_contract_addr, abi=price_oracle)
         self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=router)
+        self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=quoter)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -255,6 +261,9 @@ class Chain(CommonChain):
     web3: Web3
     sugar: Contract
     router: Contract
+    slipstream: Contract
+    prices: Contract
+    quoter: Contract
 
     def __enter__(self):
         """Sync context manager entry"""
@@ -264,6 +273,7 @@ class Chain(CommonChain):
         self.slipstream = self.web3.eth.contract(address=self.settings.slipstream_contract_addr, abi=slipstream)
         self.prices = self.web3.eth.contract(address=self.settings.price_oracle_contract_addr, abi=price_oracle)
         self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=router)
+        self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=quoter)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

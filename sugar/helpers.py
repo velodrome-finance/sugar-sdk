@@ -2,13 +2,15 @@
 
 # %% auto 0
 __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'normalize_address', 'chunk', 'amount_to_k_string', 'format_currency',
-           'format_percentage', 'amount_to_m_string', 'float_to_uint256', 'get_future_timestamp', 'apply_slippage']
+           'format_percentage', 'amount_to_m_string', 'float_to_uint256', 'get_future_timestamp', 'apply_slippage',
+           'Pair', 'find_all_paths']
 
 # %% ../src/helpers.ipynb 2
 from web3 import Web3, constants
 from typing import List
 from decimal import Decimal
 from datetime import datetime, timedelta
+from dataclasses import dataclass
 
 # %% ../src/helpers.ipynb 3
 def normalize_address(address: str) -> str: return Web3.to_checksum_address(address.lower())
@@ -66,3 +68,73 @@ def get_future_timestamp(deadline_minutes: float) -> int:
 def apply_slippage(amount: int, slippage: float) -> int:
     if slippage < 0 or slippage > 1: raise ValueError("Slippage must be between 0 and 1")
     return int(amount * (1 - slippage))
+
+# %% ../src/helpers.ipynb 10
+# Claude 3.7 sonnet made this
+
+@dataclass
+class Pair: token0: str; token1: str
+
+def find_all_paths(pairs, a, b, max_depth=3):
+    """
+    Find paths from token 'a' to token 'b' in a graph defined by pairs, with limits to prevent 
+    excessive computation in dense, cyclical graphs.
+    
+    Parameters:
+    pairs (list): A list of dictionaries with 'token0' and 'token1' keys
+    a (str): Starting token
+    b (str): Destination token
+    max_depth (int): Maximum path length to explore
+    
+    Returns:
+    list: A list of paths, where each path is a list of tokens
+    """
+    # Build adjacency list representation of the graph
+    graph = {}
+    for pair in pairs:
+        token0, token1 = pair.token0, pair.token1
+        
+        # Add connections in both directions for an undirected graph
+        if token0 not in graph:
+            graph[token0] = []
+        if token1 not in graph:
+            graph[token1] = []
+            
+        graph[token0].append(token1)
+        graph[token1].append(token0)
+    
+    # Check if start or end nodes exist in the graph
+    if a not in graph or b not in graph:
+        return []
+    
+    # List to store all found paths
+    all_paths = []
+    
+    # Helper function for DFS traversal with depth limit
+    def dfs(current, destination, visited, path, depth=0):    
+        # If we've exceeded our maximum depth, stop this branch
+        if depth >= max_depth:
+            return
+            
+        # Add current node to path
+        path.append(current)
+        
+        # If we've reached the destination, add the path to our results
+        if current == destination:
+            all_paths.append(path.copy())
+        else:
+            # Mark current node as visited to avoid cycles
+            visited.add(current)
+            
+            # Explore neighbors
+            for neighbor in graph[current]:
+                if neighbor not in visited:
+                    # Create copies of visited and path for this branch of exploration
+                    dfs(neighbor, destination, visited.copy(), path.copy(), depth + 1)
+    
+    # Start DFS from the starting token
+    dfs(a, b, set(), [])
+    
+    # clear duplicates (merge paths using "-", run this through a set, then split by "-")
+    return [p.split("-") for p in set(["-".join(p) for p in all_paths])]
+    
