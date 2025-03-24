@@ -17,7 +17,7 @@ from .config import ChainSettings, make_op_chain_settings, make_base_chain_setti
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp
 from .abi import sugar, slipstream, price_oracle, router, quoter
 from .token import Token
-from .pool import LiquidityPool
+from .pool import LiquidityPool, LiquidityPoolForSwap
 from .price import Price
 from .deposit import Deposit
 from .helpers import ADDRESS_ZERO, chunk, normalize_address
@@ -79,6 +79,10 @@ class CommonChain:
     def prepare_pools(self, pools: List[Tuple], tokens: List[Token], prices: List[Price]) -> List[LiquidityPool]:
         tokens, prices = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}
         return list(filter(lambda p: p is not None, map(lambda p: LiquidityPool.from_tuple(p, tokens, prices), pools)))
+    
+    def prepare_pools_for_swap(self, pools: List[Tuple], tokens: List[Token]) -> List[LiquidityPoolForSwap]:
+        tokens = {t.token_address: t for t in tokens}
+        return list(filter(lambda p: p is not None, map(lambda p: LiquidityPoolForSwap.from_tuple(p, tokens), pools)))
 
 # %% ../src/chains.ipynb 7
 class AsyncChain(CommonChain):
@@ -109,7 +113,8 @@ class AsyncChain(CommonChain):
 
     @require_async_context
     async def get_all_tokens(self, listed_only: bool = True) -> List[Token]:
-        tokens = await self.sugar.functions.tokens(self.settings.pagination_limit, 0, ADDRESS_ZERO, []).call()
+        # TODO: pagination for tokens
+        tokens = await self.sugar.functions.tokens(1000, 0, ADDRESS_ZERO, []).call()
         return self.prepare_tokens(tokens, listed_only)
     
     # @cache_in_seconds(ORACLE_PRICES_CACHE_MINUTES * 60)
@@ -283,7 +288,7 @@ class Chain(CommonChain):
     
     @require_context
     def get_all_tokens(self, listed_only: bool = True) -> List[Token]:
-        return self.prepare_tokens(self.sugar.functions.tokens(self.settings.pagination_limit, 0, ADDRESS_ZERO, []).call(), listed_only)
+        return self.prepare_tokens(self.sugar.functions.tokens(800, 0, ADDRESS_ZERO, []).call(), listed_only)
     
     # @cache_in_seconds(ORACLE_PRICES_CACHE_MINUTES * 60)
     def _get_prices(self, tokens: Tuple[Token]) -> List[int]:
@@ -301,18 +306,21 @@ class Chain(CommonChain):
         return self.prepare_prices(tokens, sum([self._get_prices(tuple(ts)) for ts in list(chunk(tokens, self.settings.price_batch_size))], []))
     
     @require_context
-    def get_pools(self) -> List[LiquidityPool]:
+    def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
         pools, offset, limit = [], 0, self.settings.pool_page_size
-        tokens = self.get_all_tokens()
-        prices = self.get_prices(tokens)
-        
+        tokens = self.get_all_tokens(listed_only=False)
+
         while True:
-            pools_batch = self.sugar.functions.all(limit, offset).call()
+            f = self.sugar.functions.all if not for_swaps else self.sugar.functions.forSwaps
+            pools_batch = f(limit, offset).call()
             pools += pools_batch
-            if len(pools_batch) < limit: break
+            if len(pools_batch) == 0: break
             else: offset += limit
 
-        return self.prepare_pools(pools, tokens, prices)
+        return self.prepare_pools(pools, tokens, self.get_prices(tokens)) if not for_swaps else self.prepare_pools_for_swap(pools, tokens)
+    
+    @require_context
+    def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return self.get_pools(for_swaps=True)
 
 # %% ../src/chains.ipynb 11
 class OPChainCommon():

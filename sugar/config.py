@@ -15,7 +15,7 @@ base_default_settings = {
   "price_batch_size": int(os.getenv("SUGAR_PRICE_BATCH_SIZE","40")),
   "price_threshold_filter": int(os.getenv("SUGAR_PRICE_THRESHOLD_FILTER","10")),
   "pagination_limit": int(os.getenv("SUGAR_PAGINATION_LIMIT","2000")),
-  "pool_page_size": int(os.getenv("SUGAR_POOL_PAGE_SIZE","500")),
+  "pool_page_size": int(os.getenv("SUGAR_POOL_PAGE_SIZE","300")),
   "native_token_symbol": "ETH",
   "native_token_decimals": 18
 }
