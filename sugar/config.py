@@ -95,7 +95,7 @@ def make_op_chain_settings(**kwargs) -> ChainSettings:
     } 
     return make_settings("10", "OP", **{ **d, **kwargs })
 
-# %% ../src/config.ipynb 9
+# %% ../src/config.ipynb 8
 def make_base_chain_settings(**kwargs) -> ChainSettings:
     d = {
         "rpc_uri": "https://mainnet.base.org",

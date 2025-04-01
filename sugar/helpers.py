@@ -7,7 +7,7 @@ __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'normalize_address', 'chunk', 'amount_
 
 # %% ../src/helpers.ipynb 2
 from web3 import Web3, constants
-from typing import List
+from typing import List, Tuple
 from decimal import Decimal
 from datetime import datetime, timedelta
 from dataclasses import dataclass
@@ -76,15 +76,56 @@ from dataclasses import dataclass
 import networkx as nx
 
 @dataclass
-class Pair:
-    token0: str
-    token1: str
+class Pair: token0: str; token1: str; pool: str
 
-def find_all_paths(pairs: List[Pair], start_token, end_token, cutoff=3):
-    # Create graph
-    G = nx.Graph()
-    for pair in pairs: G.add_edge(pair.token0, pair.token1)
+def find_all_paths(pairs: List[Pair], start_token: str, end_token: str, cutoff=3) -> List[List[Tuple]]:
+    # MultiGraph required to support parallel edges
+    # same tokens can be present in different pools, hence parallel edges
+    # specific pool identifier is stored inside edge attribute
+    G, complete_paths = nx.MultiGraph(), []
+    for pair in pairs: G.add_edge(pair.token0, pair.token1, pool=pair.pool)
+    node_paths =  [p for p in nx.all_simple_paths(G, source=start_token, target=end_token, cutoff=cutoff)]
+    for path in node_paths:
+        edge_path = []
+        # For each consecutive pair of nodes in the path
+        for i in range(len(path) - 1):
+            current = path[i]
+            next_node = path[i + 1]
+            
+            # Get all edges between these nodes
+            edges = G.get_edge_data(current, next_node)
+            
+            # There might be multiple edges (pools) between these nodes
+            # Add all possible edges to create different complete paths
+            current_paths = [] if not edge_path else edge_path.copy()
+            new_edge_paths = []
+            
+            # If this is the first segment, initialize with empty path
+            if not current_paths:
+                current_paths = [[]]
+                
+            # For each possible edge between current and next_node
+            for edge_key, edge_attrs in edges.items():
+                pool = edge_attrs['pool']
+                for current_path in current_paths:
+                    # Create a new path that includes this edge
+                    new_path = current_path + [(current, next_node, pool)]
+                    new_edge_paths.append(new_path)
+            
+            edge_path = new_edge_paths
+        
+        # Add all possible edge paths to the complete paths
+        complete_paths.extend(edge_path)
     
-    # Find all simple paths
-    return [p for p in nx.all_simple_paths(G, source=start_token, target=end_token, cutoff=cutoff)]
+    # seen is a list of strings that look like this ["pool1-pool2-pool3", ...]
+    uniques, seen = [], []
+
+    for path in complete_paths:
+        p = '-'.join(map(lambda x: x[2], path))
+        if p not in seen:
+            uniques.append(path)
+            seen.append(p)
+
+    # remove duplicates
+    return uniques
 

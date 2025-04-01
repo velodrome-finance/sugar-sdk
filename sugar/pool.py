@@ -63,9 +63,7 @@ class LiquidityPoolForSwap:
     def from_tuple(cls, t: Tuple, tokens: Dict[str, Token]) -> Optional["LiquidityPoolForSwap"]:
         token0, token1, pool_type = normalize_address(t[2]), normalize_address(t[3]), t[1]
         token0, token1 = tokens.get(token0), tokens.get(token1)
-        if not token0 or not token1: 
-            print(f">>>>>>>>>>. missing toekens {token0} {token1}")
-            return None
+        if not token0 or not token1: return None
         return LiquidityPoolForSwap(
             lp=normalize_address(t[0]),
             type=pool_type,
