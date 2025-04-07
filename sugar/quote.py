@@ -27,7 +27,7 @@ class Quote:
 QUOTER_STABLE_POOL_FILLER, QUOTER_VOLATILE_POOL_FILLER = 2097152, 4194304
 
 @dataclass
-class PreparedRoute: 
+class PreparedRoute:
     types: List[str]; values: List[Union[str, int]]
 
     @property

@@ -91,9 +91,7 @@ class CommonChain:
     
     def prepare_quote_batch(self, batcher: RequestBatcher, pools: List[List[LiquidityPoolForSwap]], amount_in: int, paths: List[List[Tuple]]):
         for i, path in enumerate(paths):
-            #print(f">>>>>>>>>> processing pools: {pools}")
             rt = prepare_route([RouteInput(pool=p, reversed=p.token0.token_address != path[i][0]) for i, p in enumerate(pools[i])])
-            #print(f">>>>>>>>>> calling quoteExactInput with {amount_in} {rt.encoded}")
             batcher.add(self.quoter.functions.quoteExactInput(rt.encoded, amount_in))
         return batcher
 
