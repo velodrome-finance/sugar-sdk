@@ -24,7 +24,7 @@ from .pool import LiquidityPool, LiquidityPoolForSwap
 from .price import Price
 from .deposit import Deposit
 from .helpers import ADDRESS_ZERO, chunk, normalize_address, Pair, find_all_paths
-from .quote import QuoteInput, Quote, RouteInput
+from .quote import QuoteInput, Quote
 
 
 # %% ../src/chains.ipynb 6
@@ -92,8 +92,8 @@ class CommonChain:
     def prepare_quote_batch(self, from_token: Token, to_token: Token, batcher: RequestBatcher, pools: List[List[LiquidityPoolForSwap]], amount_in: int, paths: List[List[Tuple]]):
         inputs = []
         for i, path in enumerate(paths):
-            route = QuoteInput.prepare_route([RouteInput(pool=p, reversed=p.token0.token_address != path[i][0]) for i, p in enumerate(pools[i])])
-            q = QuoteInput(from_token=from_token, to_token=to_token, amount_in=amount_in, path=pools[i], route=route)
+            p = [(p, p.token0.token_address != path[i][0]) for i, p in enumerate(pools[i])]
+            q = QuoteInput(from_token=from_token, to_token=to_token, amount_in=amount_in, path=p)
             batcher.add(self.quoter.functions.quoteExactInput(q.route.encoded, amount_in))
             inputs.append(q)
         return batcher, inputs
