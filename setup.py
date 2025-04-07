@@ -37,8 +37,7 @@ if pkg_data:
     package_data[cfg['lib_name']] =  pkg_data.split() # split as multiple files might be listed
 # Add package data to setup_cfg for setuptools.setup(..., **setup_cfg)
 setup_cfg['package_data'] = package_data
-print(">>>>>>>>>>>>>>>>>>>")
-print(cfg.get('dep_links','').split())
+
 setuptools.setup(
     name = cfg['lib_name'],
     license = lic[0],

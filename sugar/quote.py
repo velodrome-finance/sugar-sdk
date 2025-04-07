@@ -13,7 +13,15 @@ from .pool import LiquidityPoolForSwap
 
 # %% ../src/quote.ipynb 4
 @dataclass
-class Quote: from_token: Token; to_token: Token; path: List[LiquidityPoolForSwap]; amount_in: int; amount_out: int
+class Quote:
+    from_token: Token; to_token: Token; path: List[LiquidityPoolForSwap]; amount_in: int; amount_out: int
+
+    def to_tuple(self) -> tuple: return (self.from_token, self.to_token, tuple(self.path), self.amount_in, self.amount_out)
+
+    @staticmethod
+    def from_tuple(t: tuple) -> "Quote":
+        from_token, to_token, path, amount_in, amount_out = t
+        return Quote(from_token=from_token, to_token=to_token, path=list(path), amount_in=amount_in, amount_out=amount_out)
 
 # magic numbers
 QUOTER_STABLE_POOL_FILLER, QUOTER_VOLATILE_POOL_FILLER = 2097152, 4194304
