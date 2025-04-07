@@ -24,7 +24,7 @@ from .pool import LiquidityPool, LiquidityPoolForSwap
 from .price import Price
 from .deposit import Deposit
 from .helpers import ADDRESS_ZERO, chunk, normalize_address, Pair, find_all_paths
-from .quote import Quote, RouteInput, prepare_route
+from .quote import QuoteInput, Quote, RouteInput
 
 
 # %% ../src/chains.ipynb 6
@@ -89,17 +89,22 @@ class CommonChain:
         tokens = {t.token_address: t for t in tokens}
         return list(filter(lambda p: p is not None, map(lambda p: LiquidityPoolForSwap.from_tuple(p, tokens), pools)))
     
-    def prepare_quote_batch(self, batcher: RequestBatcher, pools: List[List[LiquidityPoolForSwap]], amount_in: int, paths: List[List[Tuple]]):
+    def prepare_quote_batch(self, from_token: Token, to_token: Token, batcher: RequestBatcher, pools: List[List[LiquidityPoolForSwap]], amount_in: int, paths: List[List[Tuple]]):
+        inputs = []
         for i, path in enumerate(paths):
-            rt = prepare_route([RouteInput(pool=p, reversed=p.token0.token_address != path[i][0]) for i, p in enumerate(pools[i])])
-            batcher.add(self.quoter.functions.quoteExactInput(rt.encoded, amount_in))
-        return batcher
+            route = QuoteInput.prepare_route([RouteInput(pool=p, reversed=p.token0.token_address != path[i][0]) for i, p in enumerate(pools[i])])
+            q = QuoteInput(from_token=from_token, to_token=to_token, amount_in=amount_in, path=pools[i], route=route)
+            batcher.add(self.quoter.functions.quoteExactInput(q.route.encoded, amount_in))
+            inputs.append(q)
+        return batcher, inputs
 
-    def prepare_quotes(self, from_token:Token, to_token:Token, amount_in: int, path_pools: List[List[LiquidityPoolForSwap]], responses):
+    # def prepare_quotes(self, from_token:Token, to_token:Token, amount_in: int, path_pools: List[List[LiquidityPoolForSwap]], responses):
+    def prepare_quotes(self, quote_inputs: List[QuoteInput], responses):
+        if len(responses) != len(quote_inputs): raise ValueError(f"Number of responses {len(responses)} does not match number of quote inputs {len(quote_inputs)}")
         quotes = []
         for i, r in enumerate(responses):
             if isinstance(r, Exception): continue
-            else: quotes.append(Quote(from_token=from_token, to_token=to_token, path=path_pools[i], amount_in=amount_in, amount_out=r[0]))
+            else: quotes.append(Quote(input=quote_inputs[i], amount_out=r[0]))
         return quotes
     
     def get_paths_for_quote(self, from_token: Token, to_token: Token, pools: List[LiquidityPoolForSwap], exclude_tokens: List[str]) -> List[List[Tuple]]:
@@ -193,8 +198,8 @@ class AsyncChain(CommonChain):
         pools_dict = {p.lp: p for p in pools}
         path_pools = [list(map(lambda p: pools_dict[p[2]], path)) for path in paths]
         async with self.web3.batch_requests() as batch:
-            batch = self.prepare_quote_batch(batch, path_pools, amount_in, paths)
-            return self.prepare_quotes(from_token, to_token, amount_in, path_pools, await batch.async_execute())
+            batch, inputs = self.prepare_quote_batch(from_token, to_token, batch, path_pools, amount_in, paths)
+            return self.prepare_quotes(inputs, await batch.async_execute())
 
     @require_async_context
     async def get_quote(self, from_token: Token, to_token: Token, amount_in: int, exclude_tokens: List[str] = []) -> Optional[Quote]:
@@ -375,8 +380,8 @@ class Chain(CommonChain):
         pools_dict = {p.lp: p for p in pools}
         path_pools = [list(map(lambda p: pools_dict[p[2]], path)) for path in paths]
         with self.web3.batch_requests() as batch:
-            batch = self.prepare_quote_batch(batch, path_pools, amount_in, paths)
-            return self.prepare_quotes(from_token, to_token, amount_in, path_pools, batch.execute())
+            batch, inputs = self.prepare_quote_batch(from_token, to_token, batch, path_pools, amount_in, paths)
+            return self.prepare_quotes(inputs, batch.execute())
 
     @require_context
     def get_quote(self, from_token: Token, to_token: Token, amount_in: int, exclude_tokens: List[str] = []) -> Optional[Quote]:
