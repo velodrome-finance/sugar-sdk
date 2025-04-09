@@ -26,11 +26,11 @@ def pack_path(path: List[Tuple[LiquidityPoolForSwap, bool]]) -> PreparedRoute:
     types, values = reduce(lambda s, pool: s + pool, [["address", "int24"] for i in range(len(path))], []) + ["address"], []
     for node in path:
         pool, reversed = node
-        token0, token1 = pool.token0 if not reversed else pool.token1, pool.token1 if not reversed else pool.token0
+        token0, token1 = pool.token0_address if not reversed else pool.token1_address, pool.token1_address if not reversed else pool.token0_address
         if pool.type > 0: filler = pool.type
         else: filler =  QUOTER_STABLE_POOL_FILLER if pool.is_stable else QUOTER_VOLATILE_POOL_FILLER
-        if len(values) == 0: values = [token0.token_address, filler, token1.token_address]
-        else: values += [filler, token1.token_address]
+        if len(values) == 0: values = [token0, filler, token1]
+        else: values += [filler, token1]
     return PreparedRoute(types=types, values=values)
 
 @dataclass
@@ -48,4 +48,14 @@ class QuoteInput:
     def route(self) -> PreparedRoute: return pack_path(self.path)
 
 @dataclass
-class Quote: input: QuoteInput; amount_out: int
+class Quote:
+    input: QuoteInput; amount_out: int
+
+    @property
+    def from_token(self) -> Token: return self.input.from_token
+    @property
+    def to_token(self) -> Token: return self.input.to_token
+    @property
+    def path(self) -> List[Tuple[LiquidityPoolForSwap, bool]]: return self.input.path
+    @property
+    def amount_in(self) -> int: return self.input.amount_in

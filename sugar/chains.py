@@ -18,13 +18,14 @@ from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp
-from .abi import sugar, slipstream, price_oracle, router, quoter
+from .abi import sugar, slipstream, price_oracle, router, quoter, swapper
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap
 from .price import Price
 from .deposit import Deposit
 from .helpers import ADDRESS_ZERO, chunk, normalize_address, Pair, find_all_paths
 from .quote import QuoteInput, Quote
+from .swap import setup_planner
 
 
 # %% ../src/chains.ipynb 6
@@ -85,20 +86,22 @@ class CommonChain:
         tokens, prices = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}
         return list(filter(lambda p: p is not None, map(lambda p: LiquidityPool.from_tuple(p, tokens, prices), pools)))
     
-    def prepare_pools_for_swap(self, pools: List[Tuple], tokens: List[Token]) -> List[LiquidityPoolForSwap]:
-        tokens = {t.token_address: t for t in tokens}
-        return list(filter(lambda p: p is not None, map(lambda p: LiquidityPoolForSwap.from_tuple(p, tokens), pools)))
+    def prepare_pools_for_swap(self, pools: List[Tuple]) -> List[LiquidityPoolForSwap]:
+        return list(map(lambda p: LiquidityPoolForSwap.from_tuple(p), pools))
+    
+    def filter_pools_for_swap(self, pools: List[LiquidityPoolForSwap], from_token: Token, to_token: Token) -> List[LiquidityPoolForSwap]:
+        match_tokens = set(self.settings.connector_tokens_addrs + [from_token.token_address, to_token.token_address])
+        return list(filter(lambda p: p.token0_address in match_tokens or p.token1_address in match_tokens, pools))
     
     def prepare_quote_batch(self, from_token: Token, to_token: Token, batcher: RequestBatcher, pools: List[List[LiquidityPoolForSwap]], amount_in: int, paths: List[List[Tuple]]):
         inputs = []
         for i, path in enumerate(paths):
-            p = [(p, p.token0.token_address != path[i][0]) for i, p in enumerate(pools[i])]
+            p = [(p, p.token0_address != path[i][0]) for i, p in enumerate(pools[i])]
             q = QuoteInput(from_token=from_token, to_token=to_token, amount_in=amount_in, path=p)
             batcher.add(self.quoter.functions.quoteExactInput(q.route.encoded, amount_in))
             inputs.append(q)
         return batcher, inputs
 
-    # def prepare_quotes(self, from_token:Token, to_token:Token, amount_in: int, path_pools: List[List[LiquidityPoolForSwap]], responses):
     def prepare_quotes(self, quote_inputs: List[QuoteInput], responses):
         if len(responses) != len(quote_inputs): raise ValueError(f"Number of responses {len(responses)} does not match number of quote inputs {len(quote_inputs)}")
         quotes = []
@@ -113,7 +116,7 @@ class CommonChain:
         if from_token.token_address in exclude_tokens: exclude_tokens_set.remove(from_token.token_address)
         if to_token.token_address in exclude_tokens: exclude_tokens_set.remove(to_token.token_address)
 
-        pairs = [Pair(p.token0.token_address, p.token1.token_address, p.lp) for p in pools]
+        pairs = [Pair(p.token0_address, p.token1_address, p.lp) for p in pools]
         paths = find_all_paths(pairs, from_token.wrapped_token_address or from_token.token_address, to_token.wrapped_token_address or to_token.token_address)
         # filter out paths with excluded tokens
         return list(filter(lambda p: len(set(map(lambda t: t[0], p)) & exclude_tokens_set) == 0, paths))
@@ -126,6 +129,7 @@ class AsyncChain(CommonChain):
     router: AsyncContract
     prices: AsyncContract
     quoter: AsyncContract
+    swapper: AsyncContract
 
 
     async def __aenter__(self):
@@ -137,6 +141,7 @@ class AsyncChain(CommonChain):
         self.prices = self.web3.eth.contract(address=self.settings.price_oracle_contract_addr, abi=price_oracle)
         self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=router)
         self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=quoter)
+        self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=swapper)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -178,16 +183,18 @@ class AsyncChain(CommonChain):
     @require_async_context
     async def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
         pools, offset, limit = [], 0, self.settings.pool_page_size
-        tokens = await self.get_all_tokens()
-        
+
         while True:
             f = self.sugar.functions.all if not for_swaps else self.sugar.functions.forSwaps
             pools_batch = await f(limit, offset).call()
             pools += pools_batch
-            if len(pools_batch) < limit: break
+            if len(pools_batch) == 0: break
             else: offset += limit
 
-        return self.prepare_pools(pools, tokens, await self.get_prices(tokens)) if not for_swaps else self.prepare_pools_for_swap(pools, tokens)
+        if not for_swaps:
+            tokens = await self.get_all_tokens()
+            return self.prepare_pools(pools, tokens, await self.get_prices(tokens))
+        else: return self.prepare_pools_for_swap(pools)
     
     
     @require_async_context
@@ -199,14 +206,32 @@ class AsyncChain(CommonChain):
         path_pools = [list(map(lambda p: pools_dict[p[2]], path)) for path in paths]
         async with self.web3.batch_requests() as batch:
             batch, inputs = self.prepare_quote_batch(from_token, to_token, batch, path_pools, amount_in, paths)
-            return self.prepare_quotes(inputs, await batch.async_execute())
+            outputs = await batch.async_execute()
+            return self.prepare_quotes(inputs, outputs)
 
     @require_async_context
-    async def get_quote(self, from_token: Token, to_token: Token, amount_in: int, exclude_tokens: List[str] = []) -> Optional[Quote]:
-        pools = await self.get_pools_for_swaps()
-        paths = self.get_paths_for_quote(from_token, to_token, pools, exclude_tokens)
-        quotes = sum(await asyncio.gather(*[self._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths) for paths in chunk(paths, 500)]), [])
+    async def get_quote(self, from_token: Token, to_token: Token, amount_in: int, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+        pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=await self.get_pools_for_swaps())
+        paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
+        # TODO: investigate why this takes too long
+        # quotes = sum(await asyncio.gather(*[self._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths) for paths in chunk(paths, 500)]), [])
+        quotes = [] 
+        for paths in chunk(paths, 500):
+            r = await self._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths)
+            for q in r:
+                if q is not None: quotes.append(q)
+        if filter_quotes is not None: quotes = list(filter(filter_quotes, quotes))
         return max(quotes, key=lambda q: q.amount_out) if len(quotes) > 0 else None
+    
+    @require_async_context
+    async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: float = 0.01):
+        swapper_contract_addr = self.settings.swapper_contract_addr
+        q = await self.get_quote(from_token, to_token, float_to_uint256(amount, decimals=from_token.decimals))
+        if not q: raise ValueError("No quotes found")
+        planner = setup_planner(quote=q, slippage=slippage, account=self.account.address, router_address=swapper_contract_addr)
+        await self.set_token_allowance(from_token, swapper_contract_addr, q.input.amount_in)
+        value = q.input.amount_in if from_token.wrapped_token_address else 0
+        return await self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
 
     @require_async_context
     async def set_token_allowance(self, token: Token, addr: str, amount: int):
@@ -217,7 +242,7 @@ class AsyncChain(CommonChain):
             "inputs": [{"name": "spender", "type": "address"}, {"name": "amount", "type": "uint256"}],
             "outputs": [{"name": "", "type": "bool"}]
         }]
-        token_contract = self.web3.eth.contract(address=token.token_address, abi=ERC20_ABI)
+        token_contract = self.web3.eth.contract(address=token.wrapped_token_address or token.token_address, abi=ERC20_ABI)
         return await self.sign_and_send_tx(token_contract.functions.approve(addr, amount))
 
     @require_async_context
@@ -229,7 +254,7 @@ class AsyncChain(CommonChain):
             "inputs": [{"name": "owner", "type": "address"}, {"name": "spender", "type": "address"}],
             "outputs": [{"name": "", "type": "uint256"}]
         }]
-        token_contract = self.web3.eth.contract(address=token.token_address, abi=ERC20_ABI)
+        token_contract = self.web3.eth.contract(address=token.wrapped_token_address or token.token_address, abi=ERC20_ABI)
         return await token_contract.functions.allowance(self.account.address, addr).call()
 
     @require_async_context
@@ -322,6 +347,7 @@ class Chain(CommonChain):
     slipstream: Contract
     prices: Contract
     quoter: Contract
+    swapper: Contract
 
     def __enter__(self):
         """Sync context manager entry"""
@@ -332,6 +358,7 @@ class Chain(CommonChain):
         self.prices = self.web3.eth.contract(address=self.settings.price_oracle_contract_addr, abi=price_oracle)
         self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=router)
         self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=quoter)
+        self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=swapper)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -361,7 +388,6 @@ class Chain(CommonChain):
     @require_context
     def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
         pools, offset, limit = [], 0, self.settings.pool_page_size
-        tokens = self.get_all_tokens(listed_only=False)
 
         while True:
             f = self.sugar.functions.all if not for_swaps else self.sugar.functions.forSwaps
@@ -370,7 +396,10 @@ class Chain(CommonChain):
             if len(pools_batch) == 0: break
             else: offset += limit
 
-        return self.prepare_pools(pools, tokens, self.get_prices(tokens)) if not for_swaps else self.prepare_pools_for_swap(pools, tokens)
+        if not for_swaps:
+            tokens = self.get_all_tokens(listed_only=False)
+            return self.prepare_pools(pools, tokens, self.get_prices(tokens))
+        else: return self.prepare_pools_for_swap(pools)
     
     @require_context
     def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return self.get_pools(for_swaps=True)
@@ -384,8 +413,8 @@ class Chain(CommonChain):
             return self.prepare_quotes(inputs, batch.execute())
 
     @require_context
-    def get_quote(self, from_token: Token, to_token: Token, amount_in: int, exclude_tokens: List[str] = []) -> Optional[Quote]:
-        pools = self.get_pools_for_swaps()
+    def get_quote(self, from_token: Token, to_token: Token, amount_in: int, exclude_tokens: List[str] = [], filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+        pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=self.get_pools_for_swaps())
         paths = self.get_paths_for_quote(from_token, to_token, pools, exclude_tokens)
         path_chunks = list(chunk(paths, 500))
         
@@ -415,6 +444,8 @@ class Chain(CommonChain):
             for q in quotes: all_quotes.append(q)
             # print(f">>>>>>> {}")
 
+        if filter_quotes is not None: all_quotes = list(filter(filter_quotes, all_quotes))
+
         return max(all_quotes, key=lambda q: q.amount_out) if len(all_quotes) > 0 else None
         
 
@@ -430,7 +461,7 @@ class OPChain(Chain, OPChainCommon):
     def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs))
 
 
-# %% ../src/chains.ipynb 15
+# %% ../src/chains.ipynb 14
 class BaseChainCommon():
     usdc: str = normalize_address("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913")
     aero: str = normalize_address("0x940181a94a35a4569e4529a3cdfb74e38fd98631")
@@ -441,7 +472,7 @@ class AsyncBaseChain(AsyncChain, BaseChainCommon):
 class BaseChain(Chain, BaseChainCommon):
     def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs))
 
-# %% ../src/chains.ipynb 17
+# %% ../src/chains.ipynb 16
 class AsyncOPChainSimnet(AsyncOPChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
 

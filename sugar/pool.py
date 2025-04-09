@@ -52,26 +52,22 @@ class LiquidityPoolForSwap:
 
     lp: str
     type: int
-    token0: Token
-    token1: Token
+    token0_address: str
+    token1_address: str
     is_stable: bool
     # concentrated liquidity pools
     is_cl: bool
-    symbol: str
 
     @classmethod
-    def from_tuple(cls, t: Tuple, tokens: Dict[str, Token]) -> Optional["LiquidityPoolForSwap"]:
+    def from_tuple(cls, t: Tuple) -> "LiquidityPoolForSwap":
         token0, token1, pool_type = normalize_address(t[2]), normalize_address(t[3]), t[1]
-        token0, token1 = tokens.get(token0), tokens.get(token1)
-        if not token0 or not token1: return None
         return LiquidityPoolForSwap(
             lp=normalize_address(t[0]),
             type=pool_type,
-            token0=token0,
-            token1=token1,
+            token0_address=token0,
+            token1_address=token1,
             is_stable=pool_type == 0,
-            is_cl=pool_type > 0,
-            symbol=symbol(token0, token1, pool_type)
+            is_cl=pool_type > 0
         )
 
         
