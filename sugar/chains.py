@@ -2,7 +2,8 @@
 
 # %% auto 0
 __all__ = ['T', 'require_context', 'require_async_context', 'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain',
-           'OPChain', 'BaseChainCommon', 'AsyncBaseChain', 'BaseChain', 'AsyncOPChainSimnet', 'AsyncBaseChainSimnet']
+           'OPChain', 'BaseChainCommon', 'AsyncBaseChain', 'BaseChain', 'AsyncOPChainSimnet', 'AsyncBaseChainSimnet',
+           'OPChainSimnet', 'BaseChainSimnet']
 
 # %% ../src/chains.ipynb 3
 import asyncio, os
@@ -49,6 +50,16 @@ class CommonChain:
     def __init__(self, settings: ChainSettings):
         self.settings, self._in_context = settings, False
     
+    def prepare_set_token_allowance_contract(self, token: Token, contract_wrapper):
+        ERC20_ABI = [{
+            "name": "approve",
+            "type": "function",
+            "constant": False,
+            "inputs": [{"name": "spender", "type": "address"}, {"name": "amount", "type": "uint256"}],
+            "outputs": [{"name": "", "type": "bool"}]
+        }]
+        return contract_wrapper(address=token.wrapped_token_address or token.token_address, abi=ERC20_ABI)
+    
     def prepare_tokens(self, tokens: List[Tuple], listed_only: bool) -> List[Token]:
         native = Token.make_native_token(self.settings.native_token_symbol, self.settings.wrapped_native_token_addr, self.settings.native_token_decimals)
         ts = list(map(lambda t: Token.from_tuple(t), tokens))
@@ -89,6 +100,10 @@ class CommonChain:
         match_tokens = set(self.settings.connector_tokens_addrs + [from_token.token_address, to_token.token_address])
         return list(filter(lambda p: p.token0_address in match_tokens or p.token1_address in match_tokens, pools))
     
+    def paths_to_pools(self, pools: List[LiquidityPoolForSwap], paths: List[List[Tuple]]) -> List[LiquidityPoolForSwap]:
+        pools_dict = {p.lp: p for p in pools}
+        return [list(map(lambda p: pools_dict[p[2]], path)) for path in paths]
+
     def prepare_quote_batch(self, from_token: Token, to_token: Token, batcher: RequestBatcher, pools: List[List[LiquidityPoolForSwap]], amount_in: int, paths: List[List[Tuple]]):
         inputs = []
         for i, path in enumerate(paths):
@@ -198,12 +213,10 @@ class AsyncChain(CommonChain):
 
     @require_async_context
     async def _get_quotes_for_paths(self, from_token: Token, to_token: Token, amount_in: int, pools: List[LiquidityPoolForSwap], paths: List[List[Tuple]]) -> List[Optional[Quote]]:
-        pools_dict = {p.lp: p for p in pools}
-        path_pools = [list(map(lambda p: pools_dict[p[2]], path)) for path in paths]
+        path_pools = self.paths_to_pools(pools, paths)
         async with self.web3.batch_requests() as batch:
             batch, inputs = self.prepare_quote_batch(from_token, to_token, batch, path_pools, amount_in, paths)
-            outputs = await batch.async_execute()
-            return self.prepare_quotes(inputs, outputs)
+            return self.prepare_quotes(inputs, await batch.async_execute())
 
     @require_async_context
     async def get_quote(self, from_token: Token, to_token: Token, amount_in: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
@@ -235,15 +248,9 @@ class AsyncChain(CommonChain):
 
     @require_async_context
     async def set_token_allowance(self, token: Token, addr: str, amount: int):
-        ERC20_ABI = [{
-            "name": "approve",
-            "type": "function",
-            "constant": False,
-            "inputs": [{"name": "spender", "type": "address"}, {"name": "amount", "type": "uint256"}],
-            "outputs": [{"name": "", "type": "bool"}]
-        }]
-        token_contract = self.web3.eth.contract(address=token.wrapped_token_address or token.token_address, abi=ERC20_ABI)
+        token_contract = self.prepare_set_token_allowance_contract(token, self.web3.eth.contract)
         return await self.sign_and_send_tx(token_contract.functions.approve(addr, amount))
+        
 
     @require_async_context
     async def check_token_allowance(self, token: Token, addr: str) -> int:
@@ -259,7 +266,6 @@ class AsyncChain(CommonChain):
 
     @require_async_context
     async def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
-        print(f"sign_and_send_tx: {tx} with value: {value}")
         spender = self.account.address
         tx = await tx.build_transaction({ 'from': spender, 'value': value, 'nonce': await self.web3.eth.get_transaction_count(spender) })
         signed_tx = self.account.sign_transaction(tx)
@@ -367,6 +373,19 @@ class Chain(CommonChain):
         return None
     
     @require_context
+    def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
+        spender = self.account.address
+        tx = tx.build_transaction({ 'from': spender, 'value': value, 'nonce': self.web3.eth.get_transaction_count(spender) })
+        signed_tx = self.account.sign_transaction(tx)
+        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        return self.web3.eth.wait_for_transaction_receipt(tx_hash) if wait else tx_hash
+    
+    @require_context
+    def set_token_allowance(self, token: Token, addr: str, amount: int):
+        token_contract = self.prepare_set_token_allowance_contract(token, self.web3.eth.contract)
+        return self.sign_and_send_tx(token_contract.functions.approve(addr, amount))
+
+    @require_context
     def get_all_tokens(self, listed_only: bool = True) -> List[Token]:
         return self.prepare_tokens(self.sugar.functions.tokens(800, 0, ADDRESS_ZERO, []).call(), listed_only)
     
@@ -406,24 +425,18 @@ class Chain(CommonChain):
 
     @require_context
     def _get_quotes_for_paths(self, from_token: Token, to_token: Token, amount_in: int, pools: List[LiquidityPoolForSwap], paths: List[List[Tuple]]) -> List[Optional[Quote]]:
-        pools_dict = {p.lp: p for p in pools}
-        path_pools = [list(map(lambda p: pools_dict[p[2]], path)) for path in paths]
+        path_pools = self.paths_to_pools(pools, paths)
         with self.web3.batch_requests() as batch:
             batch, inputs = self.prepare_quote_batch(from_token, to_token, batch, path_pools, amount_in, paths)
             return self.prepare_quotes(inputs, batch.execute())
 
     @require_context
-    def get_quote(self, from_token: Token, to_token: Token, amount_in: int, exclude_tokens: List[str] = [], filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+    def get_quote(self, from_token: Token, to_token: Token, amount_in: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=self.get_pools_for_swaps())
-        paths = self.get_paths_for_quote(from_token, to_token, pools, exclude_tokens)
-        path_chunks = list(chunk(paths, 500))
-        
-        # Store self reference for thread context
-        chain_instance = self
-        
-        def get_quotes_for_chunk(paths_chunk): return chain_instance._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths_chunk)
-        
-        # Collect all quotes from all threads
+        paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
+        path_chunks, chain_instance = list(chunk(paths, 500)), self
+        def get_quotes_for_chunk(paths_chunk): return chain_instance._get_quotes_for_paths(from_token, to_token, float_to_uint256(amount_in, decimals=from_token.decimals), pools, paths_chunk)
+        # TODO: make this work in threads re: https://github.com/ethereum/web3.py/issues/3613
         all_quotes = []
         for pc in path_chunks:
             quotes = get_quotes_for_chunk(pc)
@@ -432,6 +445,20 @@ class Chain(CommonChain):
         if filter_quotes is not None: all_quotes = list(filter(filter_quotes, all_quotes))
 
         return max(all_quotes, key=lambda q: q.amount_out) if len(all_quotes) > 0 else None
+    
+    @require_context
+    def swap(self, from_token: Token, to_token: Token, amount: float, slippage: float = 0.01):
+        q = self.get_quote(from_token, to_token, amount)
+        if not q: raise ValueError("No quotes found")
+        return self.swap_from_quote(q, slippage=slippage)
+        
+    @require_context
+    def swap_from_quote(self, quote: Quote, slippage: float = 0.01):
+        swapper_contract_addr, from_token = self.settings.swapper_contract_addr, quote.from_token
+        planner = setup_planner(quote=quote, slippage=slippage, account=self.account.address, router_address=swapper_contract_addr)
+        self.set_token_allowance(from_token, swapper_contract_addr, quote.input.amount_in)
+        value = quote.input.amount_in if from_token.wrapped_token_address else 0
+        return self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
 
 # %% ../src/chains.ipynb 12
 class OPChainCommon():
@@ -461,4 +488,10 @@ class AsyncOPChainSimnet(AsyncOPChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
 
 class AsyncBaseChainSimnet(AsyncBaseChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
+
+class OPChainSimnet(OPChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
+
+class BaseChainSimnet(BaseChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
