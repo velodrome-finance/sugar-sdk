@@ -5,13 +5,9 @@ __all__ = ['T', 'require_context', 'require_async_context', 'CommonChain', 'Asyn
            'OPChain', 'BaseChainCommon', 'AsyncBaseChain', 'BaseChain', 'AsyncOPChainSimnet', 'AsyncBaseChainSimnet']
 
 # %% ../src/chains.ipynb 3
-import asyncio, web3, os
-from dataclasses import dataclass
-from functools import wraps, reduce, partial
-import concurrent.futures
-from concurrent.futures import ThreadPoolExecutor
-from typing import List, TypeVar, Callable, Optional, Tuple, Dict, Union
-from fastcore.utils import patch
+import asyncio, os
+from functools import wraps
+from typing import List, TypeVar, Callable, Optional, Tuple, Dict
 from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account
 from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
@@ -210,14 +206,14 @@ class AsyncChain(CommonChain):
             return self.prepare_quotes(inputs, outputs)
 
     @require_async_context
-    async def get_quote(self, from_token: Token, to_token: Token, amount_in: int, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+    async def get_quote(self, from_token: Token, to_token: Token, amount_in: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=await self.get_pools_for_swaps())
         paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
         # TODO: investigate why this takes too long
         # quotes = sum(await asyncio.gather(*[self._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths) for paths in chunk(paths, 500)]), [])
         quotes = [] 
         for paths in chunk(paths, 500):
-            r = await self._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths)
+            r = await self._get_quotes_for_paths(from_token, to_token, float_to_uint256(amount_in, decimals=from_token.decimals), pools, paths)
             for q in r:
                 if q is not None: quotes.append(q)
         if filter_quotes is not None: quotes = list(filter(filter_quotes, quotes))
@@ -225,12 +221,16 @@ class AsyncChain(CommonChain):
     
     @require_async_context
     async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: float = 0.01):
-        swapper_contract_addr = self.settings.swapper_contract_addr
-        q = await self.get_quote(from_token, to_token, float_to_uint256(amount, decimals=from_token.decimals))
+        q = await self.get_quote(from_token, to_token, amount)
         if not q: raise ValueError("No quotes found")
-        planner = setup_planner(quote=q, slippage=slippage, account=self.account.address, router_address=swapper_contract_addr)
-        await self.set_token_allowance(from_token, swapper_contract_addr, q.input.amount_in)
-        value = q.input.amount_in if from_token.wrapped_token_address else 0
+        return await self.swap_from_quote(q, slippage=slippage)
+        
+    @require_async_context
+    async def swap_from_quote(self, quote: Quote, slippage: float = 0.01):
+        swapper_contract_addr, from_token = self.settings.swapper_contract_addr, quote.from_token
+        planner = setup_planner(quote=quote, slippage=slippage, account=self.account.address, router_address=swapper_contract_addr)
+        await self.set_token_allowance(from_token, swapper_contract_addr, quote.input.amount_in)
+        value = quote.input.amount_in if from_token.wrapped_token_address else 0
         return await self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
 
     @require_async_context
@@ -421,33 +421,17 @@ class Chain(CommonChain):
         # Store self reference for thread context
         chain_instance = self
         
-        def get_quotes_for_chunk(paths_chunk):
-            """Thread-safe function to get quotes for a chunk of paths"""
-            return chain_instance._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths_chunk)
+        def get_quotes_for_chunk(paths_chunk): return chain_instance._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths_chunk)
         
         # Collect all quotes from all threads
         all_quotes = []
-        # with ThreadPoolExecutor() as executor:
-        #     futures = [executor.submit(get_quotes_for_chunk, pc) for pc in path_chunks]
-        #     for future in concurrent.futures.as_completed(futures):
-        #         try:
-        #             quotes_batch = future.result()
-        #             all_quotes.extend(quotes_batch)
-        #         except Exception as e:
-        #             print(f"Error getting quotes: {e}")
-        
-        # # Return best quote
-        # return max(all_quotes, key=lambda q: q.amount_out) if len(all_quotes) > 0 else None
-
         for pc in path_chunks:
             quotes = get_quotes_for_chunk(pc)
             for q in quotes: all_quotes.append(q)
-            # print(f">>>>>>> {}")
 
         if filter_quotes is not None: all_quotes = list(filter(filter_quotes, all_quotes))
 
         return max(all_quotes, key=lambda q: q.amount_out) if len(all_quotes) > 0 else None
-        
 
 # %% ../src/chains.ipynb 12
 class OPChainCommon():
