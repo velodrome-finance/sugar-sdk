@@ -10,6 +10,7 @@ from eth_abi.packed import encode_packed
 from dataclasses import dataclass
 from .token import Token
 from .pool import LiquidityPoolForSwap
+from fastcore.test import test_eq
 
 # %% ../src/quote.ipynb 4
 # magic numbers

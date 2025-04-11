@@ -112,21 +112,34 @@ with OPChain() as chain:
     TVL: 2286090.488682 USDC | 35949447.85712064 VELO | $4700010.093279505
     APR: 28.92076222484818%
 
-## Deposits - WIP
+## Swaps
 
-In order to deposit, make sure spender’s account’s private key is
-provided via `SUGAR_PK` env var. Here’s how you can deposit
-[vAMM-USDC/AERO](https://aerodrome.finance/deposit?token0=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&token1=0x940181a94A35A4569E4529A3CDfB74e38FD98631&type=-1)
+Get a quote and swap:
 
 ``` python
 from sugar.chains import AsyncBaseChain
-from sugar.deposit import Deposit
 
 async with AsyncBaseChain() as chain:
-    pools = await chain.get_pools()
-    pools = list(filter(lambda x: "vAMM-USDC" in x.symbol and "AERO" in x.symbol, pools))
-    # 0.02 USDC 
-    await chain.deposit(Deposit(pools[0], 0.02))
+    tokens = await chains.get_all_tokens(listed_only=True)
+    def get_token_by_address(addr): return next(filter(lambda t: t.token_address == addr, tokens), None)
+    velo = get_token_by_address(normalize_address("0x9560e827af36c94d2ac33a39bce1fe78631088db"))
+    eth = get_token_by_address("ETH")
+    quote = await op.get_quote(velo, eth, 10)
+    # check on quote to see if you are OK with the amount
+    await op.swap_from_quote(quote)
+```
+
+“I am Feeling lucky” swap:
+
+``` python
+from sugar.chains import AsyncBaseChain
+
+async with AsyncBaseChain() as chain:
+    tokens = await chains.get_all_tokens(listed_only=True)
+    def get_token_by_address(addr): return next(filter(lambda t: t.token_address == addr, tokens), None)
+    velo = get_token_by_address(normalize_address("0x9560e827af36c94d2ac33a39bce1fe78631088db"))
+    eth = get_token_by_address("ETH")
+    await op.swap(velo, eth, 10, slippage=0.01)
 ```
 
 ## Configuration
@@ -146,9 +159,11 @@ Full list of configuration parameters for Sugar. Chain IDs can be found
 | nfpm_contract_addr | `SUGAR_NFPM_CONTRACT_ADDR` | chain specific |
 | price_oracle_contract_addr | `SUGAR_PRICE_ORACLE_ADDR_<CHAIN_ID>` | chain specific |
 | router_contract_addr | `SUGAR_ROUTER_CONTRACT_ADDR_<CHAIN_ID>` | chain specific |
+| swapper_contract_addr | `SUGAR_ROUTER_SWAPPER_CONTRACT_ADDR_<CHAIN_ID>` | chain specific |
 | token_addr | `SUGAR_TOKEN_ADDR_<CHAIN_ID>` | chain specific |
 | stable_token_addr | `SUGAR_STABLE_TOKEN_ADDR_<CHAIN_ID>` | chain specific |
 | connector_tokens_addrs | `SUGAR_CONNECTOR_TOKENS_ADDRS_<CHAIN_ID>` | chain specific |
+| excluded_tokens_addrs | `SUGAR_EXCLUDED_TOKENS_ADDRS_<CHAIN_ID>` | chain specific |
 | price_batch_size | `SUGAR_PRICE_BATCH_SIZE` | 40 |
 | price_threshold_filter | `SUGAR_PRICE_THRESHOLD_FILTER` | 10 |
 | pool_page_size | `SUGAR_POOL_PAGE_SIZE` | 500 |

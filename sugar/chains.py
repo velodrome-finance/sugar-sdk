@@ -6,7 +6,7 @@ __all__ = ['T', 'require_context', 'require_async_context', 'CommonChain', 'Asyn
            'OPChainSimnet', 'BaseChainSimnet']
 
 # %% ../src/chains.ipynb 3
-import asyncio, os
+import asyncio, os, socket
 from functools import wraps
 from typing import List, TypeVar, Callable, Optional, Tuple, Dict
 from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account
@@ -23,6 +23,8 @@ from .deposit import Deposit
 from .helpers import ADDRESS_ZERO, chunk, normalize_address, Pair, find_all_paths
 from .quote import QuoteInput, Quote
 from .swap import setup_planner
+from fastcore.test import test_close
+from fastcore.test import test_eq
 
 
 # %% ../src/chains.ipynb 6
