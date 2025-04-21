@@ -6,13 +6,14 @@ __all__ = ['ABI_DEFINITION', 'CONTRACT_BALANCE_FOR_V3_SWAPS', 'CommandType', 'Ro
 # %% ../src/swap.ipynb 3
 from .token import Token
 from .quote import Quote, QuoteInput, pack_path
-from .helpers import apply_slippage
+from .helpers import apply_slippage, float_to_uint256
 from .pool import LiquidityPoolForSwap
 from enum import IntEnum
 from typing import List, Dict, Any, Union, TypedDict, Optional, Tuple
 from decimal import Decimal
 import copy
 from eth_abi import encode
+from fastcore.test import test_eq
 
 
 # %% ../src/swap.ipynb 4
@@ -74,8 +75,7 @@ class RoutePlanner:
     def __init__(self):
         """Initialize a new RoutePlanner"""
         self.commands = "0x"
-        self.inputs: List[str] = []
-        # self.web3 = Web3()
+        self.inputs: List[bytes] = []
 
     def add_command(self, command_type: CommandType, parameters: List[Any]) -> None:
         """
@@ -94,7 +94,10 @@ class RoutePlanner:
 
     def get_encoded_commands(self) -> str: return self.commands
     
-    def get_encoded_inputs(self) -> List[str]: return self.inputs
+    def get_encoded_inputs(self) -> List[bytes]: return self.inputs
+
+    # using this for testing
+    def get_pretty_encoded_inputs(self) -> List[str]: return list(map(lambda i: "0x" + i.hex(), self.get_encoded_inputs())) 
 
 # %% ../src/swap.ipynb 5
 # Constants
