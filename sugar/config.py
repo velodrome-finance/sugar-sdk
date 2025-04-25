@@ -6,7 +6,7 @@ __all__ = ['base_default_settings', 'GetEnv', 'ChainSettings', 'validate_setting
 
 # %% ../src/config.ipynb 3
 import os
-from dataclasses import dataclass, make_dataclass
+from dataclasses import dataclass, make_dataclass, fields
 from .helpers import normalize_address
 from typing import List, Callable, Any, Dict
 from fastcore.test import test_eq
@@ -16,7 +16,7 @@ base_default_settings = {
   "price_batch_size": int(os.getenv("SUGAR_PRICE_BATCH_SIZE","40")),
   "price_threshold_filter": int(os.getenv("SUGAR_PRICE_THRESHOLD_FILTER","10")),
   "pagination_limit": int(os.getenv("SUGAR_PAGINATION_LIMIT","2000")),
-  "pool_page_size": int(os.getenv("SUGAR_POOL_PAGE_SIZE","300")),
+  "pool_page_size": int(os.getenv("SUGAR_POOL_PAGE_SIZE","500")),
   "native_token_symbol": "ETH",
   "native_token_decimals": 18,
   "swap_slippage": 0.01,
@@ -97,6 +97,9 @@ def make_settings(chain_id: str, chain_name: str, chain_settings: Dict[str, Any]
         if k.endswith("_addr"): d[k] = normalize_address(d[k])
         # anything that ends in "_addrs", should be a list of normalized addresses
         if k.endswith("_addrs"): d[k] = list(map(lambda a: normalize_address(a), d[k].split(",")))
+
+    # we only want fields that are in the ChainSettings dataclass
+    d =  {k: v for k, v in d.items() if k in [field.name for field in fields(ChainSettings)]}
 
     return validate_settings(make_dataclass(ChainSettings.__name__, ((k, type(v)) for k, v in d.items()))(**d)) 
 

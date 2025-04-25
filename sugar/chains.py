@@ -49,8 +49,14 @@ class CommonChain:
     @property
     def account(self) -> Account: return self.web3.eth.account.from_key(os.getenv("SUGAR_PK"))
 
-    def __init__(self, settings: ChainSettings):
+    pools: Optional[List[LiquidityPool]] = None
+    pools_for_swap: Optional[List[LiquidityPoolForSwap]] = None
+
+    def __init__(self, settings: ChainSettings, **kwargs):
         self.settings, self._in_context = settings, False
+
+        if "pools" in kwargs: self.pools = kwargs["pools"]
+        if "pools_for_swap" in kwargs: self.pools_for_swap = kwargs["pools_for_swap"] 
     
     def prepare_set_token_allowance_contract(self, token: Token, contract_wrapper):
         ERC20_ABI = [{
@@ -195,6 +201,9 @@ class AsyncChain(CommonChain):
 
     @require_async_context
     async def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
+        if for_swaps and self.pools_for_swap is not None: return self.pools_for_swap
+        if not for_swaps and self.pools is not None: return self.pools
+
         pools, offset, limit = [], 0, self.settings.pool_page_size
 
         while True:
@@ -409,6 +418,9 @@ class Chain(CommonChain):
     
     @require_context
     def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
+        if for_swaps and self.pools_for_swap is not None: return self.pools_for_swap
+        if not for_swaps and self.pools is not None: return self.pools
+
         pools, offset, limit = [], 0, self.settings.pool_page_size
 
         while True:
@@ -470,10 +482,10 @@ class OPChainCommon():
     eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
     
 class AsyncOPChain(AsyncChain, OPChainCommon):
-    def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs))
+    def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs), **kwargs)
 
 class OPChain(Chain, OPChainCommon):
-    def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs))
+    def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs), **kwargs)
 
 
 # %% ../src/chains.ipynb 14
@@ -483,20 +495,28 @@ class BaseChainCommon():
     eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
     
 class AsyncBaseChain(AsyncChain, BaseChainCommon):
-    def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs))
+    def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs), **kwargs)
 
 class BaseChain(Chain, BaseChainCommon):
-    def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs))
+    def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs), **kwargs)
 
 # %% ../src/chains.ipynb 16
+async with AsyncOPChain() as op:
+    op_pools = await op.get_pools()
+    op_pools_for_swap = await op.get_pools_for_swaps()
+
+async with AsyncBaseChain() as base:
+    base_pools = await base.get_pools()
+    base_pools_for_swap = await base.get_pools_for_swaps()
+
 class AsyncOPChainSimnet(AsyncOPChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", pools=op_pools, pools_for_swap=op_pools_for_swap, **kwargs)
 
 class AsyncBaseChainSimnet(AsyncBaseChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", pools=base_pools, pools_for_swap=base_pools_for_swap, **kwargs)
 
 class OPChainSimnet(OPChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", pools=op_pools, pools_for_swap=op_pools_for_swap, **kwargs)
 
 class BaseChainSimnet(BaseChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", pools=base_pools, pools_for_swap=base_pools_for_swap, **kwargs)

@@ -9,6 +9,9 @@ jobs:
       SUGAR_PK: ${{ secrets.SUGAR_PK }}
       SUGAR_RPC_URI_10: ${{ secrets.SUGAR_RPC_URI_10 }}
       SUGAR_RPC_URI_8453: ${{ secrets.SUGAR_RPC_URI_8453 }}
+      SUPERSIM_RPC_URL_BASE: ${{ secrets.SUPERSIM_RPC_URL_BASE }}
+      SUPERSIM_RPC_URL_OP: ${{ secrets.SUPERSIM_RPC_URL_OP }}
+
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
