@@ -2,8 +2,7 @@
 
 # %% auto 0
 __all__ = ['T', 'require_context', 'require_async_context', 'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain',
-           'OPChain', 'BaseChainCommon', 'AsyncBaseChain', 'BaseChain', 'AsyncOPChainSimnet', 'AsyncBaseChainSimnet',
-           'OPChainSimnet', 'BaseChainSimnet']
+           'OPChain', 'BaseChainCommon', 'AsyncBaseChain', 'BaseChain']
 
 # %% ../src/chains.ipynb 3
 import asyncio, os, socket
@@ -499,24 +498,3 @@ class AsyncBaseChain(AsyncChain, BaseChainCommon):
 
 class BaseChain(Chain, BaseChainCommon):
     def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs), **kwargs)
-
-# %% ../src/chains.ipynb 16
-async with AsyncOPChain() as op:
-    op_pools = await op.get_pools()
-    op_pools_for_swap = await op.get_pools_for_swaps()
-
-async with AsyncBaseChain() as base:
-    base_pools = await base.get_pools()
-    base_pools_for_swap = await base.get_pools_for_swaps()
-
-class AsyncOPChainSimnet(AsyncOPChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", pools=op_pools, pools_for_swap=op_pools_for_swap, **kwargs)
-
-class AsyncBaseChainSimnet(AsyncBaseChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", pools=base_pools, pools_for_swap=base_pools_for_swap, **kwargs)
-
-class OPChainSimnet(OPChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", pools=op_pools, pools_for_swap=op_pools_for_swap, **kwargs)
-
-class BaseChainSimnet(BaseChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", pools=base_pools, pools_for_swap=base_pools_for_swap, **kwargs)
