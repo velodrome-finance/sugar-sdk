@@ -36,16 +36,16 @@ with BaseChain() as chain:
         print(f"{p.token.symbol} price: {p.price}")
 ```
 
-    ETH price: 1768.296199950167
-    tBTC price: 93360.67688341912
-    USDbC price: 1.0093169584081934
-    WETH price: 1768.296199950167
-    T price: 0.017533047336501028
-    ETH price: 1768.296375339803
-    tBTC price: 93360.68614346001
-    USDbC price: 1.0093169907685393
-    WETH price: 1768.296375339803
-    T price: 0.01753304732841051
+    ETH price: 1812.3979523224696
+    tBTC price: 95688.3506011309
+    USDbC price: 1.0085229125718211
+    WETH price: 1812.3979523224696
+    T price: 0.01933236880366975
+    ETH price: 1812.3979523224696
+    tBTC price: 95688.3506011309
+    USDbC price: 1.0085229125718211
+    WETH price: 1812.3979523224696
+    T price: 0.01933236880366975
 
 ## OP quickstart
 
@@ -62,16 +62,16 @@ with OPChain() as chain:
         print(f"{p.token.symbol} price: {p.price}")
 ```
 
-    ETH price: 1744.4492427207376
-    VELO price: 0.05062317692743053
-    RED price: 0.08773882884393253
+    ETH price: 1794.9212588679125
+    VELO price: 0.054409719594976834
+    RED price: 0.09451726568693898
     USDC price: 1.0
-    WETH price: 1744.4492427207376
-    ETH price: 1744.4492427207376
-    VELO price: 0.05062317692743053
-    RED price: 0.08773882884393253
+    WETH price: 1794.9212588679125
+    ETH price: 1794.9212588679125
+    VELO price: 0.054409719594976834
+    RED price: 0.09451726568693898
     USDC price: 1.0
-    WETH price: 1744.4492427207376
+    WETH price: 1794.9212588679125
 
 ## Pools
 
@@ -80,7 +80,7 @@ from sugar.chains import AsyncOPChain, OPChain
 
 async with AsyncOPChain() as chain:
     pools = await chain.get_pools()
-    usdc_velo = next(iter([p for p in pools if p.token0.token_address == OPChain.usdc and p.token1.token_address == OPChain.velo]), None)
+    usdc_velo = next(iter([p for p in pools if p.token0.token_address == OPChain.usdc.token_address and p.token1.token_address == OPChain.velo.token_address]), None)
     print(f"{usdc_velo.symbol}")
     print("-----------------------")
     print(f"Volume: {usdc_velo.token0_volume} {usdc_velo.token0.symbol} | {usdc_velo.token1_volume} {usdc_velo.token1.symbol} | ${usdc_velo.volume}")
@@ -90,7 +90,7 @@ async with AsyncOPChain() as chain:
 
 with OPChain() as chain:
     pools = chain.get_pools()
-    usdc_velo = next(iter([p for p in pools if p.token0.token_address == OPChain.usdc and p.token1.token_address == OPChain.velo]), None)
+    usdc_velo = next(iter([p for p in pools if p.token0.token_address == OPChain.usdc.token_address and p.token1.token_address == OPChain.velo.token_address]), None)
     print(f"{usdc_velo.symbol}")
     print("-----------------------")
     print(f"Volume: {usdc_velo.token0_volume} {usdc_velo.token0.symbol} | {usdc_velo.token1_volume} {usdc_velo.token1.symbol} | ${usdc_velo.volume}")
@@ -99,18 +99,22 @@ with OPChain() as chain:
     print(f"APR: {usdc_velo.apr}%")
 ```
 
+    >>>>>>> got pools 500
+    >>>>>>> got pools 1000
+    >>>>>>> got pools 1307
+    >>>>>>> got pools 1307
     vAMM-USDC/VELO
     -----------------------
-    Volume: 33002.43411111111 USDC | 1171963.9049981958 VELO | $92316.04750086606
-    Fees: 297.021907 USDC | 10547.675144983761 VELO | $830.8444275077945
-    TVL: 1925694.554074 USDC | 38054890.00589409 VELO | $3851283.241620407
-    APR: 18.69648738123409%
+    Volume: 182312.92122222224 USDC | 2698226.004261449 VELO | $328506.14819195116
+    Fees: 1640.816291 USDC | 24284.034038353042 VELO | $2956.5553337275605
+    TVL: 1777271.82861 USDC | 32596344.38246878 VELO | $3544769.675918862
+    APR: 21.83292639918091%
     vAMM-USDC/VELO
     -----------------------
-    Volume: 33002.43411111111 USDC | 1171963.9049981958 VELO | $92316.04750086606
-    Fees: 297.021907 USDC | 10547.675144983761 VELO | $830.8444275077945
-    TVL: 1925694.554074 USDC | 38054890.00589409 VELO | $3851283.241620407
-    APR: 18.69648738123409%
+    Volume: 182312.92122222224 USDC | 2698226.004261449 VELO | $328257.87064859766
+    Fees: 1640.816291 USDC | 24284.034038353042 VELO | $2954.3208358373786
+    TVL: 1777271.82861 USDC | 32596344.38246878 VELO | $3542186.395419241
+    APR: 21.83844876022061%
 
 ## Swaps
 
