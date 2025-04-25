@@ -36,16 +36,16 @@ with BaseChain() as chain:
         print(f"{p.token.symbol} price: {p.price}")
 ```
 
-    ETH price: 2493.730879871026
-    tBTC price: 89224.39116374683
-    USDbC price: 1.0017660536011292
-    WETH price: 2493.730879871026
-    T price: 0.017866263433246897
-    ETH price: 2493.740797040875
-    tBTC price: 89224.74599491524
-    USDbC price: 1.0017697172914204
-    WETH price: 2493.740797040875
-    T price: 0.01786632641861627
+    ETH price: 1768.296199950167
+    tBTC price: 93360.67688341912
+    USDbC price: 1.0093169584081934
+    WETH price: 1768.296199950167
+    T price: 0.017533047336501028
+    ETH price: 1768.296375339803
+    tBTC price: 93360.68614346001
+    USDbC price: 1.0093169907685393
+    WETH price: 1768.296375339803
+    T price: 0.01753304732841051
 
 ## OP quickstart
 
@@ -62,16 +62,16 @@ with OPChain() as chain:
         print(f"{p.token.symbol} price: {p.price}")
 ```
 
-    ETH price: 2553.3386872068204
-    VELO price: 0.06543596476209321
-    RED price: 0.12055408976396115
+    ETH price: 1744.4492427207376
+    VELO price: 0.05062317692743053
+    RED price: 0.08773882884393253
     USDC price: 1.0
-    WETH price: 2553.3386872068204
-    ETH price: 2553.3386872068204
-    VELO price: 0.06543596476209321
-    RED price: 0.12055408976396115
+    WETH price: 1744.4492427207376
+    ETH price: 1744.4492427207376
+    VELO price: 0.05062317692743053
+    RED price: 0.08773882884393253
     USDC price: 1.0
-    WETH price: 2553.3386872068204
+    WETH price: 1744.4492427207376
 
 ## Pools
 
@@ -101,16 +101,16 @@ with OPChain() as chain:
 
     vAMM-USDC/VELO
     -----------------------
-    Volume: 756749.1011111111 USDC | 13151147.940511389 VELO | $1637676.1540950162
-    Fees: 6810.74191 USDC | 118360.3314646025 VELO | $14739.085386855146
-    TVL: 2286090.488682 USDC | 35949447.85712064 VELO | $4700011.161312506
-    APR: 28.920762224848183%
+    Volume: 33002.43411111111 USDC | 1171963.9049981958 VELO | $92316.04750086606
+    Fees: 297.021907 USDC | 10547.675144983761 VELO | $830.8444275077945
+    TVL: 1925694.554074 USDC | 38054890.00589409 VELO | $3851283.241620407
+    APR: 18.69648738123409%
     vAMM-USDC/VELO
     -----------------------
-    Volume: 756749.1011111111 USDC | 13151147.940511389 VELO | $1637675.781948628
-    Fees: 6810.74191 USDC | 118360.3314646025 VELO | $14739.082037537652
-    TVL: 2286090.488682 USDC | 35949447.85712064 VELO | $4700010.093279505
-    APR: 28.92076222484818%
+    Volume: 33002.43411111111 USDC | 1171963.9049981958 VELO | $92316.04750086606
+    Fees: 297.021907 USDC | 10547.675144983761 VELO | $830.8444275077945
+    TVL: 1925694.554074 USDC | 38054890.00589409 VELO | $3851283.241620407
+    APR: 18.69648738123409%
 
 ## Swaps
 
@@ -124,7 +124,7 @@ async with AsyncBaseChain() as chain:
     def get_token_by_address(addr): return next(filter(lambda t: t.token_address == addr, tokens), None)
     velo = get_token_by_address(normalize_address("0x9560e827af36c94d2ac33a39bce1fe78631088db"))
     eth = get_token_by_address("ETH")
-    quote = await op.get_quote(velo, eth, 10)
+    quote = await op.get_quote(from_token=velo, to_token=eth, amount=10)
     # check on quote to see if you are OK with the amount
     await op.swap_from_quote(quote)
 ```
@@ -139,7 +139,7 @@ async with AsyncBaseChain() as chain:
     def get_token_by_address(addr): return next(filter(lambda t: t.token_address == addr, tokens), None)
     velo = get_token_by_address(normalize_address("0x9560e827af36c94d2ac33a39bce1fe78631088db"))
     eth = get_token_by_address("ETH")
-    await op.swap(velo, eth, 10, slippage=0.01)
+    await op.swap(from_token=velo, to_token=eth, amount=10, slippage=0.01)
 ```
 
 ## Configuration
