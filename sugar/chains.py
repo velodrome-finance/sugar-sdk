@@ -235,16 +235,15 @@ class AsyncChain(CommonChain):
         return max(quotes, key=lambda q: q.amount_out) if len(quotes) > 0 else None
     
     @require_async_context
-    async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: float = 0.01):
-        print(f">>>>>>>>>>>> quote for {from_token} -> {to_token} amount: {amount}")
+    async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None):
         q = await self.get_quote(from_token, to_token, amount)
         if not q: raise ValueError("No quotes found")
         return await self.swap_from_quote(q, slippage=slippage)
         
     @require_async_context
-    async def swap_from_quote(self, quote: Quote, slippage: float = 0.01):
+    async def swap_from_quote(self, quote: Quote, slippage: Optional[float] = None):
         swapper_contract_addr, from_token = self.settings.swapper_contract_addr, quote.from_token
-        planner = setup_planner(quote=quote, slippage=slippage, account=self.account.address, router_address=swapper_contract_addr)
+        planner = setup_planner(quote=quote, slippage=slippage if slippage is not None else self.settings.swap_slippage, account=self.account.address, router_address=swapper_contract_addr)
         await self.set_token_allowance(from_token, swapper_contract_addr, quote.input.amount_in)
         value = quote.input.amount_in if from_token.wrapped_token_address else 0
         return await self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
@@ -450,15 +449,15 @@ class Chain(CommonChain):
         return max(all_quotes, key=lambda q: q.amount_out) if len(all_quotes) > 0 else None
     
     @require_context
-    def swap(self, from_token: Token, to_token: Token, amount: float, slippage: float = 0.01):
+    def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None):
         q = self.get_quote(from_token, to_token, amount)
         if not q: raise ValueError("No quotes found")
         return self.swap_from_quote(q, slippage=slippage)
         
     @require_context
-    def swap_from_quote(self, quote: Quote, slippage: float = 0.01):
+    def swap_from_quote(self, quote: Quote, slippage: Optional[float] = None):
         swapper_contract_addr, from_token = self.settings.swapper_contract_addr, quote.from_token
-        planner = setup_planner(quote=quote, slippage=slippage, account=self.account.address, router_address=swapper_contract_addr)
+        planner = setup_planner(quote=quote, slippage=slippage if slippage is not None else self.settings.swap_slippage, account=self.account.address, router_address=swapper_contract_addr)
         self.set_token_allowance(from_token, swapper_contract_addr, quote.input.amount_in)
         value = quote.input.amount_in if from_token.wrapped_token_address else 0
         return self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)

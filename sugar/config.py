@@ -18,7 +18,8 @@ base_default_settings = {
   "pagination_limit": int(os.getenv("SUGAR_PAGINATION_LIMIT","2000")),
   "pool_page_size": int(os.getenv("SUGAR_POOL_PAGE_SIZE","300")),
   "native_token_symbol": "ETH",
-  "native_token_decimals": 18
+  "native_token_decimals": 18,
+  "swap_slippage": 0.01,
 }
 
 
@@ -44,6 +45,8 @@ class ChainSettings:
     connector_tokens_addrs: List[str]
     # tokens to exclude from quote search graph
     excluded_tokens_addrs: List[str]
+    # default swap slippage in % (0.0-1.0)
+    swap_slippage: float
     price_batch_size: int
     price_threshold_filter: int
     pagination_limit: int
@@ -68,6 +71,10 @@ class ChainSettings:
 
 def validate_settings(settings: ChainSettings) -> ChainSettings:
     # TODO: this should actually validate stuff, duh
+    floats = ["swap_slippage"]
+    ints = ["price_batch_size", "price_threshold_filter", "pagination_limit", "pool_page_size", "native_token_decimals"]
+    for k in floats: setattr(settings, k, float(getattr(settings, k)))
+    for k in ints: setattr(settings, k, int(getattr(settings, k)))
     return settings
 
 def get_env(key: str, default: Any) -> Any: return os.getenv(key, default)

@@ -139,7 +139,7 @@ async with AsyncBaseChain() as chain:
     def get_token_by_address(addr): return next(filter(lambda t: t.token_address == addr, tokens), None)
     velo = get_token_by_address(normalize_address("0x9560e827af36c94d2ac33a39bce1fe78631088db"))
     eth = get_token_by_address("ETH")
-    await op.swap(from_token=velo, to_token=eth, amount=10, slippage=0.01)
+    await op.swap(from_token=velo, to_token=eth, amount=10)
 ```
 
 ## Configuration
@@ -160,6 +160,7 @@ Full list of configuration parameters for Sugar. Chain IDs can be found
 | price_oracle_contract_addr | `SUGAR_PRICE_ORACLE_ADDR_<CHAIN_ID>` | chain specific |
 | router_contract_addr | `SUGAR_ROUTER_CONTRACT_ADDR_<CHAIN_ID>` | chain specific |
 | swapper_contract_addr | `SUGAR_ROUTER_SWAPPER_CONTRACT_ADDR_<CHAIN_ID>` | chain specific |
+| swap_slippage | `SUGAR_SWAP_SLIPPAGE_<CHAIN_ID>` | 0.01 |
 | token_addr | `SUGAR_TOKEN_ADDR_<CHAIN_ID>` | chain specific |
 | stable_token_addr | `SUGAR_STABLE_TOKEN_ADDR_<CHAIN_ID>` | chain specific |
 | connector_tokens_addrs | `SUGAR_CONNECTOR_TOKENS_ADDRS_<CHAIN_ID>` | chain specific |
