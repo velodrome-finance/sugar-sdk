@@ -201,6 +201,7 @@ class AsyncChain(CommonChain):
             f = self.sugar.functions.all if not for_swaps else self.sugar.functions.forSwaps
             pools_batch = await f(limit, offset).call()
             pools += pools_batch
+            print(f">>>>>>> got pools {len(pools)}")
             if len(pools_batch) == 0: break
             else: offset += limit
 
@@ -464,9 +465,10 @@ class Chain(CommonChain):
 
 # %% ../src/chains.ipynb 12
 class OPChainCommon():
-    usdc: str = normalize_address("0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85")
-    velo: str = normalize_address("0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db")
-
+    usdc: Token = Token(token_address='0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
+    velo: Token = Token(token_address='0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', symbol='VELO', decimals=18, listed=True, wrapped_token_address=None)
+    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    
 class AsyncOPChain(AsyncChain, OPChainCommon):
     def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs))
 
@@ -476,9 +478,10 @@ class OPChain(Chain, OPChainCommon):
 
 # %% ../src/chains.ipynb 14
 class BaseChainCommon():
-    usdc: str = normalize_address("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913")
-    aero: str = normalize_address("0x940181a94a35a4569e4529a3cdfb74e38fd98631")
-
+    usdc: Token = Token(token_address='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
+    aero: Token = Token(token_address='0x940181a94A35A4569E4529A3CDfB74e38FD98631', symbol='AERO', decimals=18, listed=True, wrapped_token_address=None)
+    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    
 class AsyncBaseChain(AsyncChain, BaseChainCommon):
     def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs))
 
