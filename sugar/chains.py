@@ -236,6 +236,7 @@ class AsyncChain(CommonChain):
     
     @require_async_context
     async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: float = 0.01):
+        print(f">>>>>>>>>>>> quote for {from_token} -> {to_token} amount: {amount}")
         q = await self.get_quote(from_token, to_token, amount)
         if not q: raise ValueError("No quotes found")
         return await self.swap_from_quote(q, slippage=slippage)
