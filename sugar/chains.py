@@ -209,7 +209,6 @@ class AsyncChain(CommonChain):
             f = self.sugar.functions.all if not for_swaps else self.sugar.functions.forSwaps
             pools_batch = await f(limit, offset).call()
             pools += pools_batch
-            print(f">>>>>>> got pools {len(pools)}")
             if len(pools_batch) == 0: break
             else: offset += limit
 
