@@ -7,7 +7,7 @@ __all__ = ['abis_dir', 'download_contract_abi', 'get_abi']
 import requests, os, json
 
 # %% ../src/abi.ipynb 4
-abis_dir="../sugar/abis"
+abis_dir="./sugar/abis"
 
 def download_contract_abi(name, address, abis_dir=abis_dir, etherscan_api_url="https://api-optimistic.etherscan.io/api"):
     api_key = os.getenv("ETHERSCAN_API_KEY")
