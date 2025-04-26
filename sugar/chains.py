@@ -14,7 +14,7 @@ from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp
-from .abi import sugar, slipstream, price_oracle, router, quoter, swapper
+from .abi import get_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap
 from .price import Price
@@ -154,12 +154,12 @@ class AsyncChain(CommonChain):
         """Async context manager entry"""
         self._in_context = True
         self.web3 = AsyncWeb3(AsyncHTTPProvider(self.settings.rpc_uri))
-        self.sugar = self.web3.eth.contract(address=self.settings.sugar_contract_addr, abi=sugar)
-        self.slipstream = self.web3.eth.contract(address=self.settings.slipstream_contract_addr, abi=slipstream)
-        self.prices = self.web3.eth.contract(address=self.settings.price_oracle_contract_addr, abi=price_oracle)
-        self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=router)
-        self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=quoter)
-        self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=swapper)
+        self.sugar = self.web3.eth.contract(address=self.settings.sugar_contract_addr, abi=get_abi("sugar"))
+        self.slipstream = self.web3.eth.contract(address=self.settings.slipstream_contract_addr, abi=get_abi("slipstream"))
+        self.prices = self.web3.eth.contract(address=self.settings.price_oracle_contract_addr, abi=get_abi("price_oracle"))
+        self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=get_abi("router"))
+        self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=get_abi("quoter"))
+        self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=get_abi("swapper"))
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -369,12 +369,12 @@ class Chain(CommonChain):
         """Sync context manager entry"""
         self._in_context = True
         self.web3 = Web3(HTTPProvider(self.settings.rpc_uri))
-        self.sugar = self.web3.eth.contract(address=self.settings.sugar_contract_addr, abi=sugar)
-        self.slipstream = self.web3.eth.contract(address=self.settings.slipstream_contract_addr, abi=slipstream)
-        self.prices = self.web3.eth.contract(address=self.settings.price_oracle_contract_addr, abi=price_oracle)
-        self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=router)
-        self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=quoter)
-        self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=swapper)
+        self.sugar = self.web3.eth.contract(address=self.settings.sugar_contract_addr, abi=get_abi("sugar"))
+        self.slipstream = self.web3.eth.contract(address=self.settings.slipstream_contract_addr, abi=get_abi("slipstream"))
+        self.prices = self.web3.eth.contract(address=self.settings.price_oracle_contract_addr, abi=get_abi("price_oracle"))
+        self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=get_abi("router"))
+        self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=get_abi("quoter"))
+        self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=get_abi("swapper"))
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
