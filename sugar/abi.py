@@ -21,11 +21,14 @@ def download_contract_abi(name, address, abis_dir=abis_dir, etherscan_api_url="h
         json.dump(json.loads(response_data.get("result")), file, indent=4)
 
 def get_abi(name):
-    dir = abis_dir
+    dir = None
 
-    if not os.path.exists(dir):
-        dir = "./abis"
-        if not os.path.exists(dir): raise Exception("Cannot find abis directory. Did you run download_contract_abi?")
+    for d in [abis_dir, os.path.join("../", abis_dir), "./abis"]:
+        if os.path.exists(d):
+            dir = d
+            break
+
+    if not dir: raise Exception("Cannot find abis directory. Did you run download_contract_abi?")
         
     with open(os.path.join(dir, f"{name}.json"), "r") as file:
         return file.read()
