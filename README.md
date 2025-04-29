@@ -375,4 +375,5 @@ pre-commit install
 
 ABIs for contracts are stored inside `sugar/abis` dir. To regenerate
 them, use `abis.py` script (make sure you have `ETHERSCAN_API_KEY` env
-var set)
+var set). We use [Optimistic
+Etherscan](https://optimistic.etherscan.io/).
