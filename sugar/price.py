@@ -4,11 +4,8 @@
 __all__ = ['Price']
 
 # %% ../src/price.ipynb 3
-import functools, asyncio
 from dataclasses import dataclass
-from typing import Tuple, List
 from .token import Token
-from .helpers import chunk
 
 # %% ../src/price.ipynb 4
 @dataclass(frozen=True)

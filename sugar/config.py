@@ -9,7 +9,6 @@ import os
 from dataclasses import dataclass, make_dataclass, fields
 from .helpers import normalize_address
 from typing import List, Callable, Any, Dict
-from fastcore.test import test_eq
 
 # %% ../src/config.ipynb 4
 base_default_settings = {

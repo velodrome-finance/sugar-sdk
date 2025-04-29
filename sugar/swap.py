@@ -4,17 +4,12 @@
 __all__ = ['ABI_DEFINITION', 'CONTRACT_BALANCE_FOR_V3_SWAPS', 'CommandType', 'RoutePlanner', 'setup_planner']
 
 # %% ../src/swap.ipynb 3
-from .token import Token
-from .quote import Quote, QuoteInput, pack_path
-from .helpers import apply_slippage, float_to_uint256
+from .quote import Quote, pack_path
+from .helpers import apply_slippage
 from .pool import LiquidityPoolForSwap
 from enum import IntEnum
-from typing import List, Dict, Any, Union, TypedDict, Optional, Tuple
-from decimal import Decimal
-import copy
+from typing import List, Any, Tuple
 from eth_abi import encode
-from fastcore.test import test_eq
-
 
 # %% ../src/swap.ipynb 4
 class CommandType(IntEnum):

@@ -10,7 +10,6 @@ from web3 import Web3, constants
 from typing import List, Tuple
 from decimal import Decimal
 from datetime import datetime, timedelta
-from fastcore.test import test_eq
 import math
 
 # %% ../src/helpers.ipynb 3
@@ -70,7 +69,7 @@ def apply_slippage(amount: int, slippage: float) -> int:
     if slippage < 0 or slippage > 1: raise ValueError("Slippage must be between 0 and 1")
     return int(math.ceil(amount * (1 - slippage)))
 
-# %% ../src/helpers.ipynb 11
+# %% ../src/helpers.ipynb 12
 # Claude 3.7 sonnet made this
 
 from dataclasses import dataclass
