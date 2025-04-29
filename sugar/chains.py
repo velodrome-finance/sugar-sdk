@@ -6,7 +6,7 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
            'AsyncBaseChain', 'BaseChain']
 
 # %% ../src/chains.ipynb 3
-import asyncio
+import asyncio, os
 from functools import wraps
 from typing import List, TypeVar, Callable, Optional, Tuple, Dict
 from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account

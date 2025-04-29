@@ -11,14 +11,6 @@ pip install git+https://github.com/velodrome-finance/sugar-sdk
 
 **TODO**: push to pypi
 
-``` python
-# load env
-from dotenv import load_dotenv
-load_dotenv()
-```
-
-    True
-
 ## Base quickstart
 
 Getting start with Sugar on Base network:
@@ -88,14 +80,10 @@ with OPChain() as chain:
 Get a quote and swap:
 
 ``` python
-from sugar.chains import AsyncBaseChain
+from sugar.chains import AsyncOPChain
 
-async with AsyncBaseChain() as chain:
-    tokens = await chains.get_all_tokens(listed_only=True)
-    def get_token_by_address(addr): return next(filter(lambda t: t.token_address == addr, tokens), None)
-    velo = get_token_by_address(normalize_address("0x9560e827af36c94d2ac33a39bce1fe78631088db"))
-    eth = get_token_by_address("ETH")
-    quote = await op.get_quote(from_token=velo, to_token=eth, amount=10)
+async with AsyncOPChain() as chain:
+    quote = await op.get_quote(from_token=AsyncOPChain.velo, to_token=AsyncOPChain.eth, amount=10)
     # check on quote to see if you are OK with the amount
     await op.swap_from_quote(quote)
 ```
@@ -103,13 +91,9 @@ async with AsyncBaseChain() as chain:
 “I am Feeling lucky” swap:
 
 ``` python
-from sugar.chains import AsyncBaseChain
+from sugar.chains import AsyncOPChain
 
-async with AsyncBaseChain() as chain:
-    tokens = await chains.get_all_tokens(listed_only=True)
-    def get_token_by_address(addr): return next(filter(lambda t: t.token_address == addr, tokens), None)
-    velo = get_token_by_address(normalize_address("0x9560e827af36c94d2ac33a39bce1fe78631088db"))
-    eth = get_token_by_address("ETH")
+async with AsyncOPChain() as chain:
     await op.swap(from_token=velo, to_token=eth, amount=10)
 ```
 
@@ -184,7 +168,7 @@ pre-commit install
 
 ### Regenerate ABIs if needed
 
-ABIs for contracts are stored inside `abis` dir. To regenerate
+ABIs for contracts are stored inside `sugar/abis` dir. To regenerate
 them, use `abis.py` script (make sure you have `ETHERSCAN_API_KEY` env
 var set). We use [Optimistic
 Etherscan](https://optimistic.etherscan.io/).
