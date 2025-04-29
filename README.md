@@ -36,16 +36,16 @@ with BaseChain() as chain:
         print(f"{p.token.symbol} price: {p.price}")
 ```
 
-    ETH price: 1812.3979523224696
-    tBTC price: 95688.3506011309
-    USDbC price: 1.0085229125718211
-    WETH price: 1812.3979523224696
-    T price: 0.01933236880366975
-    ETH price: 1812.3979523224696
-    tBTC price: 95688.3506011309
-    USDbC price: 1.0085229125718211
-    WETH price: 1812.3979523224696
-    T price: 0.01933236880366975
+    ETH price: 1784.3103374091631
+    tBTC price: 93649.36506518694
+    USDbC price: 0.9915519788495735
+    WETH price: 1784.3103374091631
+    T price: 0.019331009150047245
+    ETH price: 1784.2883367980573
+    tBTC price: 93648.21036512277
+    USDbC price: 0.9915397529777503
+    WETH price: 1784.2883367980573
+    T price: 0.01933077079800406
 
 ## OP quickstart
 
@@ -62,16 +62,16 @@ with OPChain() as chain:
         print(f"{p.token.symbol} price: {p.price}")
 ```
 
-    ETH price: 1794.9212588679125
-    VELO price: 0.054409719594976834
-    RED price: 0.09451726568693898
+    ETH price: 1797.8233394812657
+    VELO price: 0.05431128550148875
+    RED price: 0.09559523864676
     USDC price: 1.0
-    WETH price: 1794.9212588679125
-    ETH price: 1794.9212588679125
-    VELO price: 0.054409719594976834
-    RED price: 0.09451726568693898
+    WETH price: 1797.8233394812657
+    ETH price: 1797.8233394812657
+    VELO price: 0.05431128550148875
+    RED price: 0.09559523864676
     USDC price: 1.0
-    WETH price: 1794.9212588679125
+    WETH price: 1797.8233394812657
 
 ## Pools
 
@@ -99,22 +99,182 @@ with OPChain() as chain:
     print(f"APR: {usdc_velo.apr}%")
 ```
 
-    >>>>>>> got pools 500
-    >>>>>>> got pools 1000
-    >>>>>>> got pools 1307
-    >>>>>>> got pools 1307
     vAMM-USDC/VELO
     -----------------------
-    Volume: 182312.92122222224 USDC | 2698226.004261449 VELO | $328506.14819195116
-    Fees: 1640.816291 USDC | 24284.034038353042 VELO | $2956.5553337275605
-    TVL: 1777271.82861 USDC | 32596344.38246878 VELO | $3544769.675918862
-    APR: 21.83292639918091%
-    vAMM-USDC/VELO
-    -----------------------
-    Volume: 182312.92122222224 USDC | 2698226.004261449 VELO | $328257.87064859766
-    Fees: 1640.816291 USDC | 24284.034038353042 VELO | $2954.3208358373786
-    TVL: 1777271.82861 USDC | 32596344.38246878 VELO | $3542186.395419241
-    APR: 21.83844876022061%
+    Volume: 255701.2547777778 USDC | 4087122.1442735214 VELO | $478521.23346041725
+    Fees: 2301.311293 USDC | 36784.09929846169 VELO | $4306.691101143755
+    TVL: 1774180.714805 USDC | 32795606.47684509 VELO | $3561202.2485489044
+    APR: 21.695979897366534%
+
+    Web3RPCError: {'message': 'out of gas', 'code': -32000}
+    [0;31m---------------------------------------------------------------------------[0m
+    [0;31mWeb3RPCError[0m                              Traceback (most recent call last)
+    Cell [0;32mIn[5], line 14[0m
+    [1;32m     11[0m     [38;5;28mprint[39m([38;5;124mf[39m[38;5;124m"[39m[38;5;124mAPR: [39m[38;5;132;01m{[39;00musdc_velo[38;5;241m.[39mapr[38;5;132;01m}[39;00m[38;5;124m%[39m[38;5;124m"[39m)
+    [1;32m     13[0m [38;5;28;01mwith[39;00m OPChain() [38;5;28;01mas[39;00m chain:
+    [0;32m---> 14[0m     pools [38;5;241m=[39m [43mchain[49m[38;5;241;43m.[39;49m[43mget_pools[49m[43m([49m[43m)[49m
+    [1;32m     15[0m     usdc_velo [38;5;241m=[39m [38;5;28mnext[39m([38;5;28miter[39m([p [38;5;28;01mfor[39;00m p [38;5;129;01min[39;00m pools [38;5;28;01mif[39;00m p[38;5;241m.[39mtoken0[38;5;241m.[39mtoken_address [38;5;241m==[39m OPChain[38;5;241m.[39musdc[38;5;241m.[39mtoken_address [38;5;129;01mand[39;00m p[38;5;241m.[39mtoken1[38;5;241m.[39mtoken_address [38;5;241m==[39m OPChain[38;5;241m.[39mvelo[38;5;241m.[39mtoken_address]), [38;5;28;01mNone[39;00m)
+    [1;32m     16[0m     [38;5;28mprint[39m([38;5;124mf[39m[38;5;124m"[39m[38;5;132;01m{[39;00musdc_velo[38;5;241m.[39msymbol[38;5;132;01m}[39;00m[38;5;124m"[39m)
+
+    File [0;32m~/projects/sugar-sdk/sugar/chains.py:36[0m, in [0;36mrequire_context.<locals>.wrapper[0;34m(self, *args, **kwargs)[0m
+    [1;32m     33[0m [38;5;129m@wraps[39m(f)
+    [1;32m     34[0m [38;5;28;01mdef[39;00m[38;5;250m [39m[38;5;21mwrapper[39m([38;5;28mself[39m: [38;5;124m'[39m[38;5;124mCommonChain[39m[38;5;124m'[39m, [38;5;241m*[39margs, [38;5;241m*[39m[38;5;241m*[39mkwargs) [38;5;241m-[39m[38;5;241m>[39m T:
+    [1;32m     35[0m     [38;5;28;01mif[39;00m [38;5;129;01mnot[39;00m [38;5;28mself[39m[38;5;241m.[39m_in_context: [38;5;28;01mraise[39;00m [38;5;167;01mRuntimeError[39;00m([38;5;124m"[39m[38;5;124mChain methods can only be accessed within [39m[38;5;124m'[39m[38;5;124masync with[39m[38;5;124m'[39m[38;5;124m block[39m[38;5;124m"[39m)
+    [0;32m---> 36[0m     [38;5;28;01mreturn[39;00m [43mf[49m[43m([49m[38;5;28;43mself[39;49m[43m,[49m[43m [49m[38;5;241;43m*[39;49m[43margs[49m[43m,[49m[43m [49m[38;5;241;43m*[39;49m[38;5;241;43m*[39;49m[43mkwargs[49m[43m)[49m
+
+    File [0;32m~/projects/sugar-sdk/sugar/chains.py:433[0m, in [0;36mChain.get_pools[0;34m(self, for_swaps)[0m
+    [1;32m    431[0m [38;5;28;01mif[39;00m [38;5;129;01mnot[39;00m for_swaps:
+    [1;32m    432[0m     tokens [38;5;241m=[39m [38;5;28mself[39m[38;5;241m.[39mget_all_tokens(listed_only[38;5;241m=[39m[38;5;28;01mFalse[39;00m)
+    [0;32m--> 433[0m     [38;5;28;01mreturn[39;00m [38;5;28mself[39m[38;5;241m.[39mprepare_pools(pools, tokens, [38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43mget_prices[49m[43m([49m[43mtokens[49m[43m)[49m)
+    [1;32m    434[0m [38;5;28;01melse[39;00m: [38;5;28;01mreturn[39;00m [38;5;28mself[39m[38;5;241m.[39mprepare_pools_for_swap(pools)
+
+    File [0;32m~/projects/sugar-sdk/sugar/chains.py:36[0m, in [0;36mrequire_context.<locals>.wrapper[0;34m(self, *args, **kwargs)[0m
+    [1;32m     33[0m [38;5;129m@wraps[39m(f)
+    [1;32m     34[0m [38;5;28;01mdef[39;00m[38;5;250m [39m[38;5;21mwrapper[39m([38;5;28mself[39m: [38;5;124m'[39m[38;5;124mCommonChain[39m[38;5;124m'[39m, [38;5;241m*[39margs, [38;5;241m*[39m[38;5;241m*[39mkwargs) [38;5;241m-[39m[38;5;241m>[39m T:
+    [1;32m     35[0m     [38;5;28;01mif[39;00m [38;5;129;01mnot[39;00m [38;5;28mself[39m[38;5;241m.[39m_in_context: [38;5;28;01mraise[39;00m [38;5;167;01mRuntimeError[39;00m([38;5;124m"[39m[38;5;124mChain methods can only be accessed within [39m[38;5;124m'[39m[38;5;124masync with[39m[38;5;124m'[39m[38;5;124m block[39m[38;5;124m"[39m)
+    [0;32m---> 36[0m     [38;5;28;01mreturn[39;00m [43mf[49m[43m([49m[38;5;28;43mself[39;49m[43m,[49m[43m [49m[38;5;241;43m*[39;49m[43margs[49m[43m,[49m[43m [49m[38;5;241;43m*[39;49m[38;5;241;43m*[39;49m[43mkwargs[49m[43m)[49m
+
+    File [0;32m~/projects/sugar-sdk/sugar/chains.py:415[0m, in [0;36mChain.get_prices[0;34m(self, tokens)[0m
+    [1;32m    412[0m [38;5;129m@require_context[39m
+    [1;32m    413[0m [38;5;28;01mdef[39;00m[38;5;250m [39m[38;5;21mget_prices[39m([38;5;28mself[39m, tokens: List[Token]) [38;5;241m-[39m[38;5;241m>[39m List[Price]:
+    [1;32m    414[0m [38;5;250m    [39m[38;5;124;03m"""Get prices for tokens in target stable token"""[39;00m
+    [0;32m--> 415[0m     [38;5;28;01mreturn[39;00m [38;5;28mself[39m[38;5;241m.[39mprepare_prices(tokens, [38;5;28msum[39m([[38;5;28mself[39m[38;5;241m.[39m_get_prices([38;5;28mtuple[39m(ts)) [38;5;28;01mfor[39;00m ts [38;5;129;01min[39;00m [38;5;28mlist[39m(chunk(tokens, [38;5;28mself[39m[38;5;241m.[39msettings[38;5;241m.[39mprice_batch_size))], []))
+
+    File [0;32m~/projects/sugar-sdk/sugar/chains.py:415[0m, in [0;36m<listcomp>[0;34m(.0)[0m
+    [1;32m    412[0m [38;5;129m@require_context[39m
+    [1;32m    413[0m [38;5;28;01mdef[39;00m[38;5;250m [39m[38;5;21mget_prices[39m([38;5;28mself[39m, tokens: List[Token]) [38;5;241m-[39m[38;5;241m>[39m List[Price]:
+    [1;32m    414[0m [38;5;250m    [39m[38;5;124;03m"""Get prices for tokens in target stable token"""[39;00m
+    [0;32m--> 415[0m     [38;5;28;01mreturn[39;00m [38;5;28mself[39m[38;5;241m.[39mprepare_prices(tokens, [38;5;28msum[39m([[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43m_get_prices[49m[43m([49m[38;5;28;43mtuple[39;49m[43m([49m[43mts[49m[43m)[49m[43m)[49m [38;5;28;01mfor[39;00m ts [38;5;129;01min[39;00m [38;5;28mlist[39m(chunk(tokens, [38;5;28mself[39m[38;5;241m.[39msettings[38;5;241m.[39mprice_batch_size))], []))
+
+    File [0;32m~/projects/sugar-sdk/sugar/chains.py:410[0m, in [0;36mChain._get_prices[0;34m(self, tokens)[0m
+    [1;32m    403[0m [38;5;28;01mdef[39;00m[38;5;250m [39m[38;5;21m_get_prices[39m([38;5;28mself[39m, tokens: Tuple[Token]) [38;5;241m-[39m[38;5;241m>[39m List[[38;5;28mint[39m]:
+    [1;32m    404[0m     [38;5;66;03m# token_address => normalized rate[39;00m
+    [1;32m    405[0m     [38;5;28;01mreturn[39;00m [38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43mprices[49m[38;5;241;43m.[39;49m[43mfunctions[49m[38;5;241;43m.[39;49m[43mgetManyRatesToEthWithCustomConnectors[49m[43m([49m
+    [1;32m    406[0m [43m        [49m[38;5;28;43mlist[39;49m[43m([49m[38;5;28;43mmap[39;49m[43m([49m[38;5;28;43;01mlambda[39;49;00m[43m [49m[43mt[49m[43m:[49m[43m [49m[43mt[49m[38;5;241;43m.[39;49m[43mwrapped_token_address[49m[43m [49m[38;5;129;43;01mor[39;49;00m[43m [49m[43mt[49m[38;5;241;43m.[39;49m[43mtoken_address[49m[43m,[49m[43m [49m[43mtokens[49m[43m)[49m[43m)[49m[43m,[49m
+    [1;32m    407[0m [43m        [49m[38;5;28;43;01mFalse[39;49;00m[43m,[49m[43m [49m[38;5;66;43;03m# use wrappers[39;49;00m
+    [1;32m    408[0m [43m        [49m[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43msettings[49m[38;5;241;43m.[39;49m[43mconnector_tokens_addrs[49m[43m,[49m
+    [1;32m    409[0m [43m        [49m[38;5;241;43m10[39;49m[43m [49m[38;5;66;43;03m# threshold_filter[39;49;00m
+    [0;32m--> 410[0m [43m    [49m[43m)[49m[38;5;241;43m.[39;49m[43mcall[49m[43m([49m[43m)[49m
+
+    File [0;32m~/projects/sugar-sdk/env/lib/python3.10/site-packages/web3/contract/contract.py:291[0m, in [0;36mContractFunction.call[0;34m(self, transaction, block_identifier, state_override, ccip_read_enabled)[0m
+    [1;32m    287[0m block_id [38;5;241m=[39m parse_block_identifier([38;5;28mself[39m[38;5;241m.[39mw3, block_identifier)
+    [1;32m    289[0m abi_element_identifier [38;5;241m=[39m abi_to_signature([38;5;28mself[39m[38;5;241m.[39mabi)
+    [0;32m--> 291[0m [38;5;28;01mreturn[39;00m [43mcall_contract_function[49m[43m([49m
+    [1;32m    292[0m [43m    [49m[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43mw3[49m[43m,[49m
+    [1;32m    293[0m [43m    [49m[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43maddress[49m[43m,[49m
+    [1;32m    294[0m [43m    [49m[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43m_return_data_normalizers[49m[43m,[49m
+    [1;32m    295[0m [43m    [49m[43mabi_element_identifier[49m[43m,[49m
+    [1;32m    296[0m [43m    [49m[43mcall_transaction[49m[43m,[49m
+    [1;32m    297[0m [43m    [49m[43mblock_id[49m[43m,[49m
+    [1;32m    298[0m [43m    [49m[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43mcontract_abi[49m[43m,[49m
+    [1;32m    299[0m [43m    [49m[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43mabi[49m[43m,[49m
+    [1;32m    300[0m [43m    [49m[43mstate_override[49m[43m,[49m
+    [1;32m    301[0m [43m    [49m[43mccip_read_enabled[49m[43m,[49m
+    [1;32m    302[0m [43m    [49m[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43mdecode_tuples[49m[43m,[49m
+    [1;32m    303[0m [43m    [49m[38;5;241;43m*[39;49m[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43margs[49m[43m [49m[38;5;129;43;01mor[39;49;00m[43m [49m[43m([49m[43m)[49m[43m,[49m
+    [1;32m    304[0m [43m    [49m[38;5;241;43m*[39;49m[38;5;241;43m*[39;49m[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43mkwargs[49m[43m [49m[38;5;129;43;01mor[39;49;00m[43m [49m[43m{[49m[43m}[49m[43m,[49m
+    [1;32m    305[0m [43m[49m[43m)[49m
+
+    File [0;32m~/projects/sugar-sdk/env/lib/python3.10/site-packages/web3/contract/utils.py:154[0m, in [0;36mcall_contract_function[0;34m(w3, address, normalizers, abi_element_identifier, transaction, block_id, contract_abi, abi_callable, state_override, ccip_read_enabled, decode_tuples, *args, **kwargs)[0m
+    [1;32m    139[0m [38;5;250m[39m[38;5;124;03m"""[39;00m
+    [1;32m    140[0m [38;5;124;03mHelper function for interacting with a contract function using the[39;00m
+    [1;32m    141[0m [38;5;124;03m`eth_call` API.[39;00m
+    [1;32m    142[0m [38;5;124;03m"""[39;00m
+    [1;32m    143[0m call_transaction [38;5;241m=[39m prepare_transaction(
+    [1;32m    144[0m     address,
+    [1;32m    145[0m     w3,
+    [0;32m   (...)[0m
+    [1;32m    151[0m     fn_kwargs[38;5;241m=[39mkwargs,
+    [1;32m    152[0m )
+    [0;32m--> 154[0m return_data [38;5;241m=[39m [43mw3[49m[38;5;241;43m.[39;49m[43meth[49m[38;5;241;43m.[39;49m[43mcall[49m[43m([49m
+    [1;32m    155[0m [43m    [49m[43mcall_transaction[49m[43m,[49m
+    [1;32m    156[0m [43m    [49m[43mblock_identifier[49m[38;5;241;43m=[39;49m[43mblock_id[49m[43m,[49m
+    [1;32m    157[0m [43m    [49m[43mstate_override[49m[38;5;241;43m=[39;49m[43mstate_override[49m[43m,[49m
+    [1;32m    158[0m [43m    [49m[43mccip_read_enabled[49m[38;5;241;43m=[39;49m[43mccip_read_enabled[49m[43m,[49m
+    [1;32m    159[0m [43m[49m[43m)[49m
+    [1;32m    161[0m [38;5;28;01mif[39;00m abi_callable [38;5;129;01mis[39;00m [38;5;28;01mNone[39;00m:
+    [1;32m    162[0m     abi_callable [38;5;241m=[39m cast(
+    [1;32m    163[0m         ABIFunction,
+    [1;32m    164[0m         get_abi_element(
+    [0;32m   (...)[0m
+    [1;32m    170[0m         ),
+    [1;32m    171[0m     )
+
+    File [0;32m~/projects/sugar-sdk/env/lib/python3.10/site-packages/web3/eth/eth.py:246[0m, in [0;36mEth.call[0;34m(self, transaction, block_identifier, state_override, ccip_read_enabled)[0m
+    [1;32m    236[0m ccip_read_enabled_on_provider [38;5;241m=[39m [38;5;28mself[39m[38;5;241m.[39mw3[38;5;241m.[39mprovider[38;5;241m.[39mglobal_ccip_read_enabled
+    [1;32m    237[0m [38;5;28;01mif[39;00m (
+    [1;32m    238[0m     [38;5;66;03m# default conditions:[39;00m
+    [1;32m    239[0m     ccip_read_enabled_on_provider
+    [0;32m   (...)[0m
+    [1;32m    244[0m     [38;5;129;01mand[39;00m ccip_read_enabled [38;5;129;01mis[39;00m [38;5;28;01mTrue[39;00m
+    [1;32m    245[0m ):
+    [0;32m--> 246[0m     [38;5;28;01mreturn[39;00m [38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43m_durin_call[49m[43m([49m[43mtransaction[49m[43m,[49m[43m [49m[43mblock_identifier[49m[43m,[49m[43m [49m[43mstate_override[49m[43m)[49m
+    [1;32m    248[0m [38;5;28;01mreturn[39;00m [38;5;28mself[39m[38;5;241m.[39m_call(transaction, block_identifier, state_override)
+
+    File [0;32m~/projects/sugar-sdk/env/lib/python3.10/site-packages/web3/eth/eth.py:265[0m, in [0;36mEth._durin_call[0;34m(self, transaction, block_identifier, state_override)[0m
+    [1;32m    263[0m [38;5;28;01mfor[39;00m _ [38;5;129;01min[39;00m [38;5;28mrange[39m(max_redirects):
+    [1;32m    264[0m     [38;5;28;01mtry[39;00m:
+    [0;32m--> 265[0m         [38;5;28;01mreturn[39;00m [38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43m_call[49m[43m([49m[43mtransaction[49m[43m,[49m[43m [49m[43mblock_identifier[49m[43m,[49m[43m [49m[43mstate_override[49m[43m)[49m
+    [1;32m    266[0m     [38;5;28;01mexcept[39;00m OffchainLookup [38;5;28;01mas[39;00m offchain_lookup:
+    [1;32m    267[0m         durin_calldata [38;5;241m=[39m handle_offchain_lookup(
+    [1;32m    268[0m             offchain_lookup[38;5;241m.[39mpayload,
+    [1;32m    269[0m             transaction,
+    [1;32m    270[0m         )
+
+    File [0;32m~/projects/sugar-sdk/env/lib/python3.10/site-packages/web3/module.py:112[0m, in [0;36mretrieve_blocking_method_call_fn.<locals>.caller[0;34m(*args, **kwargs)[0m
+    [1;32m    105[0m     [38;5;28;01mreturn[39;00m LogFilter(eth_module[38;5;241m=[39mmodule, filter_id[38;5;241m=[39merr[38;5;241m.[39mfilter_id)
+    [1;32m    107[0m (
+    [1;32m    108[0m     result_formatters,
+    [1;32m    109[0m     error_formatters,
+    [1;32m    110[0m     null_result_formatters,
+    [1;32m    111[0m ) [38;5;241m=[39m response_formatters
+    [0;32m--> 112[0m result [38;5;241m=[39m [43mw3[49m[38;5;241;43m.[39;49m[43mmanager[49m[38;5;241;43m.[39;49m[43mrequest_blocking[49m[43m([49m
+    [1;32m    113[0m [43m    [49m[43mmethod_str[49m[43m,[49m[43m [49m[43mparams[49m[43m,[49m[43m [49m[43merror_formatters[49m[43m,[49m[43m [49m[43mnull_result_formatters[49m
+    [1;32m    114[0m [43m[49m[43m)[49m
+    [1;32m    115[0m [38;5;28;01mreturn[39;00m apply_result_formatters(result_formatters, result)
+
+    File [0;32m~/projects/sugar-sdk/env/lib/python3.10/site-packages/web3/manager.py:232[0m, in [0;36mRequestManager.request_blocking[0;34m(self, method, params, error_formatters, null_result_formatters)[0m
+    [1;32m    228[0m [38;5;250m[39m[38;5;124;03m"""[39;00m
+    [1;32m    229[0m [38;5;124;03mMake a synchronous request using the provider[39;00m
+    [1;32m    230[0m [38;5;124;03m"""[39;00m
+    [1;32m    231[0m response [38;5;241m=[39m [38;5;28mself[39m[38;5;241m.[39m_make_request(method, params)
+    [0;32m--> 232[0m [38;5;28;01mreturn[39;00m [38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43mformatted_response[49m[43m([49m
+    [1;32m    233[0m [43m    [49m[43mresponse[49m[43m,[49m[43m [49m[43mparams[49m[43m,[49m[43m [49m[43merror_formatters[49m[43m,[49m[43m [49m[43mnull_result_formatters[49m
+    [1;32m    234[0m [43m[49m[43m)[49m
+
+    File [0;32m~/projects/sugar-sdk/env/lib/python3.10/site-packages/web3/manager.py:198[0m, in [0;36mRequestManager.formatted_response[0;34m(self, response, params, error_formatters, null_result_formatters)[0m
+    [1;32m    184[0m [38;5;28;01mdef[39;00m[38;5;250m [39m[38;5;21mformatted_response[39m(
+    [1;32m    185[0m     [38;5;28mself[39m,
+    [1;32m    186[0m     response: RPCResponse,
+    [0;32m   (...)[0m
+    [1;32m    189[0m     null_result_formatters: Optional[Callable[[38;5;241m.[39m[38;5;241m.[39m[38;5;241m.[39m, Any]] [38;5;241m=[39m [38;5;28;01mNone[39;00m,
+    [1;32m    190[0m ) [38;5;241m-[39m[38;5;241m>[39m Any:
+    [1;32m    191[0m     is_subscription_response [38;5;241m=[39m (
+    [1;32m    192[0m         response[38;5;241m.[39mget([38;5;124m"[39m[38;5;124mmethod[39m[38;5;124m"[39m) [38;5;241m==[39m [38;5;124m"[39m[38;5;124meth_subscription[39m[38;5;124m"[39m
+    [1;32m    193[0m         [38;5;129;01mand[39;00m response[38;5;241m.[39mget([38;5;124m"[39m[38;5;124mparams[39m[38;5;124m"[39m) [38;5;129;01mis[39;00m [38;5;129;01mnot[39;00m [38;5;28;01mNone[39;00m
+    [1;32m    194[0m         [38;5;129;01mand[39;00m response[[38;5;124m"[39m[38;5;124mparams[39m[38;5;124m"[39m][38;5;241m.[39mget([38;5;124m"[39m[38;5;124msubscription[39m[38;5;124m"[39m) [38;5;129;01mis[39;00m [38;5;129;01mnot[39;00m [38;5;28;01mNone[39;00m
+    [1;32m    195[0m         [38;5;129;01mand[39;00m response[[38;5;124m"[39m[38;5;124mparams[39m[38;5;124m"[39m][38;5;241m.[39mget([38;5;124m"[39m[38;5;124mresult[39m[38;5;124m"[39m) [38;5;129;01mis[39;00m [38;5;129;01mnot[39;00m [38;5;28;01mNone[39;00m
+    [1;32m    196[0m     )
+    [0;32m--> 198[0m     [43mvalidate_rpc_response_and_raise_if_error[49m[43m([49m
+    [1;32m    199[0m [43m        [49m[43mresponse[49m[43m,[49m
+    [1;32m    200[0m [43m        [49m[43merror_formatters[49m[43m,[49m
+    [1;32m    201[0m [43m        [49m[43mis_subscription_response[49m[38;5;241;43m=[39;49m[43mis_subscription_response[49m[43m,[49m
+    [1;32m    202[0m [43m        [49m[43mlogger[49m[38;5;241;43m=[39;49m[38;5;28;43mself[39;49m[38;5;241;43m.[39;49m[43mlogger[49m[43m,[49m
+    [1;32m    203[0m [43m        [49m[43mparams[49m[38;5;241;43m=[39;49m[43mparams[49m[43m,[49m
+    [1;32m    204[0m [43m    [49m[43m)[49m
+    [1;32m    206[0m     [38;5;66;03m# format results[39;00m
+    [1;32m    207[0m     [38;5;28;01mif[39;00m [38;5;124m"[39m[38;5;124mresult[39m[38;5;124m"[39m [38;5;129;01min[39;00m response:
+    [1;32m    208[0m         [38;5;66;03m# Null values for result should apply null_result_formatters[39;00m
+    [1;32m    209[0m         [38;5;66;03m# Skip when result not present in the response (fallback to False)[39;00m
+
+    File [0;32m~/projects/sugar-sdk/env/lib/python3.10/site-packages/web3/_utils/validation.py:401[0m, in [0;36mvalidate_rpc_response_and_raise_if_error[0;34m(response, error_formatters, is_subscription_response, logger, params)[0m
+    [1;32m    398[0m     [38;5;28;01mif[39;00m logger [38;5;129;01mis[39;00m [38;5;129;01mnot[39;00m [38;5;28;01mNone[39;00m:
+    [1;32m    399[0m         logger[38;5;241m.[39mdebug([38;5;124mf[39m[38;5;124m"[39m[38;5;124mRPC error response: [39m[38;5;132;01m{[39;00mresponse[38;5;132;01m}[39;00m[38;5;124m"[39m)
+    [0;32m--> 401[0m     [38;5;28;01mraise[39;00m web3_rpc_error
+    [1;32m    403[0m [38;5;28;01melif[39;00m [38;5;124m"[39m[38;5;124mresult[39m[38;5;124m"[39m [38;5;129;01mnot[39;00m [38;5;129;01min[39;00m response [38;5;129;01mand[39;00m [38;5;129;01mnot[39;00m is_subscription_response:
+    [1;32m    404[0m     _raise_bad_response_format(response)
+
+    [0;31mWeb3RPCError[0m: {'message': 'out of gas', 'code': -32000}
 
 ## Swaps
 
@@ -210,3 +370,9 @@ pip install -e '.[dev]'
 ``` bash
 pre-commit install
 ```
+
+### Regenerate ABIs if needed
+
+ABIs for contracts are stored inside `sugar/abis` dir. To regenerate
+them, use `abis.py` script (make sure you have `ETHERSCAN_API_KEY` env
+var set)
