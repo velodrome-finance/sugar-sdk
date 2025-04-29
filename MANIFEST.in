@@ -2,4 +2,5 @@ include settings.ini
 include LICENSE
 include CONTRIBUTING.md
 include README.md
+include sugar/abis/*.json
 recursive-exclude * __pycache__
