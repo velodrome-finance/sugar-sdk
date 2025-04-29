@@ -7,7 +7,7 @@ __all__ = ['abis_dir', 'download_contract_abi', 'get_abi']
 import requests, os, json
 
 # %% ../src/abi.ipynb 4
-abis_dir="./sugar/abis"
+abis_dir="abis"
 
 def download_contract_abi(name, address, abis_dir=abis_dir, etherscan_api_url="https://api-optimistic.etherscan.io/api"):
     api_key = os.getenv("ETHERSCAN_API_KEY")
@@ -21,9 +21,10 @@ def download_contract_abi(name, address, abis_dir=abis_dir, etherscan_api_url="h
         json.dump(json.loads(response_data.get("result")), file, indent=4)
 
 def get_abi(name):
-    dir = None
+    dir, path = None, os.path.abspath(__file__)
+    dir_path = os.path.dirname(path)
 
-    for d in [abis_dir, os.path.join("../", abis_dir), "./abis"]:
+    for d in [abis_dir, os.path.join(dir_path, abis_dir), os.path.join(dir_path, "../", abis_dir)]:
         if os.path.exists(d):
             dir = d
             break
