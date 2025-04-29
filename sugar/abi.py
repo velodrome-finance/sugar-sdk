@@ -9,7 +9,7 @@ import requests, os, json
 # %% ../src/abi.ipynb 4
 abis_dir="abis"
 
-def download_contract_abi(name, address, abis_dir=abis_dir, etherscan_api_url="https://api-optimistic.etherscan.io/api"):
+def download_contract_abi(name, address, abis_dir=os.path.join("sugar", abis_dir), etherscan_api_url="https://api-optimistic.etherscan.io/api"):
     api_key = os.getenv("ETHERSCAN_API_KEY")
     if not api_key: raise Exception("ETHERSCAN_API_KEY not set in environment variables")
     response = requests.get(etherscan_api_url, params={ "chainid": 1, "module": "contract", "action": "getabi", "address": address, "apikey": api_key })
@@ -23,8 +23,14 @@ def download_contract_abi(name, address, abis_dir=abis_dir, etherscan_api_url="h
 def get_abi(name):
     dir, path = None, os.path.abspath(__file__)
     dir_path = os.path.dirname(path)
+    abis_locations = [
+        abis_dir,
+        os.path.join(dir_path, abis_dir),
+        os.path.join("../", abis_dir),
+        os.path.join("../sugar", abis_dir),
+    ]
 
-    for d in [abis_dir, os.path.join(dir_path, abis_dir), os.path.join(dir_path, "../", abis_dir)]:
+    for d in abis_locations:
         if os.path.exists(d):
             dir = d
             break
