@@ -229,7 +229,8 @@ class AsyncChain(CommonChain):
             return self.prepare_quotes(inputs, await batch.async_execute())
 
     @require_async_context
-    async def get_quote(self, from_token: Token, to_token: Token, amount_in: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+    async def get_quote(self, from_token: Token, to_token: Token, amount: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+        amount_in = amount
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=await self.get_pools_for_swaps())
         paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
         # TODO: investigate why this takes too long
@@ -444,7 +445,8 @@ class Chain(CommonChain):
             return self.prepare_quotes(inputs, batch.execute())
 
     @require_context
-    def get_quote(self, from_token: Token, to_token: Token, amount_in: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+    def get_quote(self, from_token: Token, to_token: Token, amount: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+        amount_in = amount
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=self.get_pools_for_swaps())
         paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
         path_chunks, chain_instance = list(chunk(paths, 500)), self
