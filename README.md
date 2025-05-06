@@ -172,3 +172,9 @@ ABIs for contracts are stored inside `sugar/abis` dir. To regenerate
 them, use `abis.py` script (make sure you have `ETHERSCAN_API_KEY` env
 var set). We use [Optimistic
 Etherscan](https://optimistic.etherscan.io/).
+
+## Useful links
+
+- keep an eye on the latest sugar contract deployment for your favorite
+  chain
+  [here](https://github.com/velodrome-finance/sugar/tree/main/deployments)
