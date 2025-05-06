@@ -224,6 +224,13 @@ class AsyncChain(CommonChain):
             return self.prepare_pools(pools, tokens, await self.get_prices(tokens))
         else: return self.prepare_pools_for_swap(pools)
     
+    @require_async_context
+    async def get_pool_by_address(self, address: str) -> Optional[LiquidityPool]:
+        try:
+            p = await self.sugar.functions.byAddress(address).call()
+        except: return None
+        tokens = await self.get_all_tokens(listed_only=False)
+        return self.prepare_pools([p], tokens, await self.get_prices(tokens))[0]
     
     @require_async_context
     async def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return await self.get_pools(for_swaps=True)
@@ -440,6 +447,14 @@ class Chain(CommonChain):
             tokens = self.get_all_tokens(listed_only=False)
             return self.prepare_pools(pools, tokens, self.get_prices(tokens))
         else: return self.prepare_pools_for_swap(pools)
+
+    @require_context
+    def get_pool_by_address(self, address: str) -> Optional[LiquidityPool]:
+        try:
+            p = self.sugar.functions.byAddress(address).call()
+        except: return None
+        tokens = self.get_all_tokens(listed_only=False)
+        return self.prepare_pools([p], tokens, self.get_prices(tokens))[0]
     
     @require_context
     def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return self.get_pools(for_swaps=True)

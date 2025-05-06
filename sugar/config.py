@@ -107,7 +107,7 @@ def make_op_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings
     d = {
         "rpc_uri": "https://optimism-mainnet.wallet.coinbase.com",
         "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",
-        "sugar_contract_addr": "0x3B919747B46B13CFfd9f16629cFf951C0b7ea1e2",
+        "sugar_contract_addr": "0xA64db2D254f07977609def75c3A7db3eDc72EE1D",
         "slipstream_contract_addr": "0xD45624bf2CB9f65ecbdF3067d21992b099b56202",
         "nfpm_contract_addr": "0x416b433906b1B72FA758e166e239c43d68dC6F29",
         "price_oracle_contract_addr": "0x59114D308C6DE4A84F5F8cD80485a5481047b99f",
@@ -126,7 +126,7 @@ def make_base_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettin
     d = {
         "rpc_uri": "https://mainnet.base.org",
         "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",
-        "sugar_contract_addr": "0x92294D631E995f1dd9CeE4097426e6a71aB87Bcf",
+        "sugar_contract_addr": "0x6F8Ea68A1a66e49e16A470bcF6fe2A3a7b94CDe9",
         "slipstream_contract_addr": "0x0AD09A66af0154a84e86F761313d02d0abB6edd5",
         "nfpm_contract_addr": "0x827922686190790b37229fd06084350E74485b72",
         "price_oracle_contract_addr": "0x3B06c787711ecb5624cE65AC8F26cde10831eb0C",
