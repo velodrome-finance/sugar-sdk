@@ -19,6 +19,7 @@ base_default_settings = {
   "native_token_symbol": "ETH",
   "native_token_decimals": 18,
   "swap_slippage": 0.01,
+  "pricing_cache_timeout_seconds": 5
 }
 
 
@@ -52,6 +53,8 @@ class ChainSettings:
     pool_page_size: int
     native_token_symbol: str
     native_token_decimals: int
+    # how often to check for new prices
+    pricing_cache_timeout_seconds: int
 
     def __str__(self):
         # go over all attributes of self

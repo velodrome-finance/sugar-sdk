@@ -7,7 +7,9 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
 
 # %% ../src/chains.ipynb 3
 import asyncio, os
-from functools import wraps
+from functools import wraps, lru_cache
+from async_lru import alru_cache
+from cachetools import cached, TTLCache
 from typing import List, TypeVar, Callable, Optional, Tuple, Dict
 from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account
 from web3.eth.async_eth import AsyncContract
@@ -167,6 +169,10 @@ class AsyncChain(CommonChain):
         self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=get_abi("router"))
         self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=get_abi("quoter"))
         self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=get_abi("swapper"))
+
+        # set up caching for price oracle
+        self._get_prices = alru_cache(ttl=self.settings.pricing_cache_timeout_seconds)(self._get_prices)
+
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -176,12 +182,12 @@ class AsyncChain(CommonChain):
         return None
 
     @require_async_context
+    @alru_cache(maxsize=None)
     async def get_all_tokens(self, listed_only: bool = True) -> List[Token]:
         # TODO: pagination for tokens
         tokens = await self.sugar.functions.tokens(1000, 0, ADDRESS_ZERO, []).call()
         return self.prepare_tokens(tokens, listed_only)
     
-    # @cache_in_seconds(ORACLE_PRICES_CACHE_MINUTES * 60)
     async def _get_prices(self, tokens: Tuple[Token]) -> List[int]:
         # token_address => normalized rate
         return await self.prices.functions.getManyRatesToEthWithCustomConnectors(
@@ -205,26 +211,27 @@ class AsyncChain(CommonChain):
         )
         return self.prepare_prices(tokens, sum(batches, []))
 
-    @require_async_context
-    async def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
-        if for_swaps and self.pools_for_swap is not None: return self.pools_for_swap
-        if not for_swaps and self.pools is not None: return self.pools
-
+    @alru_cache(maxsize=None)
+    async def get_raw_pools(self, for_swaps: bool):
         pools, offset, limit = [], 0, self.settings.pool_page_size
-
         while True:
             f = self.sugar.functions.all if not for_swaps else self.sugar.functions.forSwaps
             pools_batch = await f(limit, offset).call()
             pools += pools_batch
             if len(pools_batch) == 0: break
             else: offset += limit
-
+        return pools
+    
+    @require_async_context
+    async def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
+        pools = await self.get_raw_pools(for_swaps)
         if not for_swaps:
             tokens = await self.get_all_tokens()
             return self.prepare_pools(pools, tokens, await self.get_prices(tokens))
         else: return self.prepare_pools_for_swap(pools)
     
     @require_async_context
+    @alru_cache(maxsize=None)
     async def get_pool_by_address(self, address: str) -> Optional[LiquidityPool]:
         try:
             p = await self.sugar.functions.byAddress(address).call()
@@ -390,6 +397,10 @@ class Chain(CommonChain):
         self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=get_abi("router"))
         self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=get_abi("quoter"))
         self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=get_abi("swapper"))
+
+        # set up caching for price oracle
+        self._get_prices = cached(TTLCache(ttl=self.settings.pricing_cache_timeout_seconds, maxsize=self.settings.price_batch_size * 10))(self._get_prices)
+
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -411,10 +422,10 @@ class Chain(CommonChain):
         return self.sign_and_send_tx(token_contract.functions.approve(addr, amount))
 
     @require_context
+    @lru_cache(maxsize=None)
     def get_all_tokens(self, listed_only: bool = True) -> List[Token]:
         return self.prepare_tokens(self.sugar.functions.tokens(800, 0, ADDRESS_ZERO, []).call(), listed_only)
     
-    # @cache_in_seconds(ORACLE_PRICES_CACHE_MINUTES * 60)
     def _get_prices(self, tokens: Tuple[Token]) -> List[int]:
         # token_address => normalized rate
         return self.prices.functions.getManyRatesToEthWithCustomConnectors(
@@ -429,26 +440,27 @@ class Chain(CommonChain):
         """Get prices for tokens in target stable token"""
         return self.prepare_prices(tokens, sum([self._get_prices(tuple(ts)) for ts in list(chunk(tokens, self.settings.price_batch_size))], []))
     
-    @require_context
-    def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
-        if for_swaps and self.pools_for_swap is not None: return self.pools_for_swap
-        if not for_swaps and self.pools is not None: return self.pools
-
+    @lru_cache(maxsize=None)
+    def get_raw_pools(self, for_swaps: bool):
         pools, offset, limit = [], 0, self.settings.pool_page_size
-
         while True:
             f = self.sugar.functions.all if not for_swaps else self.sugar.functions.forSwaps
             pools_batch = f(limit, offset).call()
             pools += pools_batch
             if len(pools_batch) == 0: break
             else: offset += limit
+        return pools
 
+    @require_context
+    def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
+        pools = self.get_raw_pools(for_swaps)
         if not for_swaps:
             tokens = self.get_all_tokens(listed_only=False)
             return self.prepare_pools(pools, tokens, self.get_prices(tokens))
         else: return self.prepare_pools_for_swap(pools)
 
     @require_context
+    @lru_cache(maxsize=None)
     def get_pool_by_address(self, address: str) -> Optional[LiquidityPool]:
         try:
             p = self.sugar.functions.byAddress(address).call()

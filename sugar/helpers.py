@@ -18,10 +18,6 @@ def normalize_address(address: str) -> str: return Web3.to_checksum_address(addr
 ADDRESS_ZERO = constants.ADDRESS_ZERO
 MAX_UINT256 = Web3.to_int(hexstr='0x' + 'f' * 64)
 
-# def is_address(value: str) -> bool:
-#     return Web3.is_address(value)
-
-
 # def cache_in_seconds(seconds: int):
 #     return alru_cache(ttl=seconds)
 
