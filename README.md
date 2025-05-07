@@ -128,6 +128,7 @@ Full list of configuration parameters for Sugar. Chain IDs can be found
 | price_threshold_filter | `SUGAR_PRICE_THRESHOLD_FILTER` | 10 |
 | pool_page_size | `SUGAR_POOL_PAGE_SIZE` | 500 |
 | pagination_limit | `SUGAR_PAGINATION_LIMIT` | 2000 |
+| pricing_cache_timeout_seconds | `SUGAR_PRICING_CACHE_TIMEOUT_SECONDS_<CHAIN_ID>` | 5 |
 
 In order to write to Sugar contracts, you need to set your wallet
 private key using env var `SUGAR_PK`
