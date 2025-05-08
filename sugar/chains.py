@@ -16,13 +16,12 @@ from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings
-from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp
+from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk,  Pair, find_all_paths
 from .abi import get_abi
 from .token import Token
-from .pool import LiquidityPool, LiquidityPoolForSwap
+from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
 from .price import Price
 from .deposit import Deposit
-from .helpers import ADDRESS_ZERO, chunk, normalize_address, Pair, find_all_paths
 from .quote import QuoteInput, Quote
 from .swap import setup_planner
 
@@ -111,6 +110,10 @@ class CommonChain:
     
     def prepare_pools_for_swap(self, pools: List[Tuple]) -> List[LiquidityPoolForSwap]:
         return list(map(lambda p: LiquidityPoolForSwap.from_tuple(p), pools))
+
+    def prepare_pool_epochs(self, epochs: List[Tuple], tokens: List[Token], prices: List[Price]) -> List[LiquidityPoolEpoch]:
+        tokens, prices = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}
+        return list(map(lambda p: LiquidityPoolEpoch.from_tuple(p, tokens, prices), epochs))
     
     def filter_pools_for_swap(self, pools: List[LiquidityPoolForSwap], from_token: Token, to_token: Token) -> List[LiquidityPoolForSwap]:
         match_tokens = set(self.settings.connector_tokens_addrs + [from_token.token_address, to_token.token_address])
@@ -164,6 +167,7 @@ class AsyncChain(CommonChain):
         self._in_context = True
         self.web3 = AsyncWeb3(AsyncHTTPProvider(self.settings.rpc_uri))
         self.sugar = self.web3.eth.contract(address=self.settings.sugar_contract_addr, abi=get_abi("sugar"))
+        self.sugar_rewards = self.web3.eth.contract(address=self.settings.sugar_rewards_contract_addr, abi=get_abi("sugar_rewards"))
         self.slipstream = self.web3.eth.contract(address=self.settings.slipstream_contract_addr, abi=get_abi("slipstream"))
         self.prices = self.web3.eth.contract(address=self.settings.price_oracle_contract_addr, abi=get_abi("price_oracle"))
         self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=get_abi("router"))
@@ -238,6 +242,14 @@ class AsyncChain(CommonChain):
         except: return None
         tokens = await self.get_all_tokens(listed_only=False)
         return self.prepare_pools([p], tokens, await self.get_prices(tokens))[0]
+
+    @require_async_context
+    @alru_cache(maxsize=None)
+    async def get_pool_epochs(self, lp: str, offset: int = 0, limit: int = 10) -> List[LiquidityPoolEpoch]:
+        tokens = await chain.get_all_tokens(listed_only=False)
+        prices = await chain.get_prices(tokens)
+        r = await chain.sugar_rewards.functions.epochsByAddress(limit, offset, normalize_address(lp)).call()
+        return self.prepare_pool_epochs(r, tokens, prices)
     
     @require_async_context
     async def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return await self.get_pools(for_swaps=True)
@@ -282,7 +294,6 @@ class AsyncChain(CommonChain):
     async def set_token_allowance(self, token: Token, addr: str, amount: int):
         token_contract = self.prepare_set_token_allowance_contract(token, self.web3.eth.contract)
         return await self.sign_and_send_tx(token_contract.functions.approve(addr, amount))
-        
 
     @require_async_context
     async def check_token_allowance(self, token: Token, addr: str) -> int:
@@ -392,6 +403,7 @@ class Chain(CommonChain):
         self._in_context = True
         self.web3 = Web3(HTTPProvider(self.settings.rpc_uri))
         self.sugar = self.web3.eth.contract(address=self.settings.sugar_contract_addr, abi=get_abi("sugar"))
+        self.sugar_rewards = self.web3.eth.contract(address=self.settings.sugar_rewards_contract_addr, abi=get_abi("sugar_rewards"))
         self.slipstream = self.web3.eth.contract(address=self.settings.slipstream_contract_addr, abi=get_abi("slipstream"))
         self.prices = self.web3.eth.contract(address=self.settings.price_oracle_contract_addr, abi=get_abi("price_oracle"))
         self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=get_abi("router"))
@@ -470,6 +482,14 @@ class Chain(CommonChain):
     
     @require_context
     def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return self.get_pools(for_swaps=True)
+
+    @require_context
+    @lru_cache(maxsize=None)
+    def get_pool_epochs(self, lp: str, offset: int = 0, limit: int = 10) -> List[LiquidityPoolEpoch]:
+        tokens = chain.get_all_tokens(listed_only=False)
+        prices = chain.get_prices(tokens)
+        r = chain.sugar_rewards.functions.epochsByAddress(limit, offset, normalize_address(lp)).call()
+        return self.prepare_pool_epochs(r, tokens, prices)
 
     @require_context
     def _get_quotes_for_paths(self, from_token: Token, to_token: Token, amount_in: int, pools: List[LiquidityPoolForSwap], paths: List[List[Tuple]]) -> List[Optional[Quote]]:

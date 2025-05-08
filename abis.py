@@ -9,6 +9,7 @@ from sugar.config import make_op_chain_settings
 settings =  make_op_chain_settings()
 abi_config = {
     'sugar': settings.sugar_contract_addr,
+    'sugar_rewards': settings.sugar_rewards_contract_addr,
     'slipstream': settings.slipstream_contract_addr,
     'nfpm': settings.nfpm_contract_addr,
     'price_oracle': settings.price_oracle_contract_addr,
