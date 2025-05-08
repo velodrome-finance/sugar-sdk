@@ -10,6 +10,8 @@ from web3 import Web3, constants
 from typing import List, Tuple
 from decimal import Decimal
 from datetime import datetime, timedelta
+from dataclasses import dataclass
+import networkx as nx
 import math
 
 # %% ../src/helpers.ipynb 3
@@ -64,9 +66,6 @@ def apply_slippage(amount: int, slippage: float) -> int:
 
 # %% ../src/helpers.ipynb 12
 # Claude 3.7 sonnet made this
-
-from dataclasses import dataclass
-import networkx as nx
 
 @dataclass
 class Pair: token0: str; token1: str; pool: str
