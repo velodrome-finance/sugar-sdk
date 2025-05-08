@@ -13,7 +13,7 @@ pip install git+https://github.com/velodrome-finance/sugar-sdk
 
 ## Base quickstart
 
-Getting start with Sugar on Base network:
+Getting started with Sugar on Base network:
 
 ``` python
 from sugar.chains import BaseChain, AsyncBaseChain
@@ -176,6 +176,4 @@ Etherscan](https://optimistic.etherscan.io/).
 
 ## Useful links
 
-- keep an eye on the latest sugar contract deployment for your favorite
-  chain
-  [here](https://github.com/velodrome-finance/sugar/tree/main/deployments)
+- keep an eye on the latest sugar contract deployment for your favorite chain [here](https://github.com/velodrome-finance/sugar/tree/main/deployments)
