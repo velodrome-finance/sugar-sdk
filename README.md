@@ -203,6 +203,4 @@ Etherscan](https://optimistic.etherscan.io/).
 
 ## Useful links
 
-- keep an eye on the latest sugar contract deployment for your favorite
-  chain
-  [here](https://github.com/velodrome-finance/sugar/tree/main/deployments)
+- keep an eye on the latest sugar contract deployment for your favorite chain [here](https://github.com/velodrome-finance/sugar/tree/main/deployments)
