@@ -16,7 +16,8 @@ from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings
-from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk,  Pair, find_all_paths
+from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
+from .helpers import find_all_paths, paginate, async_paginate
 from .abi import get_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
@@ -486,9 +487,9 @@ class Chain(CommonChain):
     @require_context
     @lru_cache(maxsize=None)
     def get_pool_epochs(self, lp: str, offset: int = 0, limit: int = 10) -> List[LiquidityPoolEpoch]:
-        tokens = chain.get_all_tokens(listed_only=False)
-        prices = chain.get_prices(tokens)
-        r = chain.sugar_rewards.functions.epochsByAddress(limit, offset, normalize_address(lp)).call()
+        tokens = self.get_all_tokens(listed_only=False)
+        prices = self.get_prices(tokens)
+        r = self.sugar_rewards.functions.epochsByAddress(limit, offset, normalize_address(lp)).call()
         return self.prepare_pool_epochs(r, tokens, prices)
 
     @require_context
