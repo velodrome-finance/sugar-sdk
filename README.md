@@ -82,7 +82,7 @@ Get a quote and swap:
 ``` python
 from sugar.chains import AsyncOPChain
 
-async with AsyncOPChain() as chain:
+async with AsyncOPChain() as op:
     quote = await op.get_quote(from_token=AsyncOPChain.velo, to_token=AsyncOPChain.eth, amount=10)
     # check on quote to see if you are OK with the amount
     await op.swap_from_quote(quote)
@@ -93,7 +93,7 @@ async with AsyncOPChain() as chain:
 ``` python
 from sugar.chains import AsyncOPChain
 
-async with AsyncOPChain() as chain:
+async with AsyncOPChain() as op:
     await op.swap(from_token=velo, to_token=eth, amount=10)
 ```
 
@@ -147,7 +147,7 @@ async with OPChain(rpc_uri="https://myrpc.com") as chain:
 
 ## Contributing to Sugar
 
-### Set up and acivate python virtual env
+### Set up and activate python virtual env
 
 ``` bash
 python3 -m venv env
