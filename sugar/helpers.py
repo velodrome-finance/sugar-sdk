@@ -3,7 +3,7 @@
 # %% auto 0
 __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'normalize_address', 'chunk', 'amount_to_k_string', 'format_currency',
            'format_percentage', 'amount_to_m_string', 'float_to_uint256', 'get_future_timestamp', 'apply_slippage',
-           'Pair', 'find_all_paths', 'async_paginate', 'paginate']
+           'Pair', 'find_all_paths']
 
 # %% ../src/helpers.ipynb 2
 from web3 import Web3, constants
@@ -121,66 +121,3 @@ def find_all_paths(pairs: List[Pair], start_token: str, end_token: str, cutoff=3
     # remove duplicates
     return uniques
 
-
-# %% ../src/helpers.ipynb 15
-async def async_paginate(worker_func, limit=100, upper_bound=2500):
-    """
-    A simple async paginator that dynamically extends the fetch range when results are still being returned.
-    
-    Args:
-        worker_func: An async function that takes (limit, offset) and returns a collection of results
-        limit: Number of items to request in each batch
-        upper_bound: Initial maximum number of items we expect to fetch
-        
-    Returns: List of all results fetched
-    """
-    batches = []
-    # (offset, limit) pairs
-    pagination_batches = list(map(lambda x: (x, limit), list(range(0, upper_bound, limit))))
-    for offset, limit in pagination_batches: batches.append(await worker_func(limit=limit, offset=offset))
-
-    if len(batches[len(batches) - 1]) == 0: return sum(batches, [])
-
-    # looks like our initial upper bound was too low
-    # keep fetching until get 0 results
-
-    all_results, offset = sum(batches, []), pagination_batches[len(pagination_batches) - 1][0] + limit
-
-    while True:
-        d = await worker_func(limit=limit, offset=offset)
-        if len(d) == 0: break
-        all_results.extend(d)
-        offset += limit
-
-    return all_results
-
-def paginate(worker_func, limit=100, upper_bound=2500):
-    """
-    A simple paginator that dynamically extends the fetch range when results are still being returned.
-    
-    Args:
-        worker_func: A function that takes (limit, offset) and returns a collection of results
-        limit: Number of items to request in each batch
-        upper_bound: Initial maximum number of items we expect to fetch
-        
-    Returns: List of all results fetched
-    """
-    batches = []
-    # (offset, limit) pairs
-    pagination_batches = list(map(lambda x: (x, limit), list(range(0, upper_bound, limit))))
-    for offset, limit in pagination_batches: batches.append(worker_func(limit=limit, offset=offset))
-
-    if len(batches[len(batches) - 1]) == 0: return sum(batches, [])
-
-    # looks like our initial upper bound was too low
-    # keep fetching until get 0 results
-
-    all_results, offset = sum(batches, []), pagination_batches[len(pagination_batches) - 1][0] + limit
-
-    while True:
-        d = worker_func(limit=limit, offset=offset)
-        if len(d) == 0: break
-        all_results.extend(d)
-        offset += limit
-
-    return all_results
