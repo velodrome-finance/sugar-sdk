@@ -75,6 +75,32 @@ with OPChain() as chain:
     print(f"APR: {usdc_velo.apr}%")
 ```
 
+## Fees and incentives
+
+To get information for the latest epochs across all the pools:
+
+``` python
+async with AsyncOPChain() as chain:
+    epochs = await chain.get_latest_pool_epochs()
+    ep = epochs[0]
+    print(f"{ep.pool.symbol}")
+    print(f"Epoch date: {ep.epoch_date}")
+    print(f"Fees: {' '.join([f'{fee.amount} {fee.token.symbol}' for fee in ep.fees])} {ep.total_fees}")
+    print(f"Incentives: {' '.join([f'{incentive.amount} {incentive.token.symbol}' for incentive in ep.incentives])} {ep.total_incentives}")
+```
+
+You can also get epochs for a specific pool using its address:
+
+``` python
+async with AsyncOPChain() as chain:
+    epochs = await chain.get_pool_epochs("0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a")
+    ep = epochs[0]
+    print(f"{ep.pool.symbol}")
+    print(f"Epoch date: {ep.epoch_date}")
+    print(f"Fees: {' '.join([f'{fee.amount} {fee.token.symbol}' for fee in ep.fees])} {ep.total_fees}")
+    print(f"Incentives: {' '.join([f'{incentive.amount} {incentive.token.symbol}' for incentive in ep.incentives])} {ep.total_incentives}")
+```
+
 ## Swaps
 
 Get a quote and swap:
@@ -127,6 +153,7 @@ Full list of configuration parameters for Sugar. Chain IDs can be found
 | price_batch_size | `SUGAR_PRICE_BATCH_SIZE` | 40 |
 | price_threshold_filter | `SUGAR_PRICE_THRESHOLD_FILTER` | 10 |
 | pool_page_size | `SUGAR_POOL_PAGE_SIZE` | 500 |
+| pools_count_upper_bound | `POOLS_COUNT_UPPER_BOUND_<CHAIN_ID>` | 2500 |
 | pagination_limit | `SUGAR_PAGINATION_LIMIT` | 2000 |
 | pricing_cache_timeout_seconds | `SUGAR_PRICING_CACHE_TIMEOUT_SECONDS_<CHAIN_ID>` | 5 |
 
@@ -176,5 +203,6 @@ Etherscan](https://optimistic.etherscan.io/).
 
 ## Useful links
 
-- keep an eye on the latest sugar contract deployment for your favorite chain [here](https://github.com/velodrome-finance/sugar/tree/main/deployments)
-
+- keep an eye on the latest sugar contract deployment for your favorite
+  chain
+  [here](https://github.com/velodrome-finance/sugar/tree/main/deployments)

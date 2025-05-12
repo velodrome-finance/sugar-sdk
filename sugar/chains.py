@@ -112,9 +112,9 @@ class CommonChain:
     def prepare_pools_for_swap(self, pools: List[Tuple]) -> List[LiquidityPoolForSwap]:
         return list(map(lambda p: LiquidityPoolForSwap.from_tuple(p), pools))
 
-    def prepare_pool_epochs(self, epochs: List[Tuple], tokens: List[Token], prices: List[Price]) -> List[LiquidityPoolEpoch]:
-        tokens, prices = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}
-        return list(map(lambda p: LiquidityPoolEpoch.from_tuple(p, tokens, prices), epochs))
+    def prepare_pool_epochs(self, epochs: List[Tuple], pools: List[LiquidityPool], tokens: List[Token], prices: List[Price]) -> List[LiquidityPoolEpoch]:
+        tokens, prices, pools = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}, {p.lp: p for p in pools}
+        return list(map(lambda p: LiquidityPoolEpoch.from_tuple(p, pools, tokens, prices), epochs))
     
     def filter_pools_for_swap(self, pools: List[LiquidityPoolForSwap], from_token: Token, to_token: Token) -> List[LiquidityPoolForSwap]:
         match_tokens = set(self.settings.connector_tokens_addrs + [from_token.token_address, to_token.token_address])
@@ -151,6 +151,12 @@ class CommonChain:
         paths = find_all_paths(pairs, from_token.wrapped_token_address or from_token.token_address, to_token.wrapped_token_address or to_token.token_address)
         # filter out paths with excluded tokens
         return list(filter(lambda p: len(set(map(lambda t: t[0], p)) & exclude_tokens_set) == 0, paths))
+
+    def prepare_epoch_batcher(self, batch: RequestBatcher):
+        limit, upper_bound = 100, self.settings.pools_count_upper_bound
+        pagination_batches = list(map(lambda x: (x, limit), list(range(0, upper_bound, limit))))
+        for offset, limit in pagination_batches: batch.add(self.sugar_rewards.functions.epochsLatest(limit, offset))
+        return batch
 
 # %% ../src/chains.ipynb 8
 class AsyncChain(CommonChain):
@@ -247,10 +253,21 @@ class AsyncChain(CommonChain):
     @require_async_context
     @alru_cache(maxsize=None)
     async def get_pool_epochs(self, lp: str, offset: int = 0, limit: int = 10) -> List[LiquidityPoolEpoch]:
-        tokens = await chain.get_all_tokens(listed_only=False)
-        prices = await chain.get_prices(tokens)
-        r = await chain.sugar_rewards.functions.epochsByAddress(limit, offset, normalize_address(lp)).call()
-        return self.prepare_pool_epochs(r, tokens, prices)
+        tokens, pools = await self.get_all_tokens(listed_only=False), await self.get_pools()
+        prices = await self.get_prices(tokens)
+        r = await self.sugar_rewards.functions.epochsByAddress(limit, offset, normalize_address(lp)).call()
+        return self.prepare_pool_epochs(r, pools, tokens, prices)
+
+    @require_async_context
+    @alru_cache(maxsize=None)
+    async def get_latest_pool_epochs(self) -> List[LiquidityPoolEpoch]:
+        tokens, pools = await self.get_all_tokens(listed_only=False), await self.get_pools()
+        prices = await self.get_prices(tokens)
+        async with self.web3.batch_requests() as batch:
+            batch = self.prepare_epoch_batcher(batch)
+            batches_of_epochs = await batch.async_execute()
+            # batches_of_epochs <- list of lists, flatten it below
+            return self.prepare_pool_epochs(sum(batches_of_epochs, []), pools, tokens, prices)
     
     @require_async_context
     async def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return await self.get_pools(for_swaps=True)
@@ -487,10 +504,21 @@ class Chain(CommonChain):
     @require_context
     @lru_cache(maxsize=None)
     def get_pool_epochs(self, lp: str, offset: int = 0, limit: int = 10) -> List[LiquidityPoolEpoch]:
-        tokens = self.get_all_tokens(listed_only=False)
+        tokens, pools = self.get_all_tokens(listed_only=False), self.get_pools()
         prices = self.get_prices(tokens)
         r = self.sugar_rewards.functions.epochsByAddress(limit, offset, normalize_address(lp)).call()
-        return self.prepare_pool_epochs(r, tokens, prices)
+        return self.prepare_pool_epochs(r, pools, tokens, prices)
+
+    @require_context
+    @lru_cache(maxsize=None)
+    def get_latest_pool_epochs(self) -> List[LiquidityPoolEpoch]:
+        tokens, pools = self.get_all_tokens(listed_only=False), self.get_pools()
+        prices = self.get_prices(tokens)
+        with self.web3.batch_requests() as batch:
+            batch = self.prepare_epoch_batcher(batch)
+            batches_of_epochs = batch.execute()
+            # batches_of_epochs <- list of lists, flatten it below
+            return self.prepare_pool_epochs(sum(batches_of_epochs, []), pools, tokens, prices)
 
     @require_context
     def _get_quotes_for_paths(self, from_token: Token, to_token: Token, amount_in: int, pools: List[LiquidityPoolForSwap], paths: List[List[Tuple]]) -> List[Optional[Quote]]:

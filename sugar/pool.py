@@ -5,6 +5,7 @@ __all__ = ['Price', 'Amount', 'symbol', 'LiquidityPoolForSwap', 'LiquidityPool',
 
 # %% ../src/pool.ipynb 3
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Tuple, Dict, Optional, List
 from .token import Token
 from .helpers import normalize_address
@@ -218,38 +219,30 @@ class LiquidityPool:
 class LiquidityPoolEpoch:
     ts: int
     lp: str
+    pool: LiquidityPool
     votes: int
     emissions: int
     incentives: List[Amount]
     fees: List[Amount]
 
     @classmethod
-    def from_tuple(cls, t: Tuple, tokens: Dict[str, Token], prices: Dict[str, Price]) -> "LiquidityPoolEpoch":
+    def from_tuple(cls, t: Tuple, pools: Dict[str, LiquidityPool], tokens: Dict[str, Token], prices: Dict[str, Price]) -> "LiquidityPoolEpoch":
         ts, lp, votes, emissions, incentives, fees = t[0], normalize_address(t[1]), t[2], t[3], t[4], t[5]
         def build_amount(token_address: str, amount: int) -> Amount:
             return Amount.build(normalize_address(token_address), amount, tokens, prices)
 
-        return LiquidityPoolEpoch(ts=ts, lp=lp, votes=votes, emissions=emissions,
+        return LiquidityPoolEpoch(ts=ts, lp=lp, pool=pools.get(lp), votes=votes, emissions=emissions,
             incentives=[build_amount(i[0], i[1]) for i in incentives],
             fees=[build_amount(f[0], f[1]) for f in fees]
         )
-# [
-#     (1746662400, '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a', 2056024776197125704049080, 19181568728350530, 
-#         [('0x3417E54A51924C225330f8770514aD5560B9098D', 3000000000000000000000)],
-#         [('0x3417E54A51924C225330f8770514aD5560B9098D', 267805653941732793034), ('0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', 81470986521137929477)]
-#     ),
-#     (1746057600, '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a', 2056024832181766038591096, 19253831822417903, [('0x3417E54A51924C225330f8770514aD5560B9098D', 1200000000000000000000)], [('0x3417E54A51924C225330f8770514aD5560B9098D', 44464184523591253285), ('0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', 64794494866571000870)]), (1745452800, '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a', 2051385009634926652700680, 37306487407189160, [('0x3417E54A51924C225330f8770514aD5560B9098D', 1200000000000000000000)], [('0x3417E54A51924C225330f8770514aD5560B9098D', 37571064173289335172), ('0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', 127265438536618692353)]), (1744848000, '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a', 3977142636655506235648438, 37206144624961803, [('0x3417E54A51924C225330f8770514aD5560B9098D', 2600000000000000000000)], [('0x3417E54A51924C225330f8770514aD5560B9098D', 92942471836846202824), ('0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', 299059396392390441882)]), (1744243200, '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a', 3977088257079466249550992, 37116391390950033, [('0x3417E54A51924C225330f8770514aD5560B9098D', 2300000000000000000000)], [('0x3417E54A51924C225330f8770514aD5560B9098D', 98379660134389607449), ('0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', 190148840949186514049)]), (1743638400, '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a', 3975425402407602797294276, 37144347936477938, [('0x3417E54A51924C225330f8770514aD5560B9098D', 1500000000000000000000)], [('0x3417E54A51924C225330f8770514aD5560B9098D', 81832664150680636426), ('0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', 106544187095976465204)]), (1743033600, '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a', 3973767072055488422817753, 39111094487837607, [('0x3417E54A51924C225330f8770514aD5560B9098D', 3000000000000000000000)], [('0x3417E54A51924C225330f8770514aD5560B9098D', 152980922867267765747), ('0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', 182333579676775942808)]), (1742428800, '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a', 4255170361768291929377472, 39640502132165337, [('0x3417E54A51924C225330f8770514aD5560B9098D', 4300000000000000000000)], [('0x3417E54A51924C225330f8770514aD5560B9098D', 201382309874805880678), ('0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', 376906113358557156648)]), (1741824000, '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a', 4266102287179467714360647, 39985595681011872, [('0x3417E54A51924C225330f8770514aD5560B9098D', 5400000000000000000000)], [('0x3417E54A51924C225330f8770514aD5560B9098D', 335197067444939975739), ('0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', 340822763729420176579)]), (1741219200, '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a', 4257456360408014926013322, 40598073162727141, [('0x3417E54A51924C225330f8770514aD5560B9098D', 3600000000000000000000)], [('0x3417E54A51924C225330f8770514aD5560B9098D', 273437948081275951977), ('0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', 140346506674975968991)])
-# ]
 
-# ts: bigint;
-# lp: `0x${string}`;
-# votes: bigint;
-# emissions: bigint;
-# bribes: readonly {
-#     token: `0x${string}`;
-#     amount: bigint;
-# }[];
-# fees: readonly {
-#     token: `0x${string}`;
-#     amount: bigint;
-# }[];    
+    @property
+    def total_fees(self) -> float:
+        return sum([fee.amount_in_stable for fee in self.fees]) if self.fees else 0
+    @property
+    def total_incentives(self) -> float:
+        return sum([incentive.amount_in_stable for incentive in self.incentives]) if self.incentives else 0
+
+    @property
+    def epoch_date(self) -> datetime:
+        return datetime.fromtimestamp(self.ts)
