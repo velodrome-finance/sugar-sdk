@@ -16,8 +16,6 @@ jobs:
         uses: Homebrew/actions/setup-homebrew@master
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
       - name: Confirm forge is installed
         run: forge --version
       - name: Install supersim
