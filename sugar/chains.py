@@ -153,7 +153,7 @@ class CommonChain:
         return list(filter(lambda p: len(set(map(lambda t: t[0], p)) & exclude_tokens_set) == 0, paths))
 
     def get_pool_paginator(self):
-        limit, upper_bound = 100, self.settings.pools_count_upper_bound
+        limit, upper_bound = self.settings.pool_page_size, self.settings.pools_count_upper_bound
         return list(map(lambda x: (x, limit), list(range(0, upper_bound, limit))))
 
     def prepare_epoch_batcher(self, batch: RequestBatcher):
