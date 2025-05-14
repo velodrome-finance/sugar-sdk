@@ -25,7 +25,7 @@ jobs:
       - name: Fork
         run: |
           supersim fork  --l2.host=0.0.0.0 --l2.starting.port=4444 --chains=op,base > /dev/null 2>&1 &
-          sleep 20
-      # - name: Test fork
-      #   run: cast call 0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2 "MAX_TOKENS()(uint256)" --rpc-url http://localhost:4444
+          sleep 10
+      - name: Test fork
+        run: cast call 0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2 "MAX_TOKENS()(uint256)" --rpc-url http://localhost:4444
       - uses: fastai/workflows/nbdev-ci@master
