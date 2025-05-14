@@ -171,6 +171,18 @@ class CommonChain:
         pagination_batches = self.get_pool_paginator()
         for offset, limit in pagination_batches: batch.add(self.sugar.functions.tokens(limit, offset, ADDRESS_ZERO, []))
         return batch
+    
+    def prepare_price_batcher(self, tokens: List[Token], batch: RequestBatcher):
+        batches = chunk(tokens, self.settings.price_batch_size)
+        for b in batches:
+            batch.add(self.prices.functions.getManyRatesToEthWithCustomConnectors(
+                list(map(lambda t: t.wrapped_token_address or t.token_address, b)),
+                False, # use wrappers
+                self.settings.connector_tokens_addrs,
+                10 # threshold_filter
+            ))
+        return batch
+            
 
 # %% ../src/chains.ipynb 8
 class AsyncChain(CommonChain):
@@ -214,28 +226,15 @@ class AsyncChain(CommonChain):
             # batches_of_tokens <- list of lists, flatten it below
             return self.prepare_tokens(sum(await batch.async_execute(), []), listed_only)
     
-    async def _get_prices(self, tokens: Tuple[Token]) -> List[int]:
-        # token_address => normalized rate
-        return await self.prices.functions.getManyRatesToEthWithCustomConnectors(
-            list(map(lambda t: t.wrapped_token_address or t.token_address, tokens)),
-            False, # use wrappers
-            self.settings.connector_tokens_addrs,
-            10 # threshold_filter
-        ).call()
+    async def _get_prices(self, tokens: Tuple[Token]):
+        async with self.web3.batch_requests() as batch:
+            batch = self.prepare_price_batcher(tokens=list(tokens), batch=batch)
+            return sum(await batch.async_execute(), [])
 
     @require_async_context
     async def get_prices(self, tokens: List[Token]) -> List[Price]:
         """Get prices for tokens in target stable token"""
-
-        # batches starts as a list of lists 
-        batches = await asyncio.gather(
-            *map(
-                # XX: lists are not cacheable, convert them to tuples so lru cache is happy
-                lambda ts: self._get_prices(tuple(ts)),
-                list(chunk(tokens, self.settings.price_batch_size)),
-            )
-        )
-        return self.prepare_prices(tokens, sum(batches, []))
+        return self.prepare_prices(tokens, await self._get_prices(tuple(tokens)))
 
     @alru_cache(maxsize=None)
     async def get_raw_pools(self, for_swaps: bool):
@@ -472,17 +471,14 @@ class Chain(CommonChain):
     
     def _get_prices(self, tokens: Tuple[Token]) -> List[int]:
         # token_address => normalized rate
-        return self.prices.functions.getManyRatesToEthWithCustomConnectors(
-            list(map(lambda t: t.wrapped_token_address or t.token_address, tokens)),
-            False, # use wrappers
-            self.settings.connector_tokens_addrs,
-            10 # threshold_filter
-        ).call()
+        with self.web3.batch_requests() as batch:
+            batch = self.prepare_price_batcher(tokens=list(tokens), batch=batch)
+            return sum(batch.execute(), [])
 
     @require_context
     def get_prices(self, tokens: List[Token]) -> List[Price]:
         """Get prices for tokens in target stable token"""
-        return self.prepare_prices(tokens, sum([self._get_prices(tuple(ts)) for ts in list(chunk(tokens, self.settings.price_batch_size))], []))
+        return self.prepare_prices(tokens, self._get_prices(tuple(tokens)))
     
     @lru_cache(maxsize=None)
     def get_raw_pools(self, for_swaps: bool):
