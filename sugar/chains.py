@@ -6,12 +6,11 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
            'AsyncBaseChain', 'BaseChain']
 
 # %% ../src/chains.ipynb 3
-import asyncio, os
+import os
 from functools import wraps, lru_cache
 from async_lru import alru_cache
 from cachetools import cached, TTLCache
 from typing import List, TypeVar, Callable, Optional, Tuple, Dict
-import web3
 from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account
 from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
@@ -28,10 +27,6 @@ from .quote import QuoteInput, Quote
 from .swap import setup_planner
 
 # %% ../src/chains.ipynb 4
-if web3.__version__ != "7.10.0":
-    raise ImportError(f"Quotes are super slow with anything above web3==7.10.0, current version is {web3.__version__}")
-
-# %% ../src/chains.ipynb 5
 # monkey patching how web3 handles errors in batched requests
 # re: https://github.com/ethereum/web3.py/issues/3657
 original_format_batched_response = RequestManager._format_batched_response
@@ -40,7 +35,7 @@ def safe_format_batched_response(*args):
     except Exception as e: return e
 RequestManager._format_batched_response = safe_format_batched_response
 
-# %% ../src/chains.ipynb 7
+# %% ../src/chains.ipynb 6
 T = TypeVar('T')
 
 def require_context(f: Callable[..., T]) -> Callable[..., T]:
@@ -189,7 +184,7 @@ class CommonChain:
         return batch
             
 
-# %% ../src/chains.ipynb 9
+# %% ../src/chains.ipynb 8
 class AsyncChain(CommonChain):
     web3: AsyncWeb3
     sugar: AsyncContract
@@ -421,7 +416,7 @@ class AsyncChain(CommonChain):
 
         return await self.sign_and_send_tx(self.router.functions.addLiquidity(*params))
 
-# %% ../src/chains.ipynb 11
+# %% ../src/chains.ipynb 10
 class Chain(CommonChain):
     web3: Web3
     sugar: Contract
@@ -569,7 +564,7 @@ class Chain(CommonChain):
         value = quote.input.amount_in if from_token.wrapped_token_address else 0
         return self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
 
-# %% ../src/chains.ipynb 13
+# %% ../src/chains.ipynb 12
 class OPChainCommon():
     usdc: Token = Token(token_address='0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
     velo: Token = Token(token_address='0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', symbol='VELO', decimals=18, listed=True, wrapped_token_address=None)
@@ -582,7 +577,7 @@ class OPChain(Chain, OPChainCommon):
     def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs), **kwargs)
 
 
-# %% ../src/chains.ipynb 15
+# %% ../src/chains.ipynb 14
 class BaseChainCommon():
     usdc: Token = Token(token_address='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
     aero: Token = Token(token_address='0x940181a94A35A4569E4529A3CDfB74e38FD98631', symbol='AERO', decimals=18, listed=True, wrapped_token_address=None)
