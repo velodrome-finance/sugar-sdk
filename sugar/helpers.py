@@ -3,16 +3,17 @@
 # %% auto 0
 __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'normalize_address', 'chunk', 'amount_to_k_string', 'format_currency',
            'format_percentage', 'amount_to_m_string', 'float_to_uint256', 'get_future_timestamp', 'apply_slippage',
-           'Pair', 'find_all_paths']
+           'Pair', 'find_all_paths', 'Timer', 'time_it', 'atime_it']
 
 # %% ../src/helpers.ipynb 2
 from web3 import Web3, constants
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Callable
 from decimal import Decimal
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 import networkx as nx
-import math
+import math, time, asyncio
+from contextlib import contextmanager, asynccontextmanager
 
 # %% ../src/helpers.ipynb 3
 def normalize_address(address: str) -> str: return Web3.to_checksum_address(address.lower())
@@ -121,3 +122,62 @@ def find_all_paths(pairs: List[Pair], start_token: str, end_token: str, cutoff=3
     # remove duplicates
     return uniques
 
+
+# %% ../src/helpers.ipynb 15
+# Claude 4 sonnet made this
+
+class Timer:
+    """Simple timer utility for measuring execution time"""
+    
+    def __init__(self, name: str = "Operation", precision: int = 4, callback: Optional[Callable] = None):
+        self.name = name
+        self.precision = precision
+        self.callback = callback
+        self.start_time: Optional[float] = None
+        self.end_time: Optional[float] = None
+        self.elapsed: Optional[float] = None
+    
+    def __enter__(self):
+        self.start_time = time.perf_counter()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.end_time = time.perf_counter()
+        self.elapsed = self.end_time - self.start_time
+        result = f"{self.name} took {self.elapsed:.{self.precision}f} seconds"
+        
+        if self.callback:
+            self.callback(self.elapsed, result)
+        else:
+            print(result)
+    
+    async def __aenter__(self):
+        self.start_time = time.perf_counter()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.end_time = time.perf_counter()
+        self.elapsed = self.end_time - self.start_time
+        result = f"{self.name} took {self.elapsed:.{self.precision}f} seconds"
+        
+        if self.callback:
+            if asyncio.iscoroutinefunction(self.callback):
+                await self.callback(self.elapsed, result)
+            else:
+                self.callback(self.elapsed, result)
+        else:
+            print(result)
+
+@contextmanager
+def time_it(name: str = "Operation", precision: int = 4, callback: Optional[Callable] = None):
+    """Context manager for timing synchronous code execution"""
+    timer = Timer(name, precision, callback)
+    with timer:
+        yield timer
+
+@asynccontextmanager
+async def atime_it(name: str = "Operation", precision: int = 4, callback: Optional[Callable] = None):
+    """Async context manager for timing asynchronous code execution"""
+    timer = Timer(name, precision, callback)
+    async with timer:
+        yield timer

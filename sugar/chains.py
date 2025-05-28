@@ -6,7 +6,7 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
            'AsyncBaseChain', 'BaseChain']
 
 # %% ../src/chains.ipynb 3
-import os
+import os, asyncio
 from functools import wraps, lru_cache
 from async_lru import alru_cache
 from cachetools import cached, TTLCache
@@ -17,7 +17,7 @@ from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
-from .helpers import find_all_paths
+from .helpers import find_all_paths, time_it, atime_it
 from .abi import get_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
@@ -291,16 +291,11 @@ class AsyncChain(CommonChain):
 
     @require_async_context
     async def get_quote(self, from_token: Token, to_token: Token, amount: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
-        amount_in = amount
+        amount_in = float_to_uint256(amount, decimals=from_token.decimals)
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=await self.get_pools_for_swaps())
         paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
-        # TODO: investigate why this takes too long
-        # quotes = sum(await asyncio.gather(*[self._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths) for paths in chunk(paths, 500)]), [])
-        quotes = [] 
-        for paths in chunk(paths, 500):
-            r = await self._get_quotes_for_paths(from_token, to_token, float_to_uint256(amount_in, decimals=from_token.decimals), pools, paths)
-            for q in r:
-                if q is not None: quotes.append(q)
+        quotes = sum(await asyncio.gather(*[self._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths) for paths in chunk(paths, 500)]), [])
+        quotes = list(filter(lambda q: q is not None, quotes))
         if filter_quotes is not None: quotes = list(filter(filter_quotes, quotes))
         return max(quotes, key=lambda q: q.amount_out) if len(quotes) > 0 else None
     
