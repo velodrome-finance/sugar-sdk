@@ -16,12 +16,13 @@ base_default_settings = {
   "price_threshold_filter": int(os.getenv("SUGAR_PRICE_THRESHOLD_FILTER","10")),
   "pagination_limit": int(os.getenv("SUGAR_PAGINATION_LIMIT","2000")),
   "pool_page_size": int(os.getenv("SUGAR_POOL_PAGE_SIZE","500")),
-  # XX: dealing with Schrödinger's paginator this is likely to be ignore in the future with new sugar helpers
+  # XX: dealing with Schrödinger's paginator this is likely to be ignored in the future with new sugar helpers
   "pools_count_upper_bound": 2500,
   "native_token_symbol": "ETH",
   "native_token_decimals": 18,
   "swap_slippage": 0.01,
-  "pricing_cache_timeout_seconds": 5
+  "pricing_cache_timeout_seconds": 5,
+  "quote_sync_max_workers": 5
 }
 
 
@@ -59,6 +60,8 @@ class ChainSettings:
     native_token_decimals: int
     # how often to check for new prices
     pricing_cache_timeout_seconds: int
+    # how many max workers to use when fetching quotes in sync mode
+    quote_sync_max_workers: int
 
     def __str__(self):
         # go over all attributes of self
@@ -78,7 +81,8 @@ class ChainSettings:
 def validate_settings(settings: ChainSettings) -> ChainSettings:
     # TODO: this should actually validate stuff, duh
     floats = ["swap_slippage"]
-    ints = ["price_batch_size", "price_threshold_filter", "pagination_limit", "pool_page_size", "native_token_decimals", "pricing_cache_timeout_seconds", "pools_count_upper_bound"]
+    ints = ["price_batch_size", "price_threshold_filter", "pagination_limit", "pool_page_size", "native_token_decimals",
+            "pricing_cache_timeout_seconds", "pools_count_upper_bound", "quote_sync_max_workers"]
     for k in floats: setattr(settings, k, float(getattr(settings, k)))
     for k in ints: setattr(settings, k, int(getattr(settings, k)))
     return settings
