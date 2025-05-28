@@ -7,6 +7,7 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
 
 # %% ../src/chains.ipynb 3
 import os, asyncio
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps, lru_cache
 from async_lru import alru_cache
 from cachetools import cached, TTLCache
@@ -527,21 +528,38 @@ class Chain(CommonChain):
         with self.web3.batch_requests() as batch:
             batch, inputs = self.prepare_quote_batch(from_token, to_token, batch, path_pools, amount_in, paths)
             return self.prepare_quotes(inputs, batch.execute())
-
+    
     @require_context
     def get_quote(self, from_token: Token, to_token: Token, amount: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
-        amount_in = amount
+        amount_in = float_to_uint256(amount, decimals=from_token.decimals)
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=self.get_pools_for_swaps())
         paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
-        path_chunks, chain_instance = list(chunk(paths, 500)), self
-        def get_quotes_for_chunk(paths_chunk): return chain_instance._get_quotes_for_paths(from_token, to_token, float_to_uint256(amount_in, decimals=from_token.decimals), pools, paths_chunk)
-        # TODO: make this work in threads re: https://github.com/ethereum/web3.py/issues/3613
-        all_quotes = []
-        for pc in path_chunks:
-            quotes = get_quotes_for_chunk(pc)
-            for q in quotes: all_quotes.append(q)
+        path_chunks = list(chunk(paths, 500))
 
-        if filter_quotes is not None: all_quotes = list(filter(filter_quotes, all_quotes))
+        def get_quotes_for_chunk(paths_chunk):
+            return self._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths_chunk)
+        
+        all_quotes = []
+        
+        with ThreadPoolExecutor(max_workers=self.settings.quote_sync_max_workers) as executor:
+            # Submit all chunk processing tasks
+            future_to_chunk = {
+                executor.submit(get_quotes_for_chunk, chunk_paths): chunk_paths 
+                for chunk_paths in path_chunks
+            }
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_chunk):
+                try:
+                    all_quotes.extend(future.result())
+                except Exception as e:
+                    print(f"Error processing path chunk: {e}")
+                    continue
+
+        # Filter out None quotes
+        all_quotes = [q for q in all_quotes if q is not None]
+    
+        if filter_quotes is not None:  all_quotes = list(filter(filter_quotes, all_quotes))
 
         return max(all_quotes, key=lambda q: q.amount_out) if len(all_quotes) > 0 else None
     
