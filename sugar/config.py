@@ -22,7 +22,7 @@ base_default_settings = {
   "native_token_decimals": 18,
   "swap_slippage": 0.01,
   "pricing_cache_timeout_seconds": 5,
-  "quote_sync_max_workers": 5
+  "threading_max_workers": 5
 }
 
 
@@ -60,8 +60,8 @@ class ChainSettings:
     native_token_decimals: int
     # how often to check for new prices
     pricing_cache_timeout_seconds: int
-    # how many max workers to use when fetching quotes in sync mode
-    quote_sync_max_workers: int
+    # how many max workers to use for threading in sync methods
+    threading_max_workers: int
 
     def __str__(self):
         # go over all attributes of self
@@ -82,7 +82,7 @@ def validate_settings(settings: ChainSettings) -> ChainSettings:
     # TODO: this should actually validate stuff, duh
     floats = ["swap_slippage"]
     ints = ["price_batch_size", "price_threshold_filter", "pagination_limit", "pool_page_size", "native_token_decimals",
-            "pricing_cache_timeout_seconds", "pools_count_upper_bound", "quote_sync_max_workers"]
+            "pricing_cache_timeout_seconds", "pools_count_upper_bound", "threading_max_workers"]
     for k in floats: setattr(settings, k, float(getattr(settings, k)))
     for k in ints: setattr(settings, k, int(getattr(settings, k)))
     return settings

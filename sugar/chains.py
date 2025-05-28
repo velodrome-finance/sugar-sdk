@@ -541,7 +541,7 @@ class Chain(CommonChain):
         
         all_quotes = []
         
-        with ThreadPoolExecutor(max_workers=self.settings.quote_sync_max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=self.settings.threading_max_workers) as executor:
             # Submit all chunk processing tasks
             future_to_chunk = {
                 executor.submit(get_quotes_for_chunk, chunk_paths): chunk_paths 

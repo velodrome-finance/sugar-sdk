@@ -157,7 +157,7 @@ Full list of configuration parameters for Sugar. Chain IDs can be found
 | pools_count_upper_bound | `POOLS_COUNT_UPPER_BOUND_<CHAIN_ID>` | 2500 |
 | pagination_limit | `SUGAR_PAGINATION_LIMIT` | 2000 |
 | pricing_cache_timeout_seconds | `SUGAR_PRICING_CACHE_TIMEOUT_SECONDS_<CHAIN_ID>` | 5 |
-| quote_sync_max_workers | `SUGAR_QUOTE_SYNC_MAX_WORKERS_<CHAIN_ID>` | 5 |
+| threading_max_workers | `SUGAR_THREADING_MAX_WORKERS_<CHAIN_ID>` | 5 |
 
 In order to write to Sugar contracts, you need to set your wallet
 private key using env var `SUGAR_PK`
