@@ -83,7 +83,6 @@ jobs:
             sed -n '/get_all_tokens (fresh #3)/,/ANALYSIS:/p' cache_demo_output_py${{ matrix.python-version }}.txt | head -n -1 >> benchmark_summary_py${{ matrix.python-version }}.md
             echo "\`\`\`" >> benchmark_summary_py${{ matrix.python-version }}.md
             echo "" >> benchmark_summary_py${{ matrix.python-version }}.md
-            echo "**Key Insight:** Fresh instances provide consistent timing, while reused instances show artificially fast subsequent calls due to caching." >> benchmark_summary_py${{ matrix.python-version }}.md
           fi
           
           # Add environment info
