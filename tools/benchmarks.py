@@ -112,6 +112,12 @@ class FocusedBenchmarker:
                     async with chain_class() as chain:
                         with self.time_method(method, chain_name, "async"):
                             await chain.get_latest_pool_epochs()
+                
+                elif method == "get_pool_epochs" and pools and len(pools) > 0:
+                    pool_address = pools[0].lp
+                    async with chain_class() as chain:
+                        with self.time_method(method, chain_name, "async"):
+                            await chain.get_pool_epochs(pool_address)
     
     def benchmark_sync_methods(self, chain_class, chain_name: str, methods: List[str]):
         """Benchmark specific sync methods with fresh instances"""
@@ -163,6 +169,12 @@ class FocusedBenchmarker:
                     with chain_class() as chain:
                         with self.time_method(method, chain_name, "sync"):
                             chain.get_latest_pool_epochs()
+                
+                elif method == "get_pool_epochs" and pools and len(pools) > 0:
+                    pool_address = pools[0].lp
+                    with chain_class() as chain:
+                        with self.time_method(method, chain_name, "sync"):
+                            chain.get_pool_epochs(pool_address)
     
     def print_summary(self):
         """Print a clean summary of results"""
@@ -228,7 +240,9 @@ async def main():
         "get_pools", 
         "get_prices",
         "get_quote",
-        "get_pools_for_swaps"
+        "get_pools_for_swaps",
+        "get_latest_pool_epochs",
+        "get_pool_epochs"
     ]
     
     benchmarker = FocusedBenchmarker(num_runs=3)
