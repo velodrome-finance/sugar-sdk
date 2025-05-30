@@ -3,6 +3,10 @@ on:  [pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+      fail-fast: false
     env:
       SUGAR_PK: ${{ secrets.SUGAR_PK }}
       SUGAR_RPC_URI_10: ${{ secrets.SUGAR_RPC_URI_10 }}
@@ -29,3 +33,5 @@ jobs:
       - name: Test fork
         run: cast call 0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2 "MAX_TOKENS()(uint256)" --rpc-url http://localhost:4444
       - uses: fastai/workflows/nbdev-ci@master
+        with:
+          version: ${{ matrix.python-version }}
