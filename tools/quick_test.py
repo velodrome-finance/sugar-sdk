@@ -9,7 +9,7 @@ before running the full comprehensive tests.
 import asyncio
 import time
 from sugar.chains import AsyncOPChain, OPChain
-from timer import time_it, atime_it
+from sugar.helpers import time_it, atime_it
 
 
 async def test_async_methods():

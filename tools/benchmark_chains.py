@@ -26,8 +26,7 @@ import json
 from datetime import datetime
 
 from sugar.chains import AsyncOPChain, OPChain, AsyncBaseChain, BaseChain
-from timer import time_it, atime_it
-
+from sugar.helpers import time_it, atime_it
 
 @dataclass
 class BenchmarkResult:
