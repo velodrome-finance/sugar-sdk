@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """
-Focused benchmarking script for sugar-sdk chain methods.
-
-This script provides clean, focused benchmarking with fresh chain instances
-for each method call to avoid cached results affecting timing measurements.
+Run benchmarks on clean instances of Sugar SDK chains (no cache)
 """
 
 import asyncio

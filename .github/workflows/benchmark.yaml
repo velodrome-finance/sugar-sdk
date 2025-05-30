@@ -44,8 +44,8 @@ jobs:
       - name: Run focused benchmarks
         id: focused-benchmark
         run: |
-          echo "::group::Focused Benchmark Results (Python ${{ matrix.python-version }})"
-          python tools/focused_benchmark.py | tee focused_benchmark_output_py${{ matrix.python-version }}.txt
+          echo "::group::Benchmark Results (Python ${{ matrix.python-version }})"
+          python tools/benchmarks.py | tee focused_benchmark_output_py${{ matrix.python-version }}.txt
           echo "::endgroup::"
 
       - name: Run cache impact demo
@@ -53,15 +53,6 @@ jobs:
         run: |
           echo "::group::Cache Impact Demonstration (Python ${{ matrix.python-version }})"
           python tools/cache_impact_demo.py | tee cache_demo_output_py${{ matrix.python-version }}.txt
-          echo "::endgroup::"
-
-      - name: Run comprehensive benchmarks
-        id: comprehensive-benchmark
-        continue-on-error: true
-        timeout-minutes: 10
-        run: |
-          echo "::group::Comprehensive Benchmark Results (Python ${{ matrix.python-version }})"
-          timeout 8m python tools/benchmark_chains.py | tee comprehensive_benchmark_output_py${{ matrix.python-version }}.txt || true
           echo "::endgroup::"
 
       - name: Parse and format benchmark results
@@ -122,37 +113,7 @@ jobs:
             const body = `## 🚀 Performance Benchmark Results (Python ${{ matrix.python-version }})
             
             ${benchmarkResults}
-            
-            <details>
-            <summary>📋 How to interpret these results</summary>
-            
-            - **Lower times are better** for performance
-            - **Fresh instances** are used for each method call to avoid cache interference
-            - **Async vs Sync** comparison shows which approach is faster
-            - Results may vary between runs due to network conditions
-            - These benchmarks use supersim fork for consistent testing environment
-            
-            </details>
-            
-            <details>
-            <summary>🔧 Running benchmarks locally</summary>
-            
-            \`\`\`bash
-            # Quick verification
-            python tools/quick_test.py
-            
-            # Focused benchmark
-            python tools/focused_benchmark.py
-            
-            # Cache impact demo
-            python tools/cache_impact_demo.py
-            
-            # Comprehensive benchmark
-            python tools/benchmark_chains.py
-            \`\`\`
-            
-            </details>`;
-            
+
             // Find existing benchmark comment for this Python version
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -191,7 +152,6 @@ jobs:
           path: |
             focused_benchmark_output_py${{ matrix.python-version }}.txt
             cache_demo_output_py${{ matrix.python-version }}.txt
-            comprehensive_benchmark_output_py${{ matrix.python-version }}.txt
             benchmark_summary_py${{ matrix.python-version }}.md
           retention-days: 30
 
@@ -230,34 +190,7 @@ jobs:
                 combinedResults += `## ⚠️ Python ${version} Results\n\nError reading results: ${error.message}\n\n---\n\n`;
               }
             }
-            
-            combinedResults += `
-            <details>
-            <summary>📊 Cross-Version Performance Analysis</summary>
-            
-            - Compare timing differences across Python versions
-            - Look for consistent performance patterns
-            - Identify any version-specific performance regressions
-            - All tests use the same supersim fork environment for consistency
-            
-            </details>
-            
-            <details>
-            <summary>🔧 Running benchmarks locally</summary>
-            
-            \`\`\`bash
-            # Test with specific Python version
-            python3.9 tools/focused_benchmark.py
-            python3.10 tools/focused_benchmark.py
-            python3.11 tools/focused_benchmark.py
-            python3.12 tools/focused_benchmark.py
-            
-            # Or use your default Python
-            python tools/focused_benchmark.py
-            \`\`\`
-            
-            </details>`;
-            
+
             // Find existing summary comment
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
