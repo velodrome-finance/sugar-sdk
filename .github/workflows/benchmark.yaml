@@ -113,6 +113,7 @@ jobs:
             const body = `## 🚀 Performance Benchmark Results (Python ${{ matrix.python-version }})
             
             ${benchmarkResults}
+            `;
 
             // Find existing benchmark comment for this Python version
             const { data: comments } = await github.rest.issues.listComments({
