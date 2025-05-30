@@ -1,0 +1,188 @@
+name: Performance Benchmarks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'sugar/**'
+      - 'tools/**'
+      - '.github/workflows/benchmark.yaml'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    env:
+      SUGAR_PK: ${{ secrets.SUGAR_PK }}
+      SUGAR_RPC_URI_10: ${{ secrets.SUGAR_RPC_URI_10 }}
+      SUGAR_RPC_URI_8453: ${{ secrets.SUGAR_RPC_URI_8453 }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run quick verification
+        id: quick-test
+        run: |
+          echo "::group::Quick Test Results"
+          python tools/quick_test.py
+          echo "::endgroup::"
+
+      - name: Run focused benchmarks
+        id: focused-benchmark
+        run: |
+          echo "::group::Focused Benchmark Results"
+          python tools/focused_benchmark.py | tee focused_benchmark_output.txt
+          echo "::endgroup::"
+
+      - name: Run cache impact demo
+        id: cache-demo
+        run: |
+          echo "::group::Cache Impact Demonstration"
+          python tools/cache_impact_demo.py | tee cache_demo_output.txt
+          echo "::endgroup::"
+
+      - name: Run comprehensive benchmarks
+        id: comprehensive-benchmark
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          echo "::group::Comprehensive Benchmark Results"
+          timeout 8m python tools/benchmark_chains.py | tee comprehensive_benchmark_output.txt || true
+          echo "::endgroup::"
+
+      - name: Parse and format benchmark results
+        id: parse-results
+        run: |
+          # Parse focused benchmark results into structured tables
+          if [ -f focused_benchmark_output.txt ]; then
+            echo "Parsing focused benchmark results..."
+            python tools/parse_benchmark_results.py focused_benchmark_output.txt > benchmark_summary.md
+          else
+            echo "## ⚠️ Benchmark Results" > benchmark_summary.md
+            echo "" >> benchmark_summary.md
+            echo "Focused benchmark output not found. Check workflow logs for details." >> benchmark_summary.md
+          fi
+          
+          # Add cache impact analysis if available
+          if [ -f cache_demo_output.txt ]; then
+            echo "" >> benchmark_summary.md
+            echo "## 🧪 Cache Impact Analysis" >> benchmark_summary.md
+            echo "" >> benchmark_summary.md
+            echo "This demonstrates why we use fresh chain instances for accurate benchmarking:" >> benchmark_summary.md
+            echo "" >> benchmark_summary.md
+            echo "\`\`\`" >> benchmark_summary.md
+            sed -n '/🔄 Testing with REUSED chain instance/,/🆕 Testing with FRESH chain instances/p' cache_demo_output.txt >> benchmark_summary.md
+            sed -n '/get_all_tokens (fresh #3)/,/ANALYSIS:/p' cache_demo_output.txt | head -n -1 >> benchmark_summary.md
+            echo "\`\`\`" >> benchmark_summary.md
+            echo "" >> benchmark_summary.md
+            echo "**Key Insight:** Fresh instances provide consistent timing, while reused instances show artificially fast subsequent calls due to caching." >> benchmark_summary.md
+          fi
+          
+          # Add environment info
+          echo "" >> benchmark_summary.md
+          echo "---" >> benchmark_summary.md
+          echo "" >> benchmark_summary.md
+          echo "**Benchmark Environment:**" >> benchmark_summary.md
+          echo "- 🏃 Runner: Ubuntu Latest" >> benchmark_summary.md
+          echo "- 🐍 Python: 3.11" >> benchmark_summary.md
+          echo "- ✨ Fresh chain instances for each method call" >> benchmark_summary.md
+          echo "- 📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> benchmark_summary.md
+
+      - name: Comment PR with benchmark results
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let benchmarkResults = '';
+            try {
+              benchmarkResults = fs.readFileSync('benchmark_summary.md', 'utf8');
+            } catch (error) {
+              benchmarkResults = '## ⚠️ Benchmark Results\n\nBenchmark results could not be generated. Check the workflow logs for details.';
+            }
+            
+            const body = `## 🚀 Performance Benchmark Results
+            
+            ${benchmarkResults}
+            
+            <details>
+            <summary>📋 How to interpret these results</summary>
+            
+            - **Lower times are better** for performance
+            - **Fresh instances** are used for each method call to avoid cache interference
+            - **Async vs Sync** comparison shows which approach is faster
+            - Results may vary between runs due to network conditions
+            
+            </details>
+            
+            <details>
+            <summary>🔧 Running benchmarks locally</summary>
+            
+            \`\`\`bash
+            # Quick verification
+            python tools/quick_test.py
+            
+            # Focused benchmark
+            python tools/focused_benchmark.py
+            
+            # Cache impact demo
+            python tools/cache_impact_demo.py
+            
+            # Comprehensive benchmark
+            python tools/benchmark_chains.py
+            \`\`\`
+            
+            </details>`;
+            
+            // Find existing benchmark comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const existingComment = comments.find(comment => 
+              comment.user.login === 'github-actions[bot]' && 
+              comment.body.includes('🚀 Performance Benchmark Results')
+            );
+            
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results
+          path: |
+            focused_benchmark_output.txt
+            cache_demo_output.txt
+            comprehensive_benchmark_output.txt
+            benchmark_summary.md
+          retention-days: 30
