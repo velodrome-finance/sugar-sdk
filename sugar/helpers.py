@@ -3,8 +3,8 @@
 # %% auto 0
 __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'OPEN_USDT_TOKEN', 'normalize_address', 'chunk', 'amount_to_k_string',
            'format_currency', 'format_percentage', 'amount_to_m_string', 'float_to_uint256', 'get_future_timestamp',
-           'apply_slippage', 'parse_ether', 'get_unique_str', 'to_bytes32', 'Pair', 'find_all_paths', 'Timer',
-           'time_it', 'atime_it']
+           'apply_slippage', 'parse_ether', 'get_unique_str', 'to_bytes32', 'to_bytes32_str', 'Pair', 'find_all_paths',
+           'Timer', 'time_it', 'atime_it']
 
 # %% ../src/helpers.ipynb 2
 from web3 import Web3, constants
@@ -109,10 +109,12 @@ def get_unique_str(length: int) -> str:
     return ''.join(str(byte % 10) for byte in random_bytes)[:length]
 
 # %% ../src/helpers.ipynb 12
-def to_bytes32(val: Union[str, bytes]) -> str:
-    if isinstance(val, str): val_bytes = Web3.to_bytes(hexstr=val)
-    else: val_bytes = val
-    return "0x" + val_bytes.rjust(32, b'\x00').hex()
+def to_bytes32(val: str) -> bytes: 
+    # Remove 0x prefix and pad to 64 hex characters (32 bytes)
+    hex_val = val.replace('0x', '').zfill(64)
+    return bytes.fromhex(hex_val)
+
+def to_bytes32_str(val: str) -> str: return f"0x{to_bytes32(val).hex()}"
 
 # %% ../src/helpers.ipynb 13
 # TODO: move this

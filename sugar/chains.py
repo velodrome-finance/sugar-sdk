@@ -18,7 +18,7 @@ from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
-from .helpers import find_all_paths, time_it, atime_it, parse_ether, to_bytes32, get_unique_str, OPEN_USDT_TOKEN
+from .helpers import find_all_paths, time_it, atime_it, parse_ether, to_bytes32, to_bytes32_str, get_unique_str, OPEN_USDT_TOKEN
 from .abi import get_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
@@ -711,7 +711,8 @@ class BaseChain(Chain, BaseChainCommon):
 
 # %% ../src/chains.ipynb 16
 class UniChainCommon():
-    pass
+    o_usdt: Token = Token(chain_id='130', chain_name='Uni', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
+    usdc: Token = Token(chain_id='130', chain_name='Uni', token_address='0x078D782b760474a361dDA0AF3839290b0EF57AD6', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
     
 class AsyncUniChain(AsyncChain, UniChainCommon):
     def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
