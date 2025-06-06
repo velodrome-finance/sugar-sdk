@@ -3,7 +3,8 @@
 # %% auto 0
 __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_response', 'require_context', 'require_async_context',
            'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain', 'OPChain', 'BaseChainCommon',
-           'AsyncBaseChain', 'BaseChain', 'UniChainCommon', 'AsyncUniChain', 'UniChain']
+           'AsyncBaseChain', 'BaseChain', 'UniChainCommon', 'AsyncUniChain', 'UniChain', 'get_chain', 'get_async_chain',
+           'get_chain_from_token', 'get_async_chain_from_token']
 
 # %% ../src/chains.ipynb 3
 import os, asyncio
@@ -92,6 +93,11 @@ class CommonChain:
         ts = list(map(lambda t: Token.from_tuple(t, chain_id=self.id, chain_name=self.name), tokens))
         return [native] + (list(filter(lambda t: t.listed, ts)) if listed_only else ts)
     
+    def _get_superswap_connector_token(self, tokens: List[Token]) -> Token:
+        connector = next((t for t in tokens if t.token_address == OPEN_USDT_TOKEN), None)
+        if not connector: raise ValueError(f"Open USDT token not found on {self.name} chain.")
+        return connector
+
     def _prepare_prices(self, tokens: List[Token], rates: List[int]) -> Dict[str, int]:
         # token_address => normalized rate
         result = {}
@@ -176,7 +182,7 @@ class CommonChain:
                 self.settings.connector_tokens_addrs,
                 10 # threshold_filter
             ))
-        return batch        
+        return batch
 
 # %% ../src/chains.ipynb 8
 class AsyncChain(CommonChain):
@@ -315,6 +321,9 @@ class AsyncChain(CommonChain):
     async def get_all_tokens(self, listed_only: bool = False) -> List[Token]:
         def get_tokens(limit, offset): return self.sugar.functions.tokens(limit, offset, ADDRESS_ZERO, [])
         return self.prepare_tokens(await self.apaginate(get_tokens), listed_only)
+    
+    @require_async_context
+    async def get_superswap_connector_token(self) -> Token: return self._get_superswap_connector_token(await self.get_all_tokens())
 
     async def _get_prices(self, tokens: Tuple[Token]):
         async with self.web3.batch_requests() as batch:
@@ -548,7 +557,6 @@ class Chain(CommonChain):
 
         return results
 
-
     @require_context
     def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
         spender = self.account.address
@@ -568,6 +576,9 @@ class Chain(CommonChain):
         def get_tokens(limit, offset): return self.sugar.functions.tokens(limit, offset, ADDRESS_ZERO, [])
         return self.prepare_tokens(self.paginate(get_tokens), listed_only)
     
+    @require_context
+    def get_superswap_connector_token(self) -> Token: return self._get_superswap_connector_token(self.get_all_tokens())
+
     def _get_prices(self, tokens: Tuple[Token]) -> List[int]:
         # token_address => normalized rate
         with self.web3.batch_requests() as batch:
@@ -719,3 +730,19 @@ class AsyncUniChain(AsyncChain, UniChainCommon):
 
 class UniChain(Chain, UniChainCommon):
     def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 17
+def get_chain(chain_id: str, **kwargs) -> Chain:
+    if chain_id == '10': return OPChain(**kwargs)
+    elif chain_id == '8453': return BaseChain(**kwargs)
+    elif chain_id == '130': return UniChain(**kwargs)
+    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+
+def get_async_chain(chain_id: str, **kwargs) -> AsyncChain:
+    if chain_id == '10': return AsyncOPChain(**kwargs)
+    elif chain_id == '8453': return AsyncBaseChain(**kwargs)
+    elif chain_id == '130': return AsyncUniChain(**kwargs)
+    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+
+def get_chain_from_token(t: Token, **kwargs) -> Chain: return get_chain(t.chain_id, **kwargs)
+def get_async_chain_from_token(t: Token, **kwargs) -> AsyncChain: return get_async_chain(t.chain_id, **kwargs)

@@ -4,11 +4,12 @@
 __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'OPEN_USDT_TOKEN', 'normalize_address', 'chunk', 'amount_to_k_string',
            'format_currency', 'format_percentage', 'amount_to_m_string', 'float_to_uint256', 'get_future_timestamp',
            'apply_slippage', 'parse_ether', 'get_unique_str', 'to_bytes32', 'to_bytes32_str', 'Pair', 'find_all_paths',
-           'Timer', 'time_it', 'atime_it']
+           'ICACallData', 'hash_ICA_calls', 'Timer', 'time_it', 'atime_it']
 
 # %% ../src/helpers.ipynb 2
 from web3 import Web3, constants
-from typing import List, Tuple, Optional, Callable, Union
+from eth_abi import encode
+from typing import List, Tuple, Optional, Callable
 from decimal import Decimal, getcontext
 from datetime import datetime, timedelta
 from dataclasses import dataclass
@@ -179,6 +180,18 @@ def find_all_paths(pairs: List[Pair], start_token: str, end_token: str, cutoff=3
 
 
 # %% ../src/helpers.ipynb 22
+# TODO: get rid of ICACallData, use tuples instead
+@dataclass(frozen=True)
+class ICACallData: to: str; value: int; data: str
+
+
+def hash_ICA_calls(calls: List[ICACallData], salt: str) -> bytes:
+  call_tuples = [(bytes.fromhex(call.to.replace('0x', '')), call.value, bytes.fromhex(call.data.replace('0x', '')))  for call in calls]
+  encoded = encode(["(bytes32,uint256,bytes)[]"], [call_tuples])
+  # TODO: make sure we don't need to slice off 0x prefix (python's hex() usually does NOT add it anyways)
+  return Web3.keccak(hexstr=f"{salt}{encoded.hex()}")
+
+# %% ../src/helpers.ipynb 25
 # Claude 4 sonnet made this
 
 class Timer:
