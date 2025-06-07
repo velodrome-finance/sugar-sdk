@@ -15,6 +15,8 @@ class Token:
     based on: https://github.com/velodrome-finance/sugar/blob/v2/contracts/LpSugar.vy#L17
     """
 
+    chain_id: str
+    chain_name: str
     token_address: str
     symbol: str
     decimals: int
@@ -27,13 +29,15 @@ class Token:
     def value_from_bigint(self, value: float) -> float: return value / 10**self.decimals
 
     @classmethod
-    def make_native_token(cls, symbol: str, wrapped_address: str, decimals: int) -> "Token":
-        return Token(token_address=symbol, symbol=symbol, decimals=decimals, listed=True, wrapped_token_address=wrapped_address)
+    def make_native_token(cls, symbol: str, wrapped_address: str, decimals: int, chain_id: str, chain_name: str) -> "Token":
+        return Token(chain_id=chain_id, chain_name=chain_name, token_address=symbol, symbol=symbol, decimals=decimals, listed=True, wrapped_token_address=wrapped_address)
 
     @classmethod
-    def from_tuple(cls, t: Tuple) -> "Token":
+    def from_tuple(cls, t: Tuple, chain_id: str, chain_name: str) -> "Token":
         (token_address, symbol, decimals, _, listed) = t
         return Token(
+            chain_id=chain_id,
+            chain_name=chain_name,
             token_address=normalize_address(token_address),
             symbol=symbol,
             decimals=decimals,
