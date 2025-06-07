@@ -3,10 +3,11 @@
 # %% auto 0
 __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'OPEN_USDT_TOKEN', 'normalize_address', 'chunk', 'amount_to_k_string',
            'format_currency', 'format_percentage', 'amount_to_m_string', 'float_to_uint256', 'get_future_timestamp',
-           'apply_slippage', 'parse_ether', 'get_unique_str', 'to_bytes32', 'to_bytes32_str', 'Pair', 'find_all_paths',
-           'ICACallData', 'hash_ICA_calls', 'Timer', 'time_it', 'atime_it']
+           'apply_slippage', 'parse_ether', 'get_unique_str', 'get_salt', 'to_bytes32', 'to_bytes32_str', 'Pair',
+           'find_all_paths', 'ICACallData', 'hash_ICA_calls', 'serialize_ica_calls', 'Timer', 'time_it', 'atime_it']
 
 # %% ../src/helpers.ipynb 2
+from json import dumps
 from web3 import Web3, constants
 from eth_abi import encode
 from typing import List, Tuple, Optional, Callable
@@ -109,6 +110,8 @@ def get_unique_str(length: int) -> str:
     random_bytes = secrets.token_bytes(length)
     return ''.join(str(byte % 10) for byte in random_bytes)[:length]
 
+def get_salt() -> str: return f"0x{get_unique_str(64)}" 
+
 # %% ../src/helpers.ipynb 12
 def to_bytes32(val: str) -> bytes: 
     # Remove 0x prefix and pad to 64 hex characters (32 bytes)
@@ -191,7 +194,13 @@ def hash_ICA_calls(calls: List[ICACallData], salt: str) -> bytes:
   # TODO: make sure we don't need to slice off 0x prefix (python's hex() usually does NOT add it anyways)
   return Web3.keccak(hexstr=f"{salt}{encoded.hex()}")
 
-# %% ../src/helpers.ipynb 25
+def serialize_ica_calls(calls: List[ICACallData]) -> List[dict]:
+    """
+    Convert a list of ICACallData to JSON string.
+    """
+    return list(map(lambda call: {"to": call.to, "value": str(call.value), "data": call.data}, calls))
+
+# %% ../src/helpers.ipynb 26
 # Claude 4 sonnet made this
 
 class Timer:

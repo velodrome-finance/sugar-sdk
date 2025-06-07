@@ -7,7 +7,7 @@ __all__ = ['FLAG_ALLOW_REVERT', 'ABI_DEFINITION', 'CONTRACT_BALANCE_FOR_V3_SWAPS
 # %% ../src/swap.ipynb 3
 from dataclasses import dataclass
 from .quote import Quote, pack_path
-from .helpers import apply_slippage, get_unique_str, parse_ether, ICACallData, hash_ICA_calls, OPEN_USDT_TOKEN, to_bytes32, to_bytes32_str
+from .helpers import apply_slippage, parse_ether, ICACallData, hash_ICA_calls, OPEN_USDT_TOKEN, to_bytes32, to_bytes32_str
 from .helpers import ADDRESS_ZERO, normalize_address
 from .token import Token
 from .pool import LiquidityPoolForSwap
@@ -307,8 +307,8 @@ class SuperSwapDataInput:
     bridged_amount: int
     swapper_contract_addr: str
     destination_quote: Optional[Quote]
+    salt: str
     message_fee: int = parse_ether("0.0001")
-    salt: str = f"0x{get_unique_str(64)}"
 
 @dataclass(frozen=True)
 class SuperSwapData: destination_planner: RoutePlanner; calls: List[ICACallData]; origin_domain: int; salt: str 
@@ -377,6 +377,7 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
 
     if destination_inputs:
         print(f">>>>>>>>>>>>>> destination_inputs >>>>>>>>>>>>>>>", destination_inputs)
+        print(f">>>>>>>>>>>>> destination_router", input.destination_router)
         calls.append(ICACallData(
             to=to_bytes32_str(input.destination_router),
             value=0,
