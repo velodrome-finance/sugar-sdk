@@ -2,7 +2,10 @@
 
 # %% auto 0
 __all__ = ['base_default_settings', 'GetEnv', 'ChainSettings', 'validate_settings', 'get_env', 'make_settings',
-           'make_op_chain_settings', 'make_base_chain_settings']
+           'make_op_chain_settings', 'make_base_chain_settings', 'make_uni_chain_settings',
+           'make_soneium_chain_settings', 'make_fraxtal_chain_settings', 'make_ink_chain_settings',
+           'make_lisk_chain_settings', 'make_metal_chain_settings', 'make_swell_chain_settings',
+           'make_mode_chain_settings']
 
 # %% ../src/config.ipynb 3
 import os
@@ -153,3 +156,173 @@ def make_base_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettin
         "excluded_tokens_addrs": "0x74ccbe53f77b08632ce0cb91d3a545bf6b8e0979,0x8901cb2e82cc95c01e42206f8d1f417fe53e7af0,0x9cbd543f1b1166b2df36b68eb6bb1dce24e6abdf,0x025f99977db78317a4eba606998258b502bb256f,0xd260115030b9fb6849da169a01ed80b6496d1e99,0x608d5401d377228e465ba6113517dcf9bd1f95ca,0xd260115030b9fB6849da169a01ed80b6496d1e99,0x728cDA34D732a87fD6429129e23D4742d9Ff0064,0x728cda34d732a87fd6429129e23d4742d9ff0064,0xAC1Bd2486aAf3B5C0fc3Fd868558b082a531B2B4,0x0f929C29dcE303F96b1d4104505F2e60eE795caC,0x47E78d664E6c339693e8638B7A7D9543AbCc99D4,0xFF0C532FDB8Cd566Ae169C1CB157ff2Bdc83E105,0x373504da48418c67e6fcd071f33cb0b3b47613c7,0x0f929c29dce303f96b1d4104505f2e60ee795cac,0x628c5Ba9B775DACEcd14E237130c537f497d1CC7"
     }
     return make_settings("8453", "Base", chain_settings=d, get_env=get_env, **kwargs)
+
+# %% ../src/config.ipynb 10
+def make_uni_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
+    d = {
+        "rpc_uri": "https://unichain.drpc.org",
+        "pools_count_upper_bound": 20,
+        "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",
+        "interchain_account_addr": "0x1174A4719FaF964AfE2179A404b4830EC0DCB8D5",
+        "sugar_contract_addr": "0x154c0F8331B0B4af1384A2dFa67AADCa5Fd92C20",
+        "sugar_rewards_contract_addr": "0xbDD1d5A9d9566F575bC59cE33C8F77ACa5cF924b",
+        "slipstream_contract_addr": "0x222ed297aF0560030136AE652d39fa40E1B72818",
+        "nfpm_contract_addr": "0x991d5546C4B442B4c5fdc4c8B8b8d131DEB24702",
+        "price_oracle_contract_addr": "0xe58920a8c684CD3d6dCaC2a41b12998e4CB17EfE",
+        "router_contract_addr": "0x3a63171DD9BebF4D07BC782FECC7eb0b890C2A45",
+        "quoter_contract_addr": "0x2f7150B288ef1cc553207bD9fbd40D4e0e093B24",
+        "swapper_contract_addr": "0x6Df1c91424F79E40E33B1A48F0687B666bE71075",
+        "token_addr": "0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",
+        "stable_token_addr": "0x078d782b760474a361dda0af3839290b0ef57ad6",
+        "connector_tokens_addrs": "0x4200000000000000000000000000000000000006,0x078d782b760474a361dda0af3839290b0ef57ad6",
+        "excluded_tokens_addrs": "0xE3Ae7873B76722Ba23b1EEEEE544a75eDe891a66"
+    }
+    return make_settings("130", "Uni", chain_settings=d, get_env=get_env, **kwargs)
+
+# %% ../src/config.ipynb 12
+def make_soneium_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
+    d = {
+        "rpc_uri": "https://rpc.soneium.org",#
+        "pools_count_upper_bound": 20,#
+        "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",
+        #"interchain_account_addr": "0x1174A4719FaF964AfE2179A404b4830EC0DCB8D5",
+        "sugar_contract_addr": "0x0771B5B979230E29140774C1dc441a9fDddD28bD",
+        "sugar_rewards_contract_addr": "0xbDD1d5A9d9566F575bC59cE33C8F77ACa5cF924b",
+        "slipstream_contract_addr": "0x222ed297aF0560030136AE652d39fa40E1B72818",
+        "nfpm_contract_addr": "0x991d5546C4B442B4c5fdc4c8B8b8d131DEB24702",
+        "price_oracle_contract_addr": "0xe58920a8c684CD3d6dCaC2a41b12998e4CB17EfE",
+        "router_contract_addr": "0x3a63171DD9BebF4D07BC782FECC7eb0b890C2A45",
+        "quoter_contract_addr": "0x2f7150B288ef1cc553207bD9fbd40D4e0e093B24",
+        "swapper_contract_addr": "0x652e53C6a4FE39B6B30426d9c96376a105C89A95",
+        "token_addr": "0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",
+        "stable_token_addr": "0xbA9986D2381edf1DA03B0B9c1f8b00dc4AacC369",
+        "connector_tokens_addrs": "0x4200000000000000000000000000000000000006,0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",
+        "excluded_tokens_addrs": "0xE3Ae7873B76722Ba23b1EEEEE544a75eDe891a66"#random one
+    }
+    return make_settings("1868", "Soneium", chain_settings=d, get_env=get_env, **kwargs)
+
+# %% ../src/config.ipynb 14
+def make_fraxtal_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
+    d = {
+        "rpc_uri": "https://rpc.frax.com",
+        "pools_count_upper_bound": 20,
+        "wrapped_native_token_addr": "0xFC00000000000000000000000000000000000006",#
+        "sugar_contract_addr": "0x74f18F46d20750Cab0d3fE75Ca0395bdB8016fD1",#
+        "sugar_rewards_contract_addr": "0xbDD1d5A9d9566F575bC59cE33C8F77ACa5cF924b",#
+        "slipstream_contract_addr": "0x593D092BB28CCEfe33bFdD3d9457e77Bd3084271",#
+        "nfpm_contract_addr": "0x991d5546c4b442b4c5fdc4c8b8b8d131deb24702",#
+        "price_oracle_contract_addr": "0x4817f8D70aE32Ee96e5E6BFA24eb7Fcfa83bbf29",#
+        "router_contract_addr": "0x3a63171dd9bebf4d07bc782fecc7eb0b890c2a45",#
+        "quoter_contract_addr": "0x2f7150B288ef1cc553207bD9fbd40D4e0e093B24",#
+        "swapper_contract_addr": "0x652e53C6a4FE39B6B30426d9c96376a105C89A95",# universal router
+        "token_addr": "0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",#
+        "stable_token_addr": "0xFc00000000000000000000000000000000000001",#
+        "connector_tokens_addrs": "0xFC00000000000000000000000000000000000006,0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",#
+        "excluded_tokens_addrs": "0xE3Ae7873B76722Ba23b1EEEEE544a75eDe891a66"#random one
+    }
+    return make_settings("252", "Fraxtal", chain_settings=d, get_env=get_env, **kwargs)
+
+# %% ../src/config.ipynb 16
+def make_ink_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
+    d = {
+        "rpc_uri": "https://rpc-gel.inkonchain.com",
+        "pools_count_upper_bound": 20,
+        "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",#
+        "sugar_contract_addr": "0x471C34138D06001AEe399af9EBEbbdF680b966B3",#
+        "sugar_rewards_contract_addr": "0xc100DC20aff9907E833a6aDEDDB52fC310554fF2",#
+        "slipstream_contract_addr": "0x222ed297aF0560030136AE652d39fa40E1B72818",#
+        "nfpm_contract_addr": "0x991d5546c4b442b4c5fdc4c8b8b8d131deb24702",#
+        "price_oracle_contract_addr": "0xe58920a8c684CD3d6dCaC2a41b12998e4CB17EfE",#
+        "router_contract_addr": "0x3a63171dd9bebf4d07bc782fecc7eb0b890c2a45",#
+        "quoter_contract_addr": "0x2f7150B288ef1cc553207bD9fbd40D4e0e093B24",#
+        "swapper_contract_addr": "0x652e53C6a4FE39B6B30426d9c96376a105C89A95",#
+        "token_addr": "0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",#
+        "stable_token_addr": "0x0200C29006150606B650577BBE7B6248F58470c1",#
+        "connector_tokens_addrs": "0x4200000000000000000000000000000000000006,0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",#
+        "excluded_tokens_addrs": "0xE3Ae7873B76722Ba23b1EEEEE544a75eDe891a66"#random one
+    }
+    return make_settings("57073", "Ink", chain_settings=d, get_env=get_env, **kwargs)
+
+# %% ../src/config.ipynb 18
+def make_lisk_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
+    d = {
+        "rpc_uri": "https://rpc.api.lisk.com",
+        "pools_count_upper_bound": 20,
+        "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",#
+        "sugar_contract_addr": "0x1443c0757f77c04bd514427d2bE356A5834E4167",#
+        "sugar_rewards_contract_addr": "0xB1d0DFFe6260982164B53EdAcD3ccd58B081889d",#
+        "slipstream_contract_addr": "0xB98fB4C9C99dE155cCbF5A14af0dBBAd96033D6f",
+        "nfpm_contract_addr": "0x991d5546c4b442b4c5fdc4c8b8b8d131deb24702",#
+        "price_oracle_contract_addr": "0x024503003fFE9AF285f47c1DaAaA497D9f1166D0",#
+        "router_contract_addr": "0x3a63171dd9bebf4d07bc782fecc7eb0b890c2a45",#
+        "quoter_contract_addr": "0x2f7150B288ef1cc553207bD9fbd40D4e0e093B24",#
+        "swapper_contract_addr": "0x7f14B3E106FE9395115771B12f6F346b7136469a",#
+        "token_addr": "0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",#
+        "stable_token_addr": "0xF242275d3a6527d877f2c927a82D9b057609cc71",#
+        "connector_tokens_addrs": "0x4200000000000000000000000000000000000006,0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",#
+        "excluded_tokens_addrs": "0xE3Ae7873B76722Ba23b1EEEEE544a75eDe891a66"#random one
+    }
+    return make_settings("1135", "Lisk", chain_settings=d, get_env=get_env, **kwargs)
+
+# %% ../src/config.ipynb 20
+def make_metal_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
+    d = {
+        "rpc_uri": "https://rpc.metall2.com",
+        "pools_count_upper_bound": 20,
+        "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",#
+        "sugar_contract_addr": "0x471C34138D06001AEe399af9EBEbbdF680b966B3",#
+        "sugar_rewards_contract_addr": "0xbDD1d5A9d9566F575bC59cE33C8F77ACa5cF924b",#
+        "slipstream_contract_addr": "0x222ed297aF0560030136AE652d39fa40E1B72818",#
+        "nfpm_contract_addr": "0x991d5546c4b442b4c5fdc4c8b8b8d131deb24702",#
+        "price_oracle_contract_addr": "0x3e71CCdf495d9628D3655A600Bcad3afF2ddea98",#
+        "router_contract_addr": "0x3a63171dd9bebf4d07bc782fecc7eb0b890c2a45",#
+        "quoter_contract_addr": "0x2f7150B288ef1cc553207bD9fbd40D4e0e093B24",#
+        "swapper_contract_addr": "0x652e53C6a4FE39B6B30426d9c96376a105C89A95",#
+        "token_addr": "0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",
+        "stable_token_addr": "0x51E85d70944256710cb141847F1a04f568C1Db0e",
+        "connector_tokens_addrs": "0x4200000000000000000000000000000000000006,0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",
+        "excluded_tokens_addrs": "0xE3Ae7873B76722Ba23b1EEEEE544a75eDe891a66"#random one
+    }
+    return make_settings("1750", "Metal", chain_settings=d, get_env=get_env, **kwargs)
+
+# %% ../src/config.ipynb 22
+def make_swell_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
+    d = {
+        "rpc_uri": "https://swell-mainnet.alt.technology",
+        "pools_count_upper_bound": 20,
+        "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",#
+        "sugar_contract_addr": "0x154c0F8331B0B4af1384A2dFa67AADCa5Fd92C20",#
+        "sugar_rewards_contract_addr": "0xbDD1d5A9d9566F575bC59cE33C8F77ACa5cF924b",#
+        "slipstream_contract_addr": "0x222ed297aF0560030136AE652d39fa40E1B72818",#
+        "nfpm_contract_addr": "0x991d5546c4b442b4c5fdc4c8b8b8d131deb24702",#
+        "price_oracle_contract_addr": "0xe58920a8c684CD3d6dCaC2a41b12998e4CB17EfE",#
+        "router_contract_addr": "0x3a63171dd9bebf4d07bc782fecc7eb0b890c2a45",#
+        "quoter_contract_addr": "0x2f7150B288ef1cc553207bD9fbd40D4e0e093B24",#
+        "swapper_contract_addr": "0x652e53C6a4FE39B6B30426d9c96376a105C89A95",#
+        "token_addr": "0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",#
+        "stable_token_addr": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34",#
+        "connector_tokens_addrs": "0x4200000000000000000000000000000000000006,0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",#
+        "excluded_tokens_addrs": "0xE3Ae7873B76722Ba23b1EEEEE544a75eDe891a66"#random one
+    }
+    return make_settings("1923", "Swell", chain_settings=d, get_env=get_env, **kwargs)
+
+# %% ../src/config.ipynb 24
+def make_mode_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
+    d = {
+        "rpc_uri": "https://mainnet.mode.network",
+        "pools_count_upper_bound": 20,
+        "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",#
+        "sugar_contract_addr": "0x6eA93e8d5059D4bd986F24a46546E930e0d0Fa82",#
+        "sugar_rewards_contract_addr": "0xD5d3ABAcB8CF075636792658EE0be8B03AF517B8",#
+        "slipstream_contract_addr": "0xD24a61656AB0d70994Ef5F42fE11AA95c0a1d329",#
+        "nfpm_contract_addr": "0x991d5546c4b442b4c5fdc4c8b8b8d131deb24702",#
+        "price_oracle_contract_addr": "0xbAEe949B52cb503e39f1Df54Dcee778da59E11bc",#
+        "router_contract_addr": "0x3a63171dd9bebf4d07bc782fecc7eb0b890c2a45",#
+        "quoter_contract_addr": "0x2f7150B288ef1cc553207bD9fbd40D4e0e093B24",#
+        "swapper_contract_addr": "0x652e53C6a4FE39B6B30426d9c96376a105C89A95",#
+        "token_addr": "0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",#
+        "stable_token_addr": "0xd988097fb8612cc24eeC14542bC03424c656005f",#
+        "connector_tokens_addrs": "0x4200000000000000000000000000000000000006,0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81",#
+        "excluded_tokens_addrs": "0xE3Ae7873B76722Ba23b1EEEEE544a75eDe891a66"#random one
+    }
+    return make_settings("34443", "Mode", chain_settings=d, get_env=get_env, **kwargs)

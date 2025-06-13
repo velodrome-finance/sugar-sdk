@@ -3,7 +3,11 @@
 # %% auto 0
 __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_response', 'require_context', 'require_async_context',
            'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain', 'OPChain', 'BaseChainCommon',
-           'AsyncBaseChain', 'BaseChain']
+           'AsyncBaseChain', 'BaseChain', 'UniChainCommon', 'AsyncUniChain', 'UniChain', 'SoneiumChainCommon',
+           'AsyncSoneiumChain', 'SoneiumChain', 'FraxtalChainCommon', 'AsyncFraxtalChain', 'FraxtalChain',
+           'InkChainCommon', 'AsyncInkChain', 'InkChain', 'LiskChainCommon', 'AsyncLiskChain', 'LiskChain',
+           'MetalChainCommon', 'AsyncMetalChain', 'MetalChain', 'SwellChainCommon', 'AsyncSwellChain', 'SwellChain',
+           'ModeChainCommon', 'AsyncModeChain', 'ModeChain']
 
 # %% ../src/chains.ipynb 3
 import os, asyncio
@@ -16,7 +20,7 @@ from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account
 from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
-from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings
+from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings, make_soneium_chain_settings, make_fraxtal_chain_settings, make_ink_chain_settings, make_lisk_chain_settings, make_metal_chain_settings, make_mode_chain_settings, make_swell_chain_settings
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
 from .helpers import find_all_paths, time_it, atime_it
 from .abi import get_abi
@@ -392,6 +396,47 @@ class AsyncChain(CommonChain):
         print(f"adding liquidity with params: {params}")
 
         return await self.sign_and_send_tx(self.router.functions.addLiquidity(*params))
+    
+    @require_async_context
+    async def get_swap_calldata(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None):
+        """Get swap calldata and contract address without executing the transaction"""
+        q = await self.get_quote(from_token, to_token, amount)
+        if not q: raise ValueError("No quotes found")
+        return await self.get_swap_calldata_from_quote(q, slippage=slippage)
+
+    @require_async_context
+    async def get_swap_calldata_from_quote(self, quote: Quote, slippage: Optional[float] = None):
+        """Get swap calldata and contract address from quote without executing the transaction"""
+        swapper_contract_addr, from_token = self.settings.swapper_contract_addr, quote.from_token
+        planner = setup_planner(
+            quote=quote, 
+            slippage=slippage if slippage is not None else self.settings.swap_slippage, 
+            account=self.account.address, 
+            router_address=swapper_contract_addr
+        )
+        
+        # Build the transaction without sending it
+        tx_function = self.swapper.functions.execute(*[planner.commands, planner.inputs])
+        value = quote.input.amount_in if from_token.wrapped_token_address else 0
+        
+        # Build transaction to get calldata
+        spender = self.account.address
+        tx = await tx_function.build_transaction({
+            'from': spender, 
+            'value': value, 
+            'nonce': await self.web3.eth.get_transaction_count(spender)
+        })
+        
+        return {
+            'to': swapper_contract_addr,
+            'data': tx['data'],
+            'value': value,
+            'calldata': tx['data'],
+            'contract_address': swapper_contract_addr,
+            'quote': quote,
+            'planner': planner
+        }
+
 
 # %% ../src/chains.ipynb 10
 class Chain(CommonChain):
@@ -571,6 +616,46 @@ class Chain(CommonChain):
         self.set_token_allowance(from_token, swapper_contract_addr, quote.input.amount_in)
         value = quote.input.amount_in if from_token.wrapped_token_address else 0
         return self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
+    
+    @require_context
+    def get_swap_calldata(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None):
+        """Get swap calldata and contract address without executing the transaction"""
+        q = self.get_quote(from_token, to_token, amount)
+        if not q: raise ValueError("No quotes found")
+        return self.get_swap_calldata_from_quote(q, slippage=slippage)
+
+    @require_context
+    def get_swap_calldata_from_quote(self, quote: Quote, slippage: Optional[float] = None):
+        """Get swap calldata and contract address from quote without executing the transaction"""
+        swapper_contract_addr, from_token = self.settings.swapper_contract_addr, quote.from_token
+        planner = setup_planner(
+            quote=quote, 
+            slippage=slippage if slippage is not None else self.settings.swap_slippage, 
+            account=self.account.address, 
+            router_address=swapper_contract_addr
+        )
+        
+        # Build the transaction without sending it
+        tx_function = self.swapper.functions.execute(*[planner.commands, planner.inputs])
+        value = quote.input.amount_in if from_token.wrapped_token_address else 0
+        
+        # Build transaction to get calldata
+        spender = self.account.address
+        tx = tx_function.build_transaction({
+            'from': spender, 
+            'value': value, 
+            'nonce': self.web3.eth.get_transaction_count(spender)
+        })
+        
+        return {
+            'to': swapper_contract_addr,
+            'data': tx['data'],
+            'value': value,
+            'calldata': tx['data'],
+            'contract_address': swapper_contract_addr,
+            'quote': quote,
+            'planner': planner
+        }
 
 # %% ../src/chains.ipynb 12
 class OPChainCommon():
@@ -596,3 +681,83 @@ class AsyncBaseChain(AsyncChain, BaseChainCommon):
 
 class BaseChain(Chain, BaseChainCommon):
     def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 16
+class UniChainCommon():
+    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    
+class AsyncUniChain(AsyncChain, UniChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
+
+class UniChain(Chain, UniChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 18
+class SoneiumChainCommon():
+    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    
+class AsyncSoneiumChain(AsyncChain, SoneiumChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_soneium_chain_settings(**kwargs), **kwargs)
+
+class SoneiumChain(Chain, SoneiumChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_soneium_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 20
+class FraxtalChainCommon():
+    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0xFC00000000000000000000000000000000000006')
+    
+class AsyncFraxtalChain(AsyncChain, FraxtalChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_fraxtal_chain_settings(**kwargs), **kwargs)
+
+class FraxtalChain(Chain, FraxtalChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_fraxtal_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 22
+class InkChainCommon():
+    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    
+class AsyncInkChain(AsyncChain, InkChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_ink_chain_settings(**kwargs), **kwargs)
+
+class InkChain(Chain, InkChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_ink_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 24
+class LiskChainCommon():
+    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    
+class AsyncLiskChain(AsyncChain, LiskChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_lisk_chain_settings(**kwargs), **kwargs)
+
+class LiskChain(Chain, LiskChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_lisk_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 26
+class MetalChainCommon():
+    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    
+class AsyncMetalChain(AsyncChain, MetalChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_metal_chain_settings(**kwargs), **kwargs)
+
+class MetalChain(Chain, MetalChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_metal_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 28
+class SwellChainCommon():
+    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    
+class AsyncSwellChain(AsyncChain, SwellChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_swell_chain_settings(**kwargs), **kwargs)
+
+class SwellChain(Chain, SwellChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_swell_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 30
+class ModeChainCommon():
+    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    
+class AsyncModeChain(AsyncChain, ModeChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_mode_chain_settings(**kwargs), **kwargs)
+
+class ModeChain(Chain, ModeChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_mode_chain_settings(**kwargs), **kwargs)
