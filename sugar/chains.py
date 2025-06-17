@@ -229,6 +229,36 @@ class AsyncChain(CommonChain):
         return sum(await asyncio.gather(*[process_batch(batch) for batch in self.get_pool_paginator()]), [])
     
     @require_async_context
+    async def get_bridge_fee(self, target_chain_id: int) -> int:
+        abi = [
+            {
+                "name": "quoteGasPayment",
+                "type": "function",
+                "stateMutability": "view",
+                "inputs": [
+                    {
+                    "name": "chainId",
+                    "type": "uint32"
+                    }
+                ],
+                "outputs": [
+                    {
+                    "name": "",
+                    "type": "uint256"
+                    }
+                ]
+            }
+        ]
+        contract = self.web3.eth.contract(address=self.settings.usdt_bridge_addr, abi=abi)
+        return await contract.functions.quoteGasPayment(target_chain_id).call()
+    
+    @require_async_context
+    async def get_xchain_fee(self, destination_domain: int) -> int:
+        # TODO: move this to a more appropriate place
+        XCHAIN_GAS_LIMIT_UPPERBOUND = 600000
+        return await self.ica_router.functions.quoteGasForCommitReveal(destination_domain, XCHAIN_GAS_LIMIT_UPPERBOUND).call()
+
+    @require_async_context
     async def get_domain(self, chain_id: Optional[int] = None) -> int:
         # TODO: remove chain_id arg when all chains support domains
         # TODO: move this somewhere else

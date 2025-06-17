@@ -7,7 +7,7 @@ __all__ = ['FLAG_ALLOW_REVERT', 'ABI_DEFINITION', 'CONTRACT_BALANCE_FOR_V3_SWAPS
 # %% ../src/swap.ipynb 3
 from dataclasses import dataclass
 from .quote import Quote, pack_path
-from .helpers import apply_slippage, parse_ether, ICACallData, hash_ICA_calls, OPEN_USDT_TOKEN, to_bytes32, to_bytes32_str
+from .helpers import apply_slippage, ICACallData, hash_ICA_calls, OPEN_USDT_TOKEN, to_bytes32, to_bytes32_str
 from .helpers import ADDRESS_ZERO, normalize_address
 from .token import Token
 from .pool import LiquidityPoolForSwap
@@ -308,7 +308,8 @@ class SuperSwapDataInput:
     swapper_contract_addr: str
     destination_quote: Optional[Quote]
     salt: str
-    message_fee: int = parse_ether("0.0001")
+    bridge_fee: int 
+    xchain_fee: int
 
 @dataclass(frozen=True)
 class SuperSwapData: destination_planner: RoutePlanner; calls: List[ICACallData]; origin_domain: int; salt: str 
@@ -402,8 +403,7 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
         OPEN_USDT_TOKEN,
         input.origin_bridge,
         input.bridged_amount,
-        # TODO: see if this needs to be dynamic
-        input.message_fee,
+        input.bridge_fee,
         input.destination_domain,
         input.from_token.token_address == OPEN_USDT_TOKEN,
     ])
@@ -417,7 +417,7 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
             to_bytes32(ADDRESS_ZERO),
             commitment_hash,
             # fee to dispatch x-chain message
-            input.message_fee,
+            input.xchain_fee,
             input.origin_hook,
             # TODO: figure out if this works correctly
             bytes.fromhex("0x".replace('0x', ''))
