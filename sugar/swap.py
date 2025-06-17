@@ -316,7 +316,7 @@ class SuperSwapDataInput:
     xchain_fee: int
 
 @dataclass(frozen=True)
-class SuperSwapData: destination_planner: RoutePlanner; calls: List[ICACallData]; origin_domain: int; salt: str 
+class SuperSwapData: destination_planner: RoutePlanner; calls: List[ICACallData]; origin_domain: int; salt: str; needs_relay: bool 
 
 # %% ../src/swap.ipynb 10
 def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
@@ -430,4 +430,4 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
             bytes.fromhex("0x".replace('0x', ''))
         ])
 
-    return SuperSwapData(destination_planner=destination_chain_planner, calls=calls, origin_domain=input.origin_domain, salt=input.salt)
+    return SuperSwapData(destination_planner=destination_chain_planner, calls=calls, origin_domain=input.origin_domain, salt=input.salt, needs_relay=needs_relay)

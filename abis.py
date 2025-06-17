@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from sugar.abi import download_contract_abi
-from sugar.config import make_op_chain_settings, interchain_account_router_contract_addr
+from sugar.config import make_op_chain_settings
 
 settings =  make_op_chain_settings()
 abi_config = {
@@ -16,7 +16,7 @@ abi_config = {
     'router': settings.router_contract_addr,
     'quoter': settings.quoter_contract_addr,
     'swapper': settings.swapper_contract_addr,
-    'interchain_account_router': interchain_account_router_contract_addr,
+    'interchain_router': settings.interchain_router_contract_addr,
 }
 for name, addr in abi_config.items():
     download_contract_abi(name=name, address=addr)
