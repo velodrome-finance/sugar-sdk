@@ -40,7 +40,10 @@ class ChainSettings:
     rpc_uri: str
     # interchain account address for superswaps
     interchain_account_addr: str
-    usdt_bridge_addr: str
+    # bridge contract for superswaps
+    bridge_contract_addr: str
+    # bridge token address for superswaps
+    bridge_token_addr: str
     sugar_contract_addr: str
     sugar_rewards_contract_addr: str
     # slipstream operates on concentrated liquidity (CL) pools
@@ -127,7 +130,8 @@ def make_op_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings
         "rpc_uri": "https://optimism-mainnet.wallet.coinbase.com",
         "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",
         "interchain_account_addr": "0x44c74D3d791cb4588732A9C9CEdbCb262875A3bE",
-        "usdt_bridge_addr": "0x7bd2676c85cca9fa2203eba324fb8792fbd520b8",
+        "bridge_contract_addr": "0x7bd2676c85cca9fa2203eba324fb8792fbd520b8",
+        "bridge_token_addr": "0x1217bfe6c773eec6cc4a38b5dc45b92292b6e189",
         "sugar_contract_addr": "0xA64db2D254f07977609def75c3A7db3eDc72EE1D",
         "sugar_rewards_contract_addr": "0x62CCFB2496f49A80B0184AD720379B529E9152fB",
         "slipstream_contract_addr": "0xD45624bf2CB9f65ecbdF3067d21992b099b56202",
@@ -171,7 +175,8 @@ def make_uni_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSetting
         "pools_count_upper_bound": 20,
         "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",
         "interchain_account_addr": "0x1174A4719FaF964AfE2179A404b4830EC0DCB8D5",
-        "usdt_bridge_addr": "0x4A8149B1b9e0122941A69D01D23EaE6bD1441b4f",
+        "bridge_contract_addr": "0x4A8149B1b9e0122941A69D01D23EaE6bD1441b4f",
+        "bridge_token_addr": "0x1217bfe6c773eec6cc4a38b5dc45b92292b6e189",
         "sugar_contract_addr": "0x154c0F8331B0B4af1384A2dFa67AADCa5Fd92C20",
         "sugar_rewards_contract_addr": "0xbDD1d5A9d9566F575bC59cE33C8F77ACa5cF924b",
         "slipstream_contract_addr": "0x222ed297aF0560030136AE652d39fa40E1B72818",

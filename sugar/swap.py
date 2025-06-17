@@ -7,7 +7,7 @@ __all__ = ['FLAG_ALLOW_REVERT', 'ABI_DEFINITION', 'CONTRACT_BALANCE_FOR_V3_SWAPS
 # %% ../src/swap.ipynb 3
 from dataclasses import dataclass
 from .quote import Quote, pack_path
-from .helpers import apply_slippage, ICACallData, hash_ICA_calls, OPEN_USDT_TOKEN, to_bytes32, to_bytes32_str
+from .helpers import apply_slippage, ICACallData, hash_ICA_calls, to_bytes32, to_bytes32_str
 from .helpers import ADDRESS_ZERO, normalize_address
 from .token import Token
 from .pool import LiquidityPoolForSwap
@@ -285,6 +285,8 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
 class SuperSwapQuote:
     from_token: Token
     to_token: Token
+    from_bridge_token: Token
+    to_bridge_token: Token
     amount_in: float
     origin_quote: Optional[Quote] = None
     destination_quote: Optional[Quote] = None
@@ -293,6 +295,8 @@ class SuperSwapQuote:
 class SuperSwapDataInput:
     from_token: Token
     to_token: Token
+    from_bridge_token: Token
+    to_bridge_token: Token
     account: str
     user_ICA: str
     user_ICA_balance: int
@@ -329,7 +333,10 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
 
     print(f">>>>>>>>>>>>>> transfer_subplan >>>>>>>>>>>>>>>", transfer_subplan.hex())
 
-    transfer_args = encode(ABI_DEFINITION[CommandType.TRANSFER_FROM], [OPEN_USDT_TOKEN, account, CONTRACT_BALANCE_FOR_V3_SWAPS])
+    transfer_args = encode(
+        ABI_DEFINITION[CommandType.TRANSFER_FROM],
+        [input.to_bridge_token.token_address, account, CONTRACT_BALANCE_FOR_V3_SWAPS]
+    )
 
     print(f">>>>>>>>>>>>>> transfer_args >>>>>>>>>>>>>>>", transfer_args.hex())
     print(f">>>>>>>>>>>>>>> original swap_subplan_cmds", swap_subplan_cmds)
@@ -369,7 +376,7 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
     
     calls = [
         ICACallData(
-            to=to_bytes32_str(OPEN_USDT_TOKEN),
+            to=to_bytes32_str(input.to_bridge_token.token_address),
             value=0,
             # TODO: change this to maxBridgedAmount, as at least for exact-in we might not know exactly how much is bridged over, and want to be sure
             data=Web3().eth.contract(abi=erc20_abi).encode_abi("approve", args=[input.destination_router, input.user_ICA_balance + input.bridged_amount])
@@ -392,7 +399,7 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
 
     print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>> commitment_hash", commitment_hash.hex())
 
-    needs_relay = input.to_token.token_address != OPEN_USDT_TOKEN
+    needs_relay = input.to_token.token_address != input.to_bridge_token.token_address
 
     destination_chain_planner = RoutePlanner()
 
@@ -400,12 +407,12 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
     destination_chain_planner.add_command(CommandType.BRIDGE_TOKEN, [
         BridgeType.HYP_XERC20,
         input.user_ICA if needs_relay else input.account,
-        OPEN_USDT_TOKEN,
+        input.from_bridge_token.token_address,
         input.origin_bridge,
         input.bridged_amount,
         input.bridge_fee,
         input.destination_domain,
-        input.from_token.token_address == OPEN_USDT_TOKEN,
+        input.from_token.token_address == input.from_bridge_token.token_address,
     ])
 
     if needs_relay:

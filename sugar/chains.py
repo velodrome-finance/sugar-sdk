@@ -19,7 +19,7 @@ from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
-from .helpers import find_all_paths, time_it, atime_it, parse_ether, to_bytes32, to_bytes32_str, get_unique_str, OPEN_USDT_TOKEN
+from .helpers import find_all_paths, time_it, atime_it, to_bytes32
 from .abi import get_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
@@ -94,8 +94,8 @@ class CommonChain:
         return [native] + (list(filter(lambda t: t.listed, ts)) if listed_only else ts)
     
     def _get_superswap_connector_token(self, tokens: List[Token]) -> Token:
-        connector = next((t for t in tokens if t.token_address == OPEN_USDT_TOKEN), None)
-        if not connector: raise ValueError(f"Open USDT token not found on {self.name} chain.")
+        connector = next((t for t in tokens if t.token_address == self.settings.bridge_token_addr), None)
+        if not connector: raise ValueError(f"Superswap bridge token not found on {self.name} chain.")
         return connector
 
     def _prepare_prices(self, tokens: List[Token], rates: List[int]) -> Dict[str, int]:
@@ -249,7 +249,7 @@ class AsyncChain(CommonChain):
                 ]
             }
         ]
-        contract = self.web3.eth.contract(address=self.settings.usdt_bridge_addr, abi=abi)
+        contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=abi)
         return await contract.functions.quoteGasPayment(target_chain_id).call()
     
     @require_async_context
@@ -343,7 +343,7 @@ class AsyncChain(CommonChain):
                 }
             ]
         }]
-        contract = self.web3.eth.contract(address=OPEN_USDT_TOKEN, abi=abi)
+        contract = self.web3.eth.contract(address=self.settings.bridge_token_addr, abi=abi)
         return await contract.functions.balanceOf(user_ica).call()
 
     @require_async_context
@@ -724,8 +724,11 @@ class OPChainCommon():
     velo: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
                         token_address='0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', symbol='VELO', decimals=18, listed=True, wrapped_token_address=None)
     eth: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
-                       token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
-    
+                       token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006') 
+    o_usdt: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
+                         token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT',
+                         decimals=6, listed=True, wrapped_token_address=None)
+
 class AsyncOPChain(AsyncChain, OPChainCommon):
     def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs), **kwargs)
 
