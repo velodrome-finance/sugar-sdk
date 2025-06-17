@@ -51,6 +51,8 @@ def symbol(token0: Token, token1: Token, pool_type: int) -> str:
 class LiquidityPoolForSwap:
     """A more compact pool representation used for swaps"""
 
+    chain_id: str
+    chain_name: str
     lp: str
     type: int
     token0_address: str
@@ -60,9 +62,11 @@ class LiquidityPoolForSwap:
     is_cl: bool
 
     @classmethod
-    def from_tuple(cls, t: Tuple) -> "LiquidityPoolForSwap":
+    def from_tuple(cls, t: Tuple, chain_id: str, chain_name: str) -> "LiquidityPoolForSwap":
         token0, token1, pool_type = normalize_address(t[2]), normalize_address(t[3]), t[1]
         return LiquidityPoolForSwap(
+            chain_id=chain_id,
+            chain_name=chain_name,
             lp=normalize_address(t[0]),
             type=pool_type,
             token0_address=token0,
@@ -82,6 +86,8 @@ class LiquidityPool:
     https://github.com/velodrome-finance/sugar/blob/v2/contracts/LpSugar.vy#L31
     """
 
+    chain_id: str
+    chain_name: str
     lp: str
     factory: str
     symbol: str
@@ -148,7 +154,7 @@ class LiquidityPool:
 
     @classmethod
     def from_tuple(
-        cls, t: Tuple, tokens: Dict[str, Token], prices: Dict[str, Price]
+        cls, t: Tuple, tokens: Dict[str, Token], prices: Dict[str, Price], chain_id: str, chain_name: str
     ) -> Optional["LiquidityPool"]:
         token0, token1, pool_type = normalize_address(t[7]), normalize_address(t[10]), t[4]
         token0_fees, token1_fees = t[23], t[24]
@@ -190,6 +196,8 @@ class LiquidityPool:
         if not token0 or not token1: return None
 
         return LiquidityPool(
+            chain_id=chain_id,
+            chain_name=chain_name,
             lp=normalize_address(t[0]),
             factory=normalize_address(t[18]),
             symbol=symbol(token0, token1, pool_type),

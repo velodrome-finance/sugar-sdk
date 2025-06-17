@@ -16,6 +16,7 @@ abi_config = {
     'router': settings.router_contract_addr,
     'quoter': settings.quoter_contract_addr,
     'swapper': settings.swapper_contract_addr,
+    'interchain_router': settings.interchain_router_contract_addr,
 }
 for name, addr in abi_config.items():
     download_contract_abi(name=name, address=addr)

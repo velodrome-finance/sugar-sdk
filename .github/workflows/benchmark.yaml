@@ -19,6 +19,7 @@ jobs:
       SUGAR_PK: ${{ secrets.SUGAR_PK }}
       SUGAR_RPC_URI_10: ${{ secrets.SUGAR_RPC_URI_10 }}
       SUGAR_RPC_URI_8453: ${{ secrets.SUGAR_RPC_URI_8453 }}
+      SUGAR_RPC_URI_130: ${{ secrets.SUGAR_RPC_URI_130 }}
 
     steps:
       - name: Checkout code

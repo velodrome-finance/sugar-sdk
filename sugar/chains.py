@@ -3,7 +3,8 @@
 # %% auto 0
 __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_response', 'require_context', 'require_async_context',
            'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain', 'OPChain', 'BaseChainCommon',
-           'AsyncBaseChain', 'BaseChain']
+           'AsyncBaseChain', 'BaseChain', 'UniChainCommon', 'AsyncUniChain', 'UniChain', 'get_chain', 'get_async_chain',
+           'get_chain_from_token', 'get_async_chain_from_token']
 
 # %% ../src/chains.ipynb 3
 import os, asyncio
@@ -16,9 +17,9 @@ from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account
 from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
-from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings
+from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
-from .helpers import find_all_paths, time_it, atime_it
+from .helpers import find_all_paths, time_it, atime_it, to_bytes32
 from .abi import get_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
@@ -58,6 +59,12 @@ class CommonChain:
     @property
     def account(self) -> Account: return self.web3.eth.account.from_key(os.getenv("SUGAR_PK"))
 
+    @property
+    def id(self) -> str: return self.settings.chain_id
+
+    @property
+    def name(self) -> str: return self.settings.chain_name
+
     pools: Optional[List[LiquidityPool]] = None
     pools_for_swap: Optional[List[LiquidityPoolForSwap]] = None
 
@@ -78,10 +85,19 @@ class CommonChain:
         return contract_wrapper(address=token.wrapped_token_address or token.token_address, abi=ERC20_ABI)
     
     def prepare_tokens(self, tokens: List[Tuple], listed_only: bool) -> List[Token]:
-        native = Token.make_native_token(self.settings.native_token_symbol, self.settings.wrapped_native_token_addr, self.settings.native_token_decimals)
-        ts = list(map(lambda t: Token.from_tuple(t), tokens))
+        native = Token.make_native_token(self.settings.native_token_symbol,
+                                         self.settings.wrapped_native_token_addr,
+                                         self.settings.native_token_decimals,
+                                         chain_id=self.id,
+                                         chain_name=self.name)
+        ts = list(map(lambda t: Token.from_tuple(t, chain_id=self.id, chain_name=self.name), tokens))
         return [native] + (list(filter(lambda t: t.listed, ts)) if listed_only else ts)
     
+    def _get_superswap_connector_token(self, tokens: List[Token]) -> Token:
+        connector = next((t for t in tokens if t.token_address == self.settings.bridge_token_addr), None)
+        if not connector: raise ValueError(f"Superswap bridge token not found on {self.name} chain.")
+        return connector
+
     def _prepare_prices(self, tokens: List[Token], rates: List[int]) -> Dict[str, int]:
         # token_address => normalized rate
         result = {}
@@ -108,10 +124,10 @@ class CommonChain:
     
     def prepare_pools(self, pools: List[Tuple], tokens: List[Token], prices: List[Price]) -> List[LiquidityPool]:
         tokens, prices = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}
-        return list(filter(lambda p: p is not None, map(lambda p: LiquidityPool.from_tuple(p, tokens, prices), pools)))
+        return list(filter(lambda p: p is not None, map(lambda p: LiquidityPool.from_tuple(p, tokens, prices, chain_id=self.id, chain_name=self.name), pools)))
     
     def prepare_pools_for_swap(self, pools: List[Tuple]) -> List[LiquidityPoolForSwap]:
-        return list(map(lambda p: LiquidityPoolForSwap.from_tuple(p), pools))
+        return list(map(lambda p: LiquidityPoolForSwap.from_tuple(p, chain_id=self.id, chain_name=self.name), pools))
 
     def prepare_pool_epochs(self, epochs: List[Tuple], pools: List[LiquidityPool], tokens: List[Token], prices: List[Price]) -> List[LiquidityPoolEpoch]:
         tokens, prices, pools = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}, {p.lp: p for p in pools}
@@ -166,7 +182,7 @@ class CommonChain:
                 self.settings.connector_tokens_addrs,
                 10 # threshold_filter
             ))
-        return batch        
+        return batch
 
 # %% ../src/chains.ipynb 8
 class AsyncChain(CommonChain):
@@ -190,6 +206,9 @@ class AsyncChain(CommonChain):
         self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=get_abi("router"))
         self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=get_abi("quoter"))
         self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=get_abi("swapper"))
+        if hasattr(self.settings, "interchain_router_contract_addr"):
+            # TODO: clean this up when interchain jazz is fully implemented
+            self.ica_router = self.web3.eth.contract(address=self.settings.interchain_router_contract_addr, abi=get_abi("interchain_router"))
 
         # set up caching for price oracle
         self._get_prices = alru_cache(ttl=self.settings.pricing_cache_timeout_seconds)(self._get_prices)
@@ -208,12 +227,133 @@ class AsyncChain(CommonChain):
                 for offset, limit in batch: batcher.add(f(limit, offset))
                 return sum(await batcher.async_execute(), [])
         return sum(await asyncio.gather(*[process_batch(batch) for batch in self.get_pool_paginator()]), [])
+    
+    @require_async_context
+    async def get_bridge_fee(self, target_chain_id: int) -> int:
+        abi = [
+            {
+                "name": "quoteGasPayment",
+                "type": "function",
+                "stateMutability": "view",
+                "inputs": [
+                    {
+                    "name": "chainId",
+                    "type": "uint32"
+                    }
+                ],
+                "outputs": [
+                    {
+                    "name": "",
+                    "type": "uint256"
+                    }
+                ]
+            }
+        ]
+        contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=abi)
+        return await contract.functions.quoteGasPayment(target_chain_id).call()
+    
+    @require_async_context
+    async def get_xchain_fee(self, destination_domain: int) -> int:
+        # TODO: move this to a more appropriate place
+        XCHAIN_GAS_LIMIT_UPPERBOUND = 600000
+        return await self.ica_router.functions.quoteGasForCommitReveal(destination_domain, XCHAIN_GAS_LIMIT_UPPERBOUND).call()
+
+    @require_async_context
+    async def get_domain(self, chain_id: Optional[int] = None) -> int:
+        # TODO: remove chain_id arg when all chains support domains
+        # TODO: move this somewhere else
+        MESSAGE_MODULE_ADDRESS = normalize_address("0x2BbA7515F7cF114B45186274981888D8C2fBA15E")
+        domains_abi = [
+            {
+                "name": "domains",
+                "type": "function",
+                "stateMutability": "view",
+                "inputs": [
+                    {
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "outputs": [
+                    {
+                        "name": "domain",
+                        "type": "uint256"
+                    }
+                ]
+            }
+        ]
+        contract = self.web3.eth.contract(address=MESSAGE_MODULE_ADDRESS, abi=domains_abi)
+        domain = await contract.functions.domains(int(self.settings.chain_id) if not chain_id else chain_id).call()
+        # TODO: remove fallback to chain_id when all chains support domains
+        return domain if domain != 0 else int(chain_id if chain_id else self.settings.chain_id)
+    
+    @require_async_context
+    async def get_remote_interchain_account(self, destination_domain: int):
+        abi = [{
+            "name": "getRemoteInterchainAccount",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [
+                {
+                    "name": "",
+                    "type": "uint32"
+                },
+                {
+                    "name": "",
+                    "type": "address"
+                },
+                {
+                    "name": "",
+                    "type": "bytes32"
+                }
+            ],
+            "outputs": [
+                {
+                "name": "userICA",
+                "type": "address"
+                }
+            ]
+        }]
+        contract = self.web3.eth.contract(address=self.settings.interchain_router_contract_addr, abi=abi)
+        return await contract.functions.getRemoteInterchainAccount(
+            destination_domain,
+            self.settings.swapper_contract_addr,
+            # always pass user address for consistency. Fallback condition here just to prevent runtime error
+            to_bytes32(self.account.address or ADDRESS_ZERO),
+        ).call()
+
+    @require_async_context
+    async def get_ica_hook(self): return await self.ica_router.functions.hook().call()
+
+    @require_async_context
+    async def get_user_ica_balance(self, user_ica: str) -> int:
+        abi = [{
+            "type": 'function',
+            "name": 'balanceOf',
+            "stateMutability": 'view',
+            "inputs": [
+                {
+                    "name": 'account',
+                    "type": 'address',
+                }
+            ],
+            "outputs": [
+                {
+                    "type": 'uint256',
+                }
+            ]
+        }]
+        contract = self.web3.eth.contract(address=self.settings.bridge_token_addr, abi=abi)
+        return await contract.functions.balanceOf(user_ica).call()
 
     @require_async_context
     @alru_cache(maxsize=None)
     async def get_all_tokens(self, listed_only: bool = False) -> List[Token]:
         def get_tokens(limit, offset): return self.sugar.functions.tokens(limit, offset, ADDRESS_ZERO, [])
         return self.prepare_tokens(await self.apaginate(get_tokens), listed_only)
+    
+    @require_async_context
+    async def get_superswap_connector_token(self) -> Token: return self._get_superswap_connector_token(await self.get_all_tokens())
 
     async def _get_prices(self, tokens: Tuple[Token]):
         async with self.web3.batch_requests() as batch:
@@ -447,7 +587,6 @@ class Chain(CommonChain):
 
         return results
 
-
     @require_context
     def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
         spender = self.account.address
@@ -467,6 +606,9 @@ class Chain(CommonChain):
         def get_tokens(limit, offset): return self.sugar.functions.tokens(limit, offset, ADDRESS_ZERO, [])
         return self.prepare_tokens(self.paginate(get_tokens), listed_only)
     
+    @require_context
+    def get_superswap_connector_token(self) -> Token: return self._get_superswap_connector_token(self.get_all_tokens())
+
     def _get_prices(self, tokens: Tuple[Token]) -> List[int]:
         # token_address => normalized rate
         with self.web3.batch_requests() as batch:
@@ -573,11 +715,20 @@ class Chain(CommonChain):
         return self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
 
 # %% ../src/chains.ipynb 12
+_op_settings = make_op_chain_settings()
+
 class OPChainCommon():
-    usdc: Token = Token(token_address='0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
-    velo: Token = Token(token_address='0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', symbol='VELO', decimals=18, listed=True, wrapped_token_address=None)
-    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
-    
+    usdc: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
+                        token_address='0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', symbol='USDC',
+                        decimals=6, listed=True, wrapped_token_address=None)
+    velo: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
+                        token_address='0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', symbol='VELO', decimals=18, listed=True, wrapped_token_address=None)
+    eth: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
+                       token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006') 
+    o_usdt: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
+                         token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT',
+                         decimals=6, listed=True, wrapped_token_address=None)
+
 class AsyncOPChain(AsyncChain, OPChainCommon):
     def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs), **kwargs)
 
@@ -586,13 +737,45 @@ class OPChain(Chain, OPChainCommon):
 
 
 # %% ../src/chains.ipynb 14
+_base_settings = make_base_chain_settings()
+
 class BaseChainCommon():
-    usdc: Token = Token(token_address='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
-    aero: Token = Token(token_address='0x940181a94A35A4569E4529A3CDfB74e38FD98631', symbol='AERO', decimals=18, listed=True, wrapped_token_address=None)
-    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    usdc: Token = Token(chain_id=_base_settings.chain_id, chain_name=_base_settings.chain_name,
+                        token_address='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
+    aero: Token = Token(chain_id=_base_settings.chain_id, chain_name=_base_settings.chain_name,
+                        token_address='0x940181a94A35A4569E4529A3CDfB74e38FD98631', symbol='AERO', decimals=18, listed=True, wrapped_token_address=None)
+    eth: Token = Token(chain_id=_base_settings.chain_id, chain_name=_base_settings.chain_name,
+                       token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
     
 class AsyncBaseChain(AsyncChain, BaseChainCommon):
     def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs), **kwargs)
 
 class BaseChain(Chain, BaseChainCommon):
     def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 16
+class UniChainCommon():
+    o_usdt: Token = Token(chain_id='130', chain_name='Uni', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
+    usdc: Token = Token(chain_id='130', chain_name='Uni', token_address='0x078D782b760474a361dDA0AF3839290b0EF57AD6', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
+    
+class AsyncUniChain(AsyncChain, UniChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
+
+class UniChain(Chain, UniChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 17
+def get_chain(chain_id: str, **kwargs) -> Chain:
+    if chain_id == '10': return OPChain(**kwargs)
+    elif chain_id == '8453': return BaseChain(**kwargs)
+    elif chain_id == '130': return UniChain(**kwargs)
+    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+
+def get_async_chain(chain_id: str, **kwargs) -> AsyncChain:
+    if chain_id == '10': return AsyncOPChain(**kwargs)
+    elif chain_id == '8453': return AsyncBaseChain(**kwargs)
+    elif chain_id == '130': return AsyncUniChain(**kwargs)
+    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+
+def get_chain_from_token(t: Token, **kwargs) -> Chain: return get_chain(t.chain_id, **kwargs)
+def get_async_chain_from_token(t: Token, **kwargs) -> AsyncChain: return get_async_chain(t.chain_id, **kwargs)
