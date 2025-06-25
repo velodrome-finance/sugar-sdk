@@ -35,6 +35,7 @@ class CommandType(IntEnum):
     EXECUTE_CROSS_CHAIN = 0x13
     EXECUTE_SUB_PLAN = 0x21
 
+
 class BridgeType(IntEnum):
     """
     Enum for different bridge types.
@@ -58,7 +59,7 @@ ABI_DEFINITION = {
         "address",
         "uint256",
         "uint256",
-        "(address,address,bool)[]",
+        "bytes",
         "bool",
         "bool"  # isUni
     ],
