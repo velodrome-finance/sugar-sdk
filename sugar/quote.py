@@ -23,6 +23,7 @@ class PreparedRoute:
     def encoded(self) -> bytes: return encode_packed(self.types, self.values)
 
 def pack_path(path: List[Tuple[LiquidityPoolForSwap, bool]], for_swap: bool = False) -> PreparedRoute:
+    is_v2_swap = for_swap and any(pool.is_basic for pool, _ in path)
     types, values = reduce(lambda s, pool: s + pool, [["address", "int24"] for i in range(len(path))], []) + ["address"], []
     for node in path:
         pool, reversed = node
@@ -31,7 +32,15 @@ def pack_path(path: List[Tuple[LiquidityPoolForSwap, bool]], for_swap: bool = Fa
         else: filler =  QUOTER_STABLE_POOL_FILLER if pool.is_stable else QUOTER_VOLATILE_POOL_FILLER
         if len(values) == 0: values = [token0, filler, token1]
         else: values += [filler, token1]
+    
+    if is_v2_swap:
+        types = list(map(lambda t: "bool" if t == "int24" else t, types))
+        for i in range(len(values)):
+            if values[i] == QUOTER_STABLE_POOL_FILLER: values[i] = True
+            elif values[i] == QUOTER_VOLATILE_POOL_FILLER: values[i] = False
+
     return PreparedRoute(types=types, values=values)
+  
 
 @dataclass
 class QuoteInput:
