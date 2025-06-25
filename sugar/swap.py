@@ -173,15 +173,6 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
     
     # Group nodes by pool type (v2 or v3)
     grouped_nodes: List[List[Tuple[LiquidityPoolForSwap, bool]]] = []
-    
-    # helpers for getting from and to token addresses
-    def from_token_address(node: Tuple[LiquidityPoolForSwap, bool]) -> str:
-        pool, reversed = node
-        return pool.token0_address if not reversed else pool.token1_address
-    def to_token_address(node: Tuple[LiquidityPoolForSwap, bool]) -> str:
-        pool, reversed = node
-        return pool.token1_address if not reversed else pool.token0_address
-
 
     for node in quote.path:
         if not grouped_nodes: grouped_nodes.append([node])
@@ -206,10 +197,7 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
                 router_address if quote.to_token.wrapped_token_address else account,
                 quote.amount_in,
                 min_amount_out,
-                [
-                    # from, to, stable
-                    (from_token_address(n), to_token_address(n), n[0].is_stable) for n in nodes
-                ] if is_v2_pool else pack_path(nodes).encoded,
+                pack_path(nodes, for_swap=True).encoded,
                 not tokens_come_from_contract,
                 False, # isUni
             ]
@@ -230,10 +218,7 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
                 router_address if is_first_batch_v2 else next_batch[0][0].lp,
                 quote.amount_in,
                 0,  # No expectations on min amount out for first batch
-                [
-                    # from, to, stable
-                    (from_token_address(n), to_token_address(n), n[0].is_stable) for n in first_batch
-                ] if is_first_batch_v2 else pack_path(first_batch).encoded,
+                pack_path(first_batch, for_swap=True).encoded,
                 not tokens_come_from_contract,
                 False,  # isUni
             ]
@@ -250,9 +235,7 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
                     router_address if is_batch_v2 else next_batch[0][0].lp,
                     0 if is_batch_v2 else CONTRACT_BALANCE_FOR_V3_SWAPS,
                     0,  # No expectations for middle batches
-                    [
-                        (from_token_address(n), to_token_address(n), n[0].is_stable) for n in batch
-                    ] if is_batch_v2 else pack_path(batch).encoded,
+                    pack_path(batch, for_swap=True).encoded,
                     False,  # Money comes from contract
                     False,  # isUni
                 ]
@@ -267,9 +250,7 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
                 router_address if quote.to_token.wrapped_token_address else account,
                 0 if is_last_batch_v2 else CONTRACT_BALANCE_FOR_V3_SWAPS,
                 min_amount_out,
-                [
-                    (from_token_address(n), to_token_address(n), n[0].is_stable) for n in last_batch
-                ] if is_last_batch_v2 else pack_path(last_batch).encoded,
+                pack_path(last_batch, for_swap=True).encoded,
                 False,  # Money comes from contract
                 False,  # isUni
             ]
