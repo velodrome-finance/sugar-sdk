@@ -57,9 +57,21 @@ class LiquidityPoolForSwap:
     type: int
     token0_address: str
     token1_address: str
-    is_stable: bool
-    # concentrated liquidity pools
-    is_cl: bool
+
+    @property
+    def is_cl(self) -> bool:
+        """Returns True if the pool is a concentrated liquidity pool"""
+        return self.type > 0
+    
+    @property
+    def is_stable(self) -> bool:
+        """Returns True if the pool is a stable pool"""
+        return self.type >= 0 and self.type <= 50
+    
+    @property
+    def is_basic(self) -> bool:
+        """Returns True if the pool is a basic pool (V2 pools)"""
+        return self.type == 0 or self.type == -1
 
     @classmethod
     def from_tuple(cls, t: Tuple, chain_id: str, chain_name: str) -> "LiquidityPoolForSwap":
@@ -70,12 +82,8 @@ class LiquidityPoolForSwap:
             lp=normalize_address(t[0]),
             type=pool_type,
             token0_address=token0,
-            token1_address=token1,
-            is_stable=pool_type == 0,
-            is_cl=pool_type > 0
+            token1_address=token1
         )
-
-        
 
 
 @dataclass(frozen=True)

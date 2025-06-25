@@ -17,12 +17,12 @@ QUOTER_STABLE_POOL_FILLER, QUOTER_VOLATILE_POOL_FILLER = 2097152, 4194304
 
 @dataclass
 class PreparedRoute:
-    types: List[str]; values: List[Union[str, int]]
+    types: List[str]; values: List[Union[str, int, bool]]
 
     @property
     def encoded(self) -> bytes: return encode_packed(self.types, self.values)
 
-def pack_path(path: List[Tuple[LiquidityPoolForSwap, bool]]) -> PreparedRoute:
+def pack_path(path: List[Tuple[LiquidityPoolForSwap, bool]], for_swap: bool = False) -> PreparedRoute:
     types, values = reduce(lambda s, pool: s + pool, [["address", "int24"] for i in range(len(path))], []) + ["address"], []
     for node in path:
         pool, reversed = node
@@ -46,6 +46,9 @@ class QuoteInput:
     
     @property
     def route(self) -> PreparedRoute: return pack_path(self.path)
+
+    @property
+    def route_for_swap(self) -> PreparedRoute: return pack_path(self.path)
 
 @dataclass
 class Quote:
