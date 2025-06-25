@@ -57,7 +57,7 @@ class QuoteInput:
     def route(self) -> PreparedRoute: return pack_path(self.path)
 
     @property
-    def route_for_swap(self) -> PreparedRoute: return pack_path(self.path)
+    def route_for_swap(self) -> PreparedRoute: return pack_path(self.path, for_swap=True)
 
 @dataclass
 class Quote:
