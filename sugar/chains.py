@@ -17,7 +17,7 @@ from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account
 from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
-from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings
+from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings, XCHAIN_GAS_LIMIT_UPPERBOUND
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
 from .helpers import find_all_paths, time_it, atime_it, to_bytes32
 from .abi import get_abi
@@ -254,8 +254,6 @@ class AsyncChain(CommonChain):
     
     @require_async_context
     async def get_xchain_fee(self, destination_domain: int) -> int:
-        # TODO: move this to a more appropriate place
-        XCHAIN_GAS_LIMIT_UPPERBOUND = 600000
         return await self.ica_router.functions.quoteGasForCommitReveal(destination_domain, XCHAIN_GAS_LIMIT_UPPERBOUND).call()
 
     @require_async_context
@@ -317,7 +315,7 @@ class AsyncChain(CommonChain):
             destination_domain,
             self.settings.swapper_contract_addr,
             # always pass user address for consistency. Fallback condition here just to prevent runtime error
-            to_bytes32(self.account.address or ADDRESS_ZERO),
+            to_bytes32(self.account.address),
         ).call()
 
     @require_async_context

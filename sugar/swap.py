@@ -5,9 +5,11 @@ __all__ = ['FLAG_ALLOW_REVERT', 'ABI_DEFINITION', 'CONTRACT_BALANCE_FOR_V3_SWAPS
            'setup_planner', 'SuperSwapQuote', 'SuperSwapDataInput', 'SuperSwapData', 'build_super_swap_data']
 
 # %% ../src/swap.ipynb 3
+import copy
 from dataclasses import dataclass
+from .config import XCHAIN_GAS_LIMIT_UPPERBOUND
 from .quote import Quote, pack_path
-from .helpers import apply_slippage, ICACallData, hash_ICA_calls, to_bytes32, to_bytes32_str
+from .helpers import apply_slippage, ICACallData, hash_ICA_calls, to_bytes32, to_bytes32_str, MAX_UINT256
 from .helpers import ADDRESS_ZERO, normalize_address
 from .token import Token
 from .pool import LiquidityPoolForSwap
@@ -297,39 +299,42 @@ class SuperSwapDataInput:
     xchain_fee: int
 
 @dataclass(frozen=True)
-class SuperSwapData: destination_planner: RoutePlanner; calls: List[ICACallData]; origin_domain: int; salt: str; needs_relay: bool 
+class SuperSwapData:
+    destination_planner: RoutePlanner
+    calls: List[ICACallData]
+    origin_domain: int
+    salt: str
+    needs_relay: bool
+    commitment_hash: Optional[bytes] 
 
 # %% ../src/swap.ipynb 10
 def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
     d_quote, account, slippage, swap_contract_addr = input.destination_quote, input.account, input.slippage, input.swapper_contract_addr
 
-    destination_chain_swap_plan = setup_planner(d_quote, slippage, account, swap_contract_addr) if d_quote else None
+    # TODO: figure out if destination quote should come with tweaked amount
+    if d_quote: 
+        d_quote_with_max_amount_in = copy.deepcopy(d_quote)
+        d_quote_with_max_amount_in.input.amount_in = CONTRACT_BALANCE_FOR_V3_SWAPS
+    destination_chain_swap_plan = setup_planner(d_quote_with_max_amount_in, slippage, account, swap_contract_addr) if d_quote_with_max_amount_in else None
 
     # TODO: figure out if we can just use len(commands) here
     swap_subplan_cmds = destination_chain_swap_plan.get_encoded_commands() if destination_chain_swap_plan else None
     swap_subplan_cmds = bytes.fromhex(swap_subplan_cmds.replace('0x', '')) if swap_subplan_cmds else None
 
+    destination_transfer_args = encode(ABI_DEFINITION[CommandType.TRANSFER_FROM], [
+        input.to_bridge_token.token_address, input.destination_router, CONTRACT_BALANCE_FOR_V3_SWAPS
+    ])
     # Encode fallback transfer
-    transfer_subplan = encode_packed(["bytes1"], [bytes([CommandType.TRANSFER_FROM])])
-
-    print(f">>>>>>>>>>>>>> transfer_subplan >>>>>>>>>>>>>>>", transfer_subplan.hex())
-
-    transfer_args = encode(
+    fallback_transfer_cmd = encode_packed(["bytes1"], [bytes([CommandType.TRANSFER_FROM])])
+    fallback_transfer_args = encode(
         ABI_DEFINITION[CommandType.TRANSFER_FROM],
         [input.to_bridge_token.token_address, account, CONTRACT_BALANCE_FOR_V3_SWAPS]
     )
-
-    print(f">>>>>>>>>>>>>> transfer_args >>>>>>>>>>>>>>>", transfer_args.hex())
-    print(f">>>>>>>>>>>>>>> original swap_subplan_cmds", swap_subplan_cmds)
-
     subplan_abi = ["bytes", "bytes[]"]
 
-    print(f">>>>>>>>>>>>>> subplan_abi >>>>>>>>>>>>>>>", subplan_abi)
-    print(f">>>>>>>>>>>>>> swap_subplan_cmds >>>>>>>>>>>>>>>", swap_subplan_cmds.hex() if swap_subplan_cmds else None)
-
     destination_inputs = [
-        encode(subplan_abi, [swap_subplan_cmds, destination_chain_swap_plan.inputs]),
-        encode(subplan_abi, [transfer_subplan, [transfer_args]]),
+        encode(subplan_abi, [swap_subplan_cmds, [destination_transfer_args] + destination_chain_swap_plan.inputs]),
+        encode(subplan_abi, [fallback_transfer_cmd, [fallback_transfer_args]]),
     ] if swap_subplan_cmds else None
 
     # Encode Sub Plan commands
@@ -340,8 +345,6 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
             bytes([CommandType.EXECUTE_SUB_PLAN | FLAG_ALLOW_REVERT])
         ]
     )
-
-    print(f">>>>>>>>>>>>>> destination_cmds >>>>>>>>>>>>>>>", destination_cmds.hex())
 
     erc20_abi = [
         {
@@ -355,31 +358,29 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
         }
     ]
     
-    calls = [
-        ICACallData(
-            to=to_bytes32_str(input.to_bridge_token.token_address),
-            value=0,
-            # TODO: change this to maxBridgedAmount, as at least for exact-in we might not know exactly how much is bridged over, and want to be sure
-            data=Web3().eth.contract(abi=erc20_abi).encode_abi("approve", args=[input.destination_router, input.user_ICA_balance + input.bridged_amount])
-        )
-    ]
+    calls = []
 
     if destination_inputs:
-        print(f">>>>>>>>>>>>>> destination_inputs >>>>>>>>>>>>>>>", destination_inputs)
-        print(f">>>>>>>>>>>>> destination_router", input.destination_router)
+        # ICA approves router to withdraw a very high amount
+        calls.append(ICACallData(
+            to=to_bytes32_str(input.to_bridge_token.token_address),
+            value=0,
+            data=Web3().eth.contract(abi=erc20_abi).encode_abi("approve", args=[input.destination_router, MAX_UINT256])
+        ))
+        # destination chain swap
         calls.append(ICACallData(
             to=to_bytes32_str(input.destination_router),
             value=0,
             data=Web3().eth.contract(abi=get_abi("swapper")).encode_abi("execute", args=[destination_cmds, destination_inputs])
         ))
-
-    print(f"calls", calls)
-
+        # reset approval back to zero
+        calls.append(ICACallData(
+            to=to_bytes32_str(input.to_bridge_token.token_address),
+            value=0,
+            data=Web3().eth.contract(abi=erc20_abi).encode_abi("approve", args=[input.destination_router, 0])
+        ))
 
     commitment_hash = hash_ICA_calls(calls, input.salt)
-
-    print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>> commitment_hash", commitment_hash.hex())
-
     needs_relay = input.to_token.token_address != input.to_bridge_token.token_address
 
     destination_chain_planner = RoutePlanner()
@@ -390,13 +391,17 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
         input.user_ICA if needs_relay else input.account,
         input.from_bridge_token.token_address,
         input.origin_bridge,
-        input.bridged_amount,
+        CONTRACT_BALANCE_FOR_V3_SWAPS,
         input.bridge_fee,
         input.destination_domain,
         input.from_token.token_address == input.from_bridge_token.token_address,
     ])
 
     if needs_relay:
+        variant = 1
+        hook_metadata = encode_packed(["uint16", "uint256", "uint256", "address"], [
+            variant, input.xchain_fee, XCHAIN_GAS_LIMIT_UPPERBOUND, input.account 
+        ])
         # destination swap command
         destination_chain_planner.add_command(CommandType.EXECUTE_CROSS_CHAIN, [
             input.destination_domain,
@@ -404,11 +409,16 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
             to_bytes32(input.destination_ICA_router),
             to_bytes32(ADDRESS_ZERO),
             commitment_hash,
-            # fee to dispatch x-chain message
             input.xchain_fee,
             input.origin_hook,
-            # TODO: figure out if this works correctly
-            bytes.fromhex("0x".replace('0x', ''))
+            hook_metadata
         ])
 
-    return SuperSwapData(destination_planner=destination_chain_planner, calls=calls, origin_domain=input.origin_domain, salt=input.salt, needs_relay=needs_relay)
+    return SuperSwapData(
+        destination_planner=destination_chain_planner,
+        calls=calls,
+        origin_domain=input.origin_domain,
+        salt=input.salt,
+        needs_relay=needs_relay,
+        commitment_hash=commitment_hash if needs_relay else None
+    )
