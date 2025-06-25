@@ -261,8 +261,6 @@ class AsyncChain(CommonChain):
     @require_async_context
     async def get_domain(self, chain_id: Optional[int] = None) -> int:
         # TODO: remove chain_id arg when all chains support domains
-        # TODO: move this somewhere else
-        MESSAGE_MODULE_ADDRESS = normalize_address("0x2BbA7515F7cF114B45186274981888D8C2fBA15E")
         domains_abi = [
             {
                 "name": "domains",
@@ -282,7 +280,7 @@ class AsyncChain(CommonChain):
                 ]
             }
         ]
-        contract = self.web3.eth.contract(address=MESSAGE_MODULE_ADDRESS, abi=domains_abi)
+        contract = self.web3.eth.contract(address=self.settings.message_module_contract_addr, abi=domains_abi)
         domain = await contract.functions.domains(int(self.settings.chain_id) if not chain_id else chain_id).call()
         # TODO: remove fallback to chain_id when all chains support domains
         return domain if domain != 0 else int(chain_id if chain_id else self.settings.chain_id)
