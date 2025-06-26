@@ -145,7 +145,8 @@ def make_op_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings
         "token_addr": "0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db",
         "stable_token_addr": "0x7f5c764cbc14f9669b88837ca1490cca17c31607",
         "connector_tokens_addrs": "0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db,0x4200000000000000000000000000000000000042,0x4200000000000000000000000000000000000006,0x9bcef72be871e61ed4fbbc7630889bee758eb81d,0x2e3d870790dc77a83dd1d18184acc7439a53f475,0x8c6f28f2f1a3c87f0f938b96d27520d9751ec8d9,0x1f32b1c2345538c0c6f582fcb022739c4a194ebb,0xbfd291da8a403daaf7e5e9dc1ec0aceacd4848b9,0xc3864f98f2a61a7caeb95b039d031b4e2f55e0e9,0x9485aca5bbbe1667ad97c7fe7c4531a624c8b1ed,0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1,0x73cb180bf0521828d8849bc8cf2b920918e23032,0x6806411765af15bddd26f8f544a34cc40cb9838b,0x6c2f7b6110a37b3b0fbdd811876be368df02e8b0,0xc5b001dc33727f8f26880b184090d3e252470d45,0x6c84a8f1c29108f47a79964b5fe888d4f4d0de40,0xc40f949f8a4e094d1b49a23ea9241d289b7b2819,0x94b008aa00579c1307b0ef2c499ad98a8ce58e58,0x0b2c639c533813f4aa9d7837caf62653d097ff85",
-        "excluded_tokens_addrs": "0x74ccbe53f77b08632ce0cb91d3a545bf6b8e0979,0x139283255069ea5deef6170699aaef7139526f1f,0x88a89866439f4c2830986b79cbe6f69d1bd548bb,0x8901cb2e82cc95c01e42206f8d1f417fe53e7af0"
+        "excluded_tokens_addrs": "0x74ccbe53f77b08632ce0cb91d3a545bf6b8e0979,0x139283255069ea5deef6170699aaef7139526f1f,0x88a89866439f4c2830986b79cbe6f69d1bd548bb,0x8901cb2e82cc95c01e42206f8d1f417fe53e7af0",
+        "message_module_contract_addr": "0x2BbA7515F7cF114B45186274981888D8C2fBA15E"
     } 
     return make_settings("10", "OP", chain_settings=d, get_env=get_env, **kwargs)
 
@@ -191,6 +192,7 @@ def make_uni_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSetting
         "token_addr": "",
         "stable_token_addr": "0x078d782b760474a361dda0af3839290b0ef57ad6",
         "connector_tokens_addrs": "0x4200000000000000000000000000000000000006,0x078d782b760474a361dda0af3839290b0ef57ad6",
+        "message_module_contract_addr": "0x2BbA7515F7cF114B45186274981888D8C2fBA15E",
         "excluded_tokens_addrs": ""
     }
     return make_settings("130", "Uni", chain_settings=d, get_env=get_env, **kwargs)
