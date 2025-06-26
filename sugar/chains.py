@@ -294,7 +294,6 @@ class AsyncChain(CommonChain):
         return await contract.functions.getRemoteInterchainAccount(
             destination_domain,
             self.settings.swapper_contract_addr,
-            # always pass user address for consistency. Fallback condition here just to prevent runtime error
             to_bytes32(self.account.address),
         ).call()
 
@@ -536,6 +535,10 @@ class Chain(CommonChain):
         self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=get_abi("quoter"))
         self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=get_abi("swapper"))
 
+        if hasattr(self.settings, "interchain_router_contract_addr"):
+            # TODO: clean this up when interchain jazz is fully implemented
+            self.ica_router = self.web3.eth.contract(address=self.settings.interchain_router_contract_addr, abi=get_abi("interchain_router"))
+
         # set up caching for price oracle
         self._get_prices = cached(TTLCache(ttl=self.settings.pricing_cache_timeout_seconds, maxsize=self.settings.price_batch_size * 10))(self._get_prices)
 
@@ -567,6 +570,92 @@ class Chain(CommonChain):
                     continue
 
         return results
+
+    @require_context
+    def get_bridge_fee(self, target_chain_id: int) -> int:
+        abi = [
+            {
+                "name": "quoteGasPayment",
+                "type": "function",
+                "stateMutability": "view",
+                "inputs": [
+                    {
+                    "name": "chainId",
+                    "type": "uint32"
+                    }
+                ],
+                "outputs": [
+                    {
+                    "name": "",
+                    "type": "uint256"
+                    }
+                ]
+            }
+        ]
+        contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=abi)
+        return contract.functions.quoteGasPayment(target_chain_id).call()
+    
+    @require_context
+    def get_xchain_fee(self, destination_domain: int) -> int:
+        return self.ica_router.functions.quoteGasForCommitReveal(destination_domain, XCHAIN_GAS_LIMIT_UPPERBOUND).call()
+
+    @require_context
+    def get_remote_interchain_account(self, destination_domain: int):
+        abi = [{
+            "name": "getRemoteInterchainAccount",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [
+                {
+                    "name": "",
+                    "type": "uint32"
+                },
+                {
+                    "name": "",
+                    "type": "address"
+                },
+                {
+                    "name": "",
+                    "type": "bytes32"
+                }
+            ],
+            "outputs": [
+                {
+                "name": "userICA",
+                "type": "address"
+                }
+            ]
+        }]
+        contract = self.web3.eth.contract(address=self.settings.interchain_router_contract_addr, abi=abi)
+        return contract.functions.getRemoteInterchainAccount(
+            destination_domain,
+            self.settings.swapper_contract_addr,
+            to_bytes32(self.account.address),
+        ).call()
+
+    @require_context
+    def get_ica_hook(self): return self.ica_router.functions.hook().call()
+
+    @require_context
+    def get_user_ica_balance(self, user_ica: str) -> int:
+        abi = [{
+            "type": 'function',
+            "name": 'balanceOf',
+            "stateMutability": 'view',
+            "inputs": [
+                {
+                    "name": 'account',
+                    "type": 'address',
+                }
+            ],
+            "outputs": [
+                {
+                    "type": 'uint256',
+                }
+            ]
+        }]
+        contract = self.web3.eth.contract(address=self.settings.bridge_token_addr, abi=abi)
+        return contract.functions.balanceOf(user_ica).call()
 
     @require_context
     def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
