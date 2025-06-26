@@ -161,8 +161,6 @@ CONTRACT_BALANCE_FOR_V3_SWAPS = int("0x80000000000000000000000000000000000000000
 
 def setup_planner(quote: Quote, slippage: float, account: str, router_address: str) -> RoutePlanner:
     """Setup route planner with the given quote and chain"""
-    
-    print(">>>>>>>>>>>> planner with", quote.input.amount_in)
 
     route_planner = RoutePlanner()
     min_amount_out = apply_slippage(quote.amount_out, slippage)
@@ -313,8 +311,6 @@ class SuperSwapData:
 def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
     d_quote, account, slippage, swap_contract_addr = input.destination_quote, input.account, input.slippage, input.swapper_contract_addr
 
-    print("d_quote is", d_quote)
-
     # TODO: figure out if destination quote should come with tweaked amount
     if d_quote: 
         d_quote_with_max_amount_in = copy.deepcopy(d_quote)
@@ -330,8 +326,6 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
     
     swap_subplan_cmds = bytes.fromhex(swap_subplan_cmds.replace('0x', '')) if swap_subplan_cmds else None
 
-    print("destination swap plan", destination_chain_swap_plan.commands, destination_chain_swap_plan.inputs)
-
     destination_transfer_args = encode(ABI_DEFINITION[CommandType.TRANSFER_FROM], [
         input.to_bridge_token.token_address, input.destination_router, CONTRACT_BALANCE_FOR_V3_SWAPS
     ])
@@ -342,8 +336,6 @@ def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
         [input.to_bridge_token.token_address, account, CONTRACT_BALANCE_FOR_V3_SWAPS]
     )
     subplan_abi = ["bytes", "bytes[]"]
-
-    print(">>>>>>>>>>>", [swap_subplan_cmds, [destination_transfer_args] + destination_chain_swap_plan.inputs])
 
     destination_inputs = [
         encode(subplan_abi, [swap_subplan_cmds, [destination_transfer_args] + destination_chain_swap_plan.inputs]),

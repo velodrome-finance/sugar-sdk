@@ -40,24 +40,16 @@ class HTTPSuperswapRelayer(SuperswapRelayer):
             'salt': salt,
             'relayers': hyperlane_relayers
         })
-        print("body:")
-        print(body)
         resp = requests.post(hyperlane_relay_url, headers={'Content-Type': 'application/json'}, data=body)
-        print(f"Response status code: {resp.status_code}: {resp.text}")
-
+        print(f"Hyperlane response: {resp.status_code}: {resp.text}")
         if not resp.ok:
-            # Read response text
             response_text = resp.text
             error_msg = f"Failed to share calls with relayer: {resp.status_code} {response_text}"
-            # Replace with your preferred error handling (toast equivalent)
             print(f"Error: {error_msg}")
             raise Exception(error_msg)
                 
 
 # %% ../src/superswap.ipynb 5
-# You'll need to import or define these constants
-# from constants import HL_RELAY_URL
-
 # TODO: add helper to inspect tx using https://explorer.hyperlane.xyz/?search
 
 class AsyncSuperswap:
@@ -67,7 +59,6 @@ class AsyncSuperswap:
 
     async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None) -> str:
         quote = await self.get_super_quote(from_token=from_token, to_token=to_token, amount_in=25)
-        print(f"SuperSwap quote: {quote}")
         return await self.swap_from_quote(quote=quote, slippage=0.1)
 
     async def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperSwapQuote:
@@ -120,8 +111,6 @@ class AsyncSuperswap:
             bridge_fee = await from_chain.get_bridge_fee(int(to_chain.id))
             xchain_fee = await from_chain.get_xchain_fee(destination_domain)
             total_fee = bridge_fee + xchain_fee if quote.to_token.token_address != quote.to_bridge_token.token_address else bridge_fee 
-            
-            print(f"bridge_fee: {bridge_fee}, xchain_fee: {xchain_fee}, total_fee: {total_fee}")
 
             swap_data = build_super_swap_data(SuperSwapDataInput(
                 from_token=quote.from_token,
@@ -155,10 +144,6 @@ class AsyncSuperswap:
                 router_address=from_chain.settings.swapper_contract_addr
             ) if origin_quote else None
 
-            print(f"Origin planner: {origin_planner}")
-            print(f"Origin planner: {origin_planner.commands}")
-            for i in origin_planner.inputs: print(f"origin planner input {i.hex()}")
-
             cmds, inputs = "", [] 
 
             if origin_planner:
@@ -171,7 +156,6 @@ class AsyncSuperswap:
             return await self.write(chain=self.chain_for_writes or from_chain, cmds=cmds, inputs=inputs, quote=quote, swap_data=swap_data, total_fee=total_fee)
 
     async def write(self, chain: AsyncChain, quote: SuperSwapQuote, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
-        # >>>>>>>>>>>>>>>>>>> WRITE stuff <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
         swapper_contract_addr, from_token =  chain.settings.swapper_contract_addr, quote.from_token
         value = quote.amount_in * (10 ** from_token.decimals)
         # TODO: extend this to proper native token support
@@ -179,7 +163,6 @@ class AsyncSuperswap:
         async with chain:
             await chain.set_token_allowance(from_token, swapper_contract_addr, value)
             tx = await chain.sign_and_send_tx(chain.swapper.functions.execute(*[cmds, inputs]), value=message_fee)
-            print(f"tx : {tx}")
             if swap_data.needs_relay:
                 self.relayer.share_calls(
                     calls=serialize_ica_calls(swap_data.calls),
