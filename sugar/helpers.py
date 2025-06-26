@@ -4,7 +4,7 @@
 __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'normalize_address', 'chunk', 'amount_to_k_string', 'format_currency',
            'format_percentage', 'amount_to_m_string', 'float_to_uint256', 'get_future_timestamp', 'apply_slippage',
            'parse_ether', 'get_unique_str', 'get_salt', 'to_bytes32', 'to_bytes32_str', 'Pair', 'find_all_paths',
-           'ICACallData', 'hash_ICA_calls', 'serialize_ica_calls', 'Timer', 'time_it', 'atime_it']
+           'ICACallData', 'hash_ICA_calls', 'serialize_ica_calls', 'Timer', 'time_it', 'atime_it', 'require_supersim']
 
 # %% ../src/helpers.ipynb 2
 from json import dumps
@@ -15,8 +15,9 @@ from decimal import Decimal, getcontext
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 import networkx as nx
-import math, time, asyncio, decimal, secrets
+import math, time, asyncio, decimal, secrets, socket
 from contextlib import contextmanager, asynccontextmanager
+from fastcore.test import test_eq
 
 # %% ../src/helpers.ipynb 3
 def normalize_address(address: str) -> str: return Web3.to_checksum_address(address.lower())
@@ -254,3 +255,16 @@ async def atime_it(name: str = "Operation", precision: int = 4, callback: Option
     timer = Timer(name, precision, callback)
     async with timer:
         yield timer
+
+# %% ../src/helpers.ipynb 28
+def require_supersim():
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        result = sock.connect_ex(('127.0.0.1', 4444))
+        # are you running supersim?
+        test_eq(result, 0)
+    except socket.error as err:
+        test_eq(err, None)
+    finally:
+        sock.close()

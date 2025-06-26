@@ -5,7 +5,8 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
            'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain', 'OPChain', 'BaseChainCommon',
            'AsyncBaseChain', 'BaseChain', 'LiskChainCommon', 'AsyncLiskChain', 'LiskChain', 'UniChainCommon',
            'AsyncUniChain', 'UniChain', 'get_chain', 'get_async_chain', 'get_chain_from_token',
-           'get_async_chain_from_token']
+           'get_async_chain_from_token', 'AsyncOPChainSimnet', 'AsyncBaseChainSimnet', 'OPChainSimnet',
+           'BaseChainSimnet', 'LiskChainSimnet', 'AsyncLiskChainSimnet']
 
 # %% ../src/chains.ipynb 3
 import os, asyncio
@@ -806,3 +807,22 @@ def get_async_chain(chain_id: str, **kwargs) -> AsyncChain:
 
 def get_chain_from_token(t: Token, **kwargs) -> Chain: return get_chain(t.chain_id, **kwargs)
 def get_async_chain_from_token(t: Token, **kwargs) -> AsyncChain: return get_async_chain(t.chain_id, **kwargs)
+
+# %% ../src/chains.ipynb 21
+class AsyncOPChainSimnet(AsyncOPChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
+
+class AsyncBaseChainSimnet(AsyncBaseChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
+
+class OPChainSimnet(OPChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
+
+class BaseChainSimnet(BaseChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
+
+class LiskChainSimnet(LiskChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", **kwargs)
+
+class AsyncLiskChainSimnet(AsyncLiskChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
