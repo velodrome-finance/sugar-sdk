@@ -188,7 +188,6 @@ class ICACallData: to: str; value: int; data: str
 def hash_ICA_calls(calls: List[ICACallData], salt: str) -> bytes:
   call_tuples = [(bytes.fromhex(call.to.replace('0x', '')), call.value, bytes.fromhex(call.data.replace('0x', '')))  for call in calls]
   encoded = encode(["(bytes32,uint256,bytes)[]"], [call_tuples])
-  # TODO: make sure we don't need to slice off 0x prefix (python's hex() usually does NOT add it anyways)
   return Web3.keccak(hexstr=f"{salt}{encoded.hex()}")
 
 def serialize_ica_calls(calls: List[ICACallData]) -> List[dict]:
