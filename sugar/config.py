@@ -3,7 +3,7 @@
 # %% auto 0
 __all__ = ['hyperlane_relay_url', 'hyperlane_relayers', 'XCHAIN_GAS_LIMIT_UPPERBOUND', 'base_default_settings', 'GetEnv',
            'ChainSettings', 'validate_settings', 'get_env', 'make_settings', 'make_op_chain_settings',
-           'make_base_chain_settings', 'make_uni_chain_settings']
+           'make_base_chain_settings', 'make_lisk_chain_settings', 'make_uni_chain_settings']
 
 # %% ../src/config.ipynb 3
 import os
@@ -173,6 +173,31 @@ def make_base_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettin
     return make_settings("8453", "Base", chain_settings=d, get_env=get_env, **kwargs)
 
 # %% ../src/config.ipynb 10
+def make_lisk_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
+    d = {
+        "rpc_uri": "https://lisk.drpc.org",
+        "pools_count_upper_bound": 100,
+        "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",
+        "interchain_router_contract_addr": "0xE59592a179c4f436d5d2e4caA6e2750beA4E3166",
+        "bridge_contract_addr": "0x7bd2676c85cca9fa2203eba324fb8792fbd520b8",
+        "bridge_token_addr": "0x1217bfe6c773eec6cc4a38b5dc45b92292b6e189",
+        "sugar_contract_addr": "0x1443c0757f77c04bd514427d2bE356A5834E4167",
+        "sugar_rewards_contract_addr": "0xB1d0DFFe6260982164B53EdAcD3ccd58B081889d",
+        "slipstream_contract_addr": "0xB98fB4C9C99dE155cCbF5A14af0dBBAd96033D6f",
+        "nfpm_contract_addr": "0x991d5546C4B442B4c5fdc4c8B8b8d131DEB24702",
+        "price_oracle_contract_addr": "0x024503003fFE9AF285f47c1DaAaA497D9f1166D0",
+        "router_contract_addr": "0x3a63171DD9BebF4D07BC782FECC7eb0b890C2A45",
+        "quoter_contract_addr": "0x2f7150B288ef1cc553207bD9fbd40D4e0e093B24",
+        "swapper_contract_addr": "0x01D40099fCD87C018969B0e8D4aB1633Fb34763C",
+        "token_addr": "",
+        "stable_token_addr": "0xf242275d3a6527d877f2c927a82d9b057609cc71",
+        "connector_tokens_addrs": "0x4200000000000000000000000000000000000006,0xac485391eb2d7d88253a7f1ef18c37f4242d1a24,0x05d032ac25d322df992303dca074ee7392c117b9,0x03c7054bcb39f7b2e5b2c7acb37583e32d70cfa3",
+        "message_module_contract_addr": "0x2BbA7515F7cF114B45186274981888D8C2fBA15E",
+        "excluded_tokens_addrs": ""
+    }
+    return make_settings("1135", "Lisk", chain_settings=d, get_env=get_env, **kwargs)
+
+# %% ../src/config.ipynb 12
 def make_uni_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
     d = {
         "rpc_uri": "https://unichain.drpc.org",

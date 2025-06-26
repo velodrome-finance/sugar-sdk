@@ -313,6 +313,8 @@ class SuperSwapData:
 def build_super_swap_data(input: SuperSwapDataInput) -> SuperSwapData:
     d_quote, account, slippage, swap_contract_addr = input.destination_quote, input.account, input.slippage, input.swapper_contract_addr
 
+    print("d_quote is", d_quote)
+
     # TODO: figure out if destination quote should come with tweaked amount
     if d_quote: 
         d_quote_with_max_amount_in = copy.deepcopy(d_quote)
