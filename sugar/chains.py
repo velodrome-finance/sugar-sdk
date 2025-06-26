@@ -264,33 +264,6 @@ class AsyncChain(CommonChain):
         return await self.ica_router.functions.quoteGasForCommitReveal(destination_domain, XCHAIN_GAS_LIMIT_UPPERBOUND).call()
 
     @require_async_context
-    async def get_domain(self, chain_id: Optional[int] = None) -> int:
-        # TODO: remove chain_id arg when all chains support domains
-        domains_abi = [
-            {
-                "name": "domains",
-                "type": "function",
-                "stateMutability": "view",
-                "inputs": [
-                    {
-                        "name": "",
-                        "type": "uint256"
-                    }
-                ],
-                "outputs": [
-                    {
-                        "name": "domain",
-                        "type": "uint256"
-                    }
-                ]
-            }
-        ]
-        contract = self.web3.eth.contract(address=self.settings.message_module_contract_addr, abi=domains_abi)
-        domain = await contract.functions.domains(int(self.settings.chain_id) if not chain_id else chain_id).call()
-        # TODO: remove fallback to chain_id when all chains support domains
-        return domain if domain != 0 else int(chain_id if chain_id else self.settings.chain_id)
-    
-    @require_async_context
     async def get_remote_interchain_account(self, destination_domain: int):
         abi = [{
             "name": "getRemoteInterchainAccount",
