@@ -93,6 +93,10 @@ class CommonChain:
         ts = list(map(lambda t: Token.from_tuple(t, chain_id=self.id, chain_name=self.name), tokens))
         return [native] + (list(filter(lambda t: t.listed, ts)) if listed_only else ts)
     
+    def find_token_by_address(self, tokens: List[Token], address: str) -> Optional[Token]:
+        address = normalize_address(address)
+        return next((t for t in tokens if t.token_address == address), None)
+
     def _get_superswap_connector_token(self, tokens: List[Token]) -> Token:
         connector = next((t for t in tokens if t.token_address == self.settings.bridge_token_addr), None)
         if not connector: raise ValueError(f"Superswap bridge token not found on {self.name} chain.")
@@ -349,6 +353,11 @@ class AsyncChain(CommonChain):
         return self.prepare_tokens(await self.apaginate(get_tokens), listed_only)
     
     @require_async_context
+    async def get_token(self, address: str) -> Optional[Token]:
+        """Get token by address"""
+        return self.find_token_by_address(await self.get_all_tokens(), address)
+
+    @require_async_context
     async def get_superswap_connector_token(self) -> Token: return self._get_superswap_connector_token(await self.get_all_tokens())
 
     async def _get_prices(self, tokens: Tuple[Token]):
@@ -601,7 +610,12 @@ class Chain(CommonChain):
     def get_all_tokens(self, listed_only: bool = False) -> List[Token]:
         def get_tokens(limit, offset): return self.sugar.functions.tokens(limit, offset, ADDRESS_ZERO, [])
         return self.prepare_tokens(self.paginate(get_tokens), listed_only)
-    
+
+    @require_context
+    def get_token(self, address: str) -> Optional[Token]:
+        """Get token by address"""
+        return self.find_token_by_address(self.get_all_tokens(), address)
+
     @require_context
     def get_superswap_connector_token(self) -> Token: return self._get_superswap_connector_token(self.get_all_tokens())
 
