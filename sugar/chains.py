@@ -63,7 +63,7 @@ class CommonChain:
     def account(self) -> Account: return self.web3.eth.account.from_key(os.getenv("SUGAR_PK"))
 
     @property
-    def id(self) -> str: return self.settings.chain_id
+    def chain_id(self) -> str: return self.settings.chain_id
 
     @property
     def name(self) -> str: return self.settings.chain_name
@@ -91,9 +91,9 @@ class CommonChain:
         native = Token.make_native_token(self.settings.native_token_symbol,
                                          self.settings.wrapped_native_token_addr,
                                          self.settings.native_token_decimals,
-                                         chain_id=self.id,
+                                         chain_id=self.chain_id,
                                          chain_name=self.name)
-        ts = list(map(lambda t: Token.from_tuple(t, chain_id=self.id, chain_name=self.name), tokens))
+        ts = list(map(lambda t: Token.from_tuple(t, chain_id=self.chain_id, chain_name=self.name), tokens))
         return [native] + (list(filter(lambda t: t.listed, ts)) if listed_only else ts)
     
     def find_token_by_address(self, tokens: List[Token], address: str) -> Optional[Token]:
@@ -131,10 +131,10 @@ class CommonChain:
     
     def prepare_pools(self, pools: List[Tuple], tokens: List[Token], prices: List[Price]) -> List[LiquidityPool]:
         tokens, prices = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}
-        return list(filter(lambda p: p is not None, map(lambda p: LiquidityPool.from_tuple(p, tokens, prices, chain_id=self.id, chain_name=self.name), pools)))
+        return list(filter(lambda p: p is not None, map(lambda p: LiquidityPool.from_tuple(p, tokens, prices, chain_id=self.chain_id, chain_name=self.name), pools)))
     
     def prepare_pools_for_swap(self, pools: List[Tuple]) -> List[LiquidityPoolForSwap]:
-        return list(map(lambda p: LiquidityPoolForSwap.from_tuple(p, chain_id=self.id, chain_name=self.name), pools))
+        return list(map(lambda p: LiquidityPoolForSwap.from_tuple(p, chain_id=self.chain_id, chain_name=self.name), pools))
 
     def prepare_pool_epochs(self, epochs: List[Tuple], pools: List[LiquidityPool], tokens: List[Token], prices: List[Price]) -> List[LiquidityPoolEpoch]:
         tokens, prices, pools = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}, {p.lp: p for p in pools}

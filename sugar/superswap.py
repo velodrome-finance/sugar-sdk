@@ -245,10 +245,10 @@ class Superswap(SuperSwapCommon):
             slippage = slippage if slippage is not None else self.from_chain.settings.swap_slippage
             
             # TODO: use chain.get_domain() when all chains support domains
-            origin_domain = get_domain(int(self.from_chain.id))
-            destination_domain = get_domain(int(self.to_chain.id))
+            origin_domain = get_domain(int(self.from_chain.chain_id))
+            destination_domain = get_domain(int(self.to_chain.chain_id))
             user_ica_address= self.from_chain.get_remote_interchain_account(destination_domain)
-            bridge_fee = self.from_chain.get_bridge_fee(int(self.to_chain.id))
+            bridge_fee = self.from_chain.get_bridge_fee(int(self.to_chain.chain_id))
             xchain_fee = self.from_chain.get_xchain_fee(destination_domain)            
             total_fee = bridge_fee + xchain_fee if quote.to_token.token_address != quote.to_bridge_token.token_address else bridge_fee 
 
@@ -314,10 +314,10 @@ class AsyncSuperswap(SuperSwapCommon):
             slippage = slippage if slippage is not None else self.from_chain.settings.swap_slippage
             
             # TODO: use chain.get_domain() when all chains support domains
-            origin_domain = await get_domain_async(int(self.from_chain.id))
-            destination_domain = await get_domain_async(int(self.to_chain.id))
+            origin_domain = await get_domain_async(int(self.from_chain.chain_id))
+            destination_domain = await get_domain_async(int(self.to_chain.chain_id))
             user_ica_address=await self.from_chain.get_remote_interchain_account(destination_domain)
-            bridge_fee = await self.from_chain.get_bridge_fee(int(self.to_chain.id))
+            bridge_fee = await self.from_chain.get_bridge_fee(int(self.to_chain.chain_id))
             xchain_fee = await self.from_chain.get_xchain_fee(destination_domain)            
             total_fee = bridge_fee + xchain_fee if quote.to_token.token_address != quote.to_bridge_token.token_address else bridge_fee 
 
