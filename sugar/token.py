@@ -23,6 +23,10 @@ class Token:
     listed: bool
     wrapped_token_address: str = None
 
+    def to_wei(self, value: float) -> int:
+        """Convert a value to wei based on the token's decimals."""
+        return int(value * 10**self.decimals)
+
     @property
     def is_native(self) -> bool: return self.wrapped_token_address is not None
 

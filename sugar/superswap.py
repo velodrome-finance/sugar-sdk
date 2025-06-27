@@ -60,6 +60,7 @@ class SuperswapRelayer(ABC):
         """Share calls with the relayer."""
         pass
 
+# TODO: add helper to inspect tx using https://explorer.hyperlane.xyz/?search
 
 class HTTPSuperswapRelayer(SuperswapRelayer):
     """HTTP-based relayer implementation."""
@@ -89,10 +90,8 @@ class HTTPSuperswapRelayer(SuperswapRelayer):
             raise Exception(error_msg)
                 
 
-# %% ../src/superswap.ipynb 6
-# TODO: add helper to inspect tx using https://explorer.hyperlane.xyz/?search
-
-supported_chains = ["OP", "Lisk", "Uni"]  # Example chains, extend as needed
+# %% ../src/superswap.ipynb 7
+supported_chains = ["OP", "Lisk", "Uni"]
 
 class SuperSwapCommon:
     amount_in: Optional[float] = None
@@ -111,7 +110,11 @@ class SuperSwapCommon:
     @property
     def bridged_amount(self) -> float: 
         assert self.amount_in is not None, "amount_in must be set before accessing bridged_amount"
-        return float(self.origin_quote.amount_out / 10 ** self.origin_bridge_token.decimals) if not self.starts_with_bridge_token else self.amount_in
+        if not self.starts_with_bridge_token:
+            return float(self.origin_quote.amount_out / 10 ** self.origin_bridge_token.decimals)
+        else:
+            print(f">>>>>>>>>> serving bridged amount as {self.amount_in} because we start with bridge token")
+            return float(self.amount_in / 10 ** self.origin_bridge_token.decimals)
 
     @property
     def ends_with_bridge_token(self): return self.to_token.token_address == self.destination_bridge_token.token_address
@@ -126,6 +129,8 @@ class SuperSwapCommon:
         """Shared prep for sync and async versions."""
 
         self.from_token, self.to_token, self.amount_in = from_token, to_token, amount_in
+
+        print(f"inittialied {self.from_token.symbol} -> {self.to_token.symbol} with amount {self.amount_in}")
 
         if sync:
             self.from_chain, self.to_chain = get_chain_from_token(from_token), get_chain_from_token(to_token)
@@ -205,6 +210,8 @@ class SuperSwapCommon:
             )
         return f'0x{tx["transactionHash"].hex()}'
 
+
+# %% ../src/superswap.ipynb 9
 class Superswap(SuperSwapCommon):
     def __init__(self, relayer: Optional[SuperswapRelayer] = None, chain_for_writes: Optional[Chain] = None):
         self.chain_for_writes = chain_for_writes
@@ -237,7 +244,7 @@ class Superswap(SuperSwapCommon):
     def swap_from_quote(self, quote: SuperSwapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
         self.check_chain_support(from_token, to_token)
 
-        origin_quote, bridged_amount, destination_quote = quote.origin_quote, quote.origin_quote.amount_out, quote.destination_quote
+        origin_quote, destination_quote = quote.origin_quote, quote.destination_quote
 
         with self.from_chain, self.to_chain:
             if not self.from_chain.account: raise ValueError("Cannot superswap without an account. Please connect your wallet first.")
@@ -272,8 +279,8 @@ class Superswap(SuperSwapCommon):
             chain.set_token_allowance(self.from_token, chain.settings.swapper_contract_addr, value)
             tx = chain.sign_and_send_tx(chain.swapper.functions.execute(*[cmds, inputs]), value=message_fee)
             return self.prepare_result(swap_data, tx)
- 
 
+# %% ../src/superswap.ipynb 11
 class AsyncSuperswap(SuperSwapCommon):
     def __init__(self, relayer: Optional[SuperswapRelayer] = None, chain_for_writes: Optional[AsyncChain] = None):
         self.chain_for_writes = chain_for_writes
@@ -306,8 +313,6 @@ class AsyncSuperswap(SuperSwapCommon):
     async def swap_from_quote(self, quote: SuperSwapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
         self.check_chain_support(from_token, to_token)
 
-        origin_quote, bridged_amount, destination_quote = quote.origin_quote, quote.origin_quote.amount_out, quote.destination_quote
-
         async with self.from_chain, self.to_chain:
             if not self.from_chain.account: raise ValueError("Cannot superswap without an account. Please connect your wallet first.")
             
@@ -321,6 +326,8 @@ class AsyncSuperswap(SuperSwapCommon):
             xchain_fee = await self.from_chain.get_xchain_fee(destination_domain)            
             total_fee = bridge_fee + xchain_fee if quote.to_token.token_address != quote.to_bridge_token.token_address else bridge_fee 
 
+            print(f"fees: bridge={bridge_fee}, xchain={xchain_fee}, total={total_fee}")
+
             cmds, inputs, swap_data = self.prepare_super_swap(
                 user_ica_address=user_ica_address,
                 user_ICA_balance=await self.to_chain.get_user_ica_balance(user_ica_address),
@@ -333,6 +340,9 @@ class AsyncSuperswap(SuperSwapCommon):
                 salt=salt
             )
 
+            print(">>>>>>>> cmds:", cmds)
+            print(">>>>>>>> inputs:", inputs)
+
             return await self.write(chain=self.chain_for_writes or self.from_chain, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
 
     async def write(self, chain: AsyncChain, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
@@ -340,6 +350,26 @@ class AsyncSuperswap(SuperSwapCommon):
 
         async with chain:
             await chain.set_token_allowance(self.from_token, chain.settings.swapper_contract_addr, value)
+
+            
+
+            print(f"set allowance >>>>> {self.from_token} {chain.settings.swapper_contract_addr} {value}")
+            print("allownance is", await chain.check_token_allowance(self.from_token, chain.settings.swapper_contract_addr))
+
+
+            # tx_function = chain.swapper.functions.execute(*[cmds, inputs])
+            # built_tx = await tx_function.build_transaction({
+            #     'value': message_fee,
+            #     'from': chain.account.address,
+            #     'gas': 2000000,  # adjust as needed
+            #     'gasPrice': await chain.web3.eth.gas_price
+            # })
+
+            # # Inspect the payload
+            # print(f"Transaction data (payload): {built_tx['data']}")
+            # print(f"To address: {built_tx['to']}")
+            # print(f"Value: {built_tx['value']}")
+            # print(f"Full transaction: {built_tx}")
+
             tx = await chain.sign_and_send_tx(chain.swapper.functions.execute(*[cmds, inputs]), value=message_fee)
             return self.prepare_result(swap_data, tx)
-        

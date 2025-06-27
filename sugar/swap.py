@@ -390,16 +390,19 @@ def build_super_swap_data(i: SuperSwapDataInput) -> SuperSwapData:
 
     destination_chain_planner = RoutePlanner()
 
+    # TODO: confirm this is OK (destination quote check)
+    starts_with_bridge_token = (i.from_token.token_address == i.from_bridge_token.token_address) and d_quote is not None
+
     # bridge command
     destination_chain_planner.add_command(CommandType.BRIDGE_TOKEN, [
         BridgeType.HYP_XERC20,
         i.user_ICA if needs_relay else i.account,
         i.from_bridge_token.token_address,
         i.origin_bridge,
-        CONTRACT_BALANCE_FOR_V3_SWAPS,
+        d_quote.amount_in_wei if starts_with_bridge_token else CONTRACT_BALANCE_FOR_V3_SWAPS,
         i.bridge_fee,
         i.destination_domain,
-        i.from_token.token_address == i.from_bridge_token.token_address,
+        starts_with_bridge_token,
     ])
 
     if needs_relay:
