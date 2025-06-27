@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['domains_abi', 'supported_chains', 'get_domain_async', 'get_domain', 'SuperswapRelayer', 'HTTPSuperswapRelayer',
-           'SuperSwapCommon', 'Superswap', 'AsyncSuperswap']
+           'MockSuperswapRelayer', 'SuperSwapCommon', 'Superswap', 'AsyncSuperswap']
 
 # %% ../src/superswap.ipynb 2
 import json, requests
@@ -88,7 +88,31 @@ class HTTPSuperswapRelayer(SuperswapRelayer):
             error_msg = f"Failed to share calls with relayer: {resp.status_code} {response_text}"
             print(f"Error: {error_msg}")
             raise Exception(error_msg)
-                
+
+class MockSuperswapRelayer(SuperswapRelayer):
+    """Mock relayer implementation for testing."""
+    
+    def __init__(self):
+        self.calls_history: List[Dict[str, Any]] = []
+    
+    def share_calls(self, calls: List[dict], salt: str, commitment_dispatch_tx: str, origin_domain: int) -> None:
+        """Mock implementation that records calls for verification."""
+        call_data = {
+            'calls': calls,
+            'salt': salt,
+            'commitment_dispatch_tx': commitment_dispatch_tx,
+            'origin_domain': origin_domain
+        }
+        self.calls_history.append(call_data)
+        print(f"Mock relayer received call: {call_data}")
+    
+    def get_last_call(self) -> Optional[Dict[str, Any]]:
+        """Get the most recent call data."""
+        return self.calls_history[-1] if self.calls_history else None
+    
+    def get_call_count(self) -> int:
+        """Get the total number of calls made."""
+        return len(self.calls_history)                
 
 # %% ../src/superswap.ipynb 7
 supported_chains = ["OP", "Lisk", "Uni"]
@@ -242,7 +266,7 @@ class Superswap(SuperSwapCommon):
             return self.prepare_super_quote()
 
     def swap_from_quote(self, quote: SuperSwapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
-        self.check_chain_support(from_token, to_token)
+        self.check_chain_support(quote.from_token, quote.to_token)
 
         origin_quote, destination_quote = quote.origin_quote, quote.destination_quote
 
@@ -311,7 +335,7 @@ class AsyncSuperswap(SuperSwapCommon):
             return self.prepare_super_quote()
 
     async def swap_from_quote(self, quote: SuperSwapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
-        self.check_chain_support(from_token, to_token)
+        self.check_chain_support(quote.from_token, quote.to_token)
 
         async with self.from_chain, self.to_chain:
             if not self.from_chain.account: raise ValueError("Cannot superswap without an account. Please connect your wallet first.")
