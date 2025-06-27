@@ -435,7 +435,7 @@ class AsyncChain(CommonChain):
     @require_async_context
     async def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
         spender = self.account.address
-        tx = await tx.build_transaction({ 'from': spender, 'value': value, 'nonce': await self.web3.eth.get_transaction_count(spender) })
+        tx = await tx.build_transaction({ 'from': spender, 'value': value, 'nonce': await self.web3.eth.get_transaction_count(spender, "pending") })
         signed_tx = self.account.sign_transaction(tx)
         tx_hash = await self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
         return await self.web3.eth.wait_for_transaction_receipt(tx_hash) if wait else tx_hash
@@ -660,7 +660,7 @@ class Chain(CommonChain):
     @require_context
     def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
         spender = self.account.address
-        tx = tx.build_transaction({ 'from': spender, 'value': value, 'nonce': self.web3.eth.get_transaction_count(spender) })
+        tx = tx.build_transaction({ 'from': spender, 'value': value, 'nonce': self.web3.eth.get_transaction_count(spender, "pending") })
         signed_tx = self.account.sign_transaction(tx)
         tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
         return self.web3.eth.wait_for_transaction_receipt(tx_hash) if wait else tx_hash
