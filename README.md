@@ -223,3 +223,8 @@ Etherscan](https://optimistic.etherscan.io/).
 - keep an eye on the latest sugar contract deployment for your favorite
   chain
   [here](https://github.com/velodrome-finance/sugar/tree/main/deployments)
+
+## Chores and random release related gymnastics
+
+- getting one file diff for LLM ingestion (skipping notebooks and ABIs):
+    `git diff main YOUR_NEW_BRANCH --output=YOUR_NEW_BRANCH.diff ':(exclude)src/*.ipynb' ':(exclude)sugar/_modidx.py' ':(exclude)sugar/abis/*.json'`
