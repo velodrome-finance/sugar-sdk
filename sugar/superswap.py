@@ -296,7 +296,7 @@ class Superswap(SuperSwapCommon):
     def swap_from_quote(self, quote: SuperSwapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
         self.check_chain_support(quote.from_token, quote.to_token)
 
-        if quote.is_bridge: return await self.bridge_from_quote(quote)
+        if quote.is_bridge: return self.bridge_from_quote(quote)
 
         origin_quote, destination_quote = quote.origin_quote, quote.destination_quote
 
