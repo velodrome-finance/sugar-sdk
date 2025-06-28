@@ -21,7 +21,7 @@ from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings, make_lisk_chain_settings
 from .config import XCHAIN_GAS_LIMIT_UPPERBOUND
-from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
+from .helpers import normalize_address, MAX_UINT256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
 from .helpers import find_all_paths, time_it, atime_it, to_bytes32
 from .abi import get_abi, bridge_transfer_from_abi, bridge_get_fee_abi
 from .token import Token
@@ -241,10 +241,10 @@ class AsyncChain(CommonChain):
         return await contract.functions.quoteGasPayment(target_chain_id).call()
 
     @require_async_context
-    async def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount: float, domain: int):
+    async def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount_wei: int, domain: int):
         # XX: marking this API as "internal" for now
         # TODO: remove destination_domain when get domain API stabilizes
-        amount_wei, fee = from_token.to_wei(amount), await self.get_bridge_fee(domain)
+        fee = await self.get_bridge_fee(domain)
         c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_from_abi)
         await self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount_wei)
         return await self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount_wei), value=fee)
@@ -382,8 +382,10 @@ class AsyncChain(CommonChain):
             return self.prepare_quotes(inputs, await batch.async_execute())
 
     @require_async_context
-    async def get_quote(self, from_token: Token, to_token: Token, amount: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
-        amount_in = float_to_uint256(amount, decimals=from_token.decimals)
+    async def get_quote(self, from_token: Token, to_token: Token, amount: Optional[float] = None, amount_wei: Optional[int] = None, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+        if amount is None and amount_wei is None: raise ValueError("Either amount or amount_wei must be provided")
+        if amount is not None and amount_wei is not None: raise ValueError("Only one of amount or amount_wei should be provided")
+        amount_in = amount_wei or from_token.to_wei(amount)
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=await self.get_pools_for_swaps())
         paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
         quotes = sum(await asyncio.gather(*[self._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths) for paths in chunk(paths, 500)]), [])
@@ -392,8 +394,8 @@ class AsyncChain(CommonChain):
         return max(quotes, key=lambda q: q.amount_out) if len(quotes) > 0 else None
     
     @require_async_context
-    async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None):
-        q = await self.get_quote(from_token, to_token, amount)
+    async def swap(self, from_token: Token, to_token: Token, amount: Optional[float] = None, amount_wei: Optional[int] = None, slippage: Optional[float] = None):
+        q = await self.get_quote(from_token, to_token, amount=amount, amount_wei=amount_wei)
         if not q: raise ValueError("No quotes found")
         return await self.swap_from_quote(q, slippage=slippage)
         
@@ -439,7 +441,7 @@ class AsyncChain(CommonChain):
             pool.token1.token_address,
             pool.is_stable,
             pool.factory,
-            float_to_uint256(amount_token0, pool.token0.decimals),
+            pool.token0.to_wei(amount_token0),
             MAX_UINT256
         ).call()
         print(f"Quote: {pool.token0.symbol} {token0_amount / 10 ** pool.token0.decimals} -> {pool.token1.symbol} {token1_amount / 10 ** pool.token1.decimals}")
@@ -567,10 +569,10 @@ class Chain(CommonChain):
         return contract.functions.quoteGasPayment(target_chain_id).call()
     
     @require_context
-    def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount: float, domain: int):
+    def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount_wei: int, domain: int):
         # XX: marking this API as "internal" for now
         # TODO: remove destination_domain when get domain API stabilizes
-        amount_wei, fee = from_token.to_wei(amount), self.get_bridge_fee(domain)
+        fee = self.get_bridge_fee(domain)
         c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_from_abi)
         self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount_wei)
         return self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount_wei), value=fee)
@@ -722,8 +724,10 @@ class Chain(CommonChain):
             return self.prepare_quotes(inputs, batch.execute())
     
     @require_context
-    def get_quote(self, from_token: Token, to_token: Token, amount: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
-        amount_in = float_to_uint256(amount, decimals=from_token.decimals)
+    def get_quote(self, from_token: Token, to_token: Token, amount: Optional[float] = None, amount_wei: Optional[int] = None, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+        if amount is None and amount_wei is None: raise ValueError("Either amount or amount_wei must be provided")
+        if amount is not None and amount_wei is not None: raise ValueError("Only one of amount or amount_wei should be provided")
+        amount_in = amount_wei or from_token.to_wei(amount)
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=self.get_pools_for_swaps())
         paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
         path_chunks = list(chunk(paths, 500))
@@ -756,8 +760,8 @@ class Chain(CommonChain):
         return max(all_quotes, key=lambda q: q.amount_out) if len(all_quotes) > 0 else None
     
     @require_context
-    def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None):
-        q = self.get_quote(from_token, to_token, amount)
+    def swap(self, from_token: Token, to_token: Token, amount: Optional[float] = None, amount_wei: Optional[int] = None, slippage: Optional[float] = None):
+        q = self.get_quote(from_token, to_token, amount=amount, amount_wei=amount_wei)
         if not q: raise ValueError("No quotes found")
         return self.swap_from_quote(q, slippage=slippage)
         

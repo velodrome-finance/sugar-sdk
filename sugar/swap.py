@@ -270,29 +270,29 @@ class SuperSwapQuote:
     to_token: Token
     from_bridge_token: Token
     to_bridge_token: Token
-    amount_in: float
+    amount_in: int
     origin_quote: Optional[Quote] = None
     destination_quote: Optional[Quote] = None
 
     @staticmethod
-    def bridge_quote(from_token: Token, to_token: Token, amount_in: float) -> 'SuperSwapQuote':
-        return SuperSwapQuote(from_token=from_token, to_token=to_token, from_bridge_token=from_token, to_bridge_token=to_token, amount_in=amount_in)
+    def bridge_quote(from_token: Token, to_token: Token, amount_in_wei: int) -> 'SuperSwapQuote':
+        return SuperSwapQuote(from_token=from_token, to_token=to_token, from_bridge_token=from_token, to_bridge_token=to_token, amount_in=amount_in_wei)
 
     @staticmethod
     def calc_bridged_amount(from_token: Token, to_token: Token, from_bridge_token: Token, to_bridge_token: Token,
-        amount_in: float, origin_quote: Optional[Quote] = None
-    ) -> float:
+        amount_in_wei: int, origin_quote: Optional[Quote] = None
+    ) -> int:
         if from_token != from_bridge_token:
             assert origin_quote is not None, "origin_quote must be set"
-            return from_bridge_token.to_decimal(origin_quote.amount_out) 
-        else: return amount_in
+            return origin_quote.amount_out
+        else: return amount_in_wei
 
     @property
-    def bridged_amount(self) -> float: 
+    def bridged_amount(self) -> int: 
         return SuperSwapQuote.calc_bridged_amount(
             from_token=self.from_token, to_token=self.to_token,
             from_bridge_token=self.from_bridge_token, to_bridge_token=self.to_bridge_token,
-            amount_in=self.amount_in, origin_quote=self.origin_quote
+            amount_in_wei=self.amount_in, origin_quote=self.origin_quote
         )
 
     @property
@@ -302,9 +302,6 @@ class SuperSwapQuote:
 
     @property
     def is_bridge(self) -> bool: return self.from_token == self.from_bridge_token and self.to_token == self.to_bridge_token
-
-    @property
-    def amount_in_wei(self) -> int: return self.from_token.to_wei(self.amount_in)
 
 @dataclass(frozen=True)
 class SuperSwapDataInput:

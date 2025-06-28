@@ -49,10 +49,10 @@ def amount_to_m_string(amount: float) -> str:
     return f"{round(amount/1000000, 2)}M"
 
 # %% ../src/helpers.ipynb 4
-def float_to_uint256(amount: float, decimals: int = 18) -> int:
+def float_to_uint256(value: float, decimals: int = 18) -> int:
     """Convert float to uint256 with decimal scaling"""
     # Convert float to Decimal for precision
-    amount_decimal = Decimal(str(amount))
+    amount_decimal = Decimal(str(value))
     # Scale by decimals
     scaled_amount = amount_decimal * Decimal(10 ** decimals)
     # Convert to integer

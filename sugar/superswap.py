@@ -178,7 +178,7 @@ class SuperswapCommon:
         return cmds, inputs, swap_data
 
     def prepare_write(self, quote: SuperSwapQuote, total_fee: int) -> tuple[int, int]:
-        value = quote.amount_in_wei
+        value = quote.amount_in
         # TODO: extend this to proper native token support
         message_fee = value + total_fee if quote.from_token.wrapped_token_address else total_fee
         return value, message_fee
@@ -216,30 +216,30 @@ class Superswap(SuperswapCommon):
 
     def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperSwapQuote:
         q = None
-
+        amount_in_wei = from_token.to_wei(amount_in)
         with get_chain_from_token(from_token) as from_chain, get_chain_from_token(to_token) as to_chain:
             from_bridge_token, to_bridge_token = from_chain.get_superswap_connector_token(), to_chain.get_superswap_connector_token()
 
             # are we bridging?
             if from_token == from_bridge_token and to_token == to_bridge_token:
-                q = SuperSwapQuote.bridge_quote(from_token=from_token, to_token=to_token, amount_in=amount_in)       
+                q = SuperSwapQuote.bridge_quote(from_token=from_token, to_token=to_token, amount_in_wei=amount_in_wei)       
             else:
                 o_q, d_q = None, None
                 # we only need origin quote if we don't start with bridge token
                 if from_token != from_bridge_token:
-                    o_q = from_chain.get_quote(from_token, from_bridge_token, amount_in)
+                    o_q = from_chain.get_quote(from_token, from_bridge_token, amount_wei=amount_in_wei)
                     assert o_q is not None, "No origin quote found"
 
                 # we need destination quote if we don't end with oUSDT
                 if to_token != to_bridge_token:
-                    b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, to_bridge_token, amount_in, o_q)
+                    b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, to_bridge_token, amount_in_wei, o_q)
                     print(f">>>>>>>>>>>>> b_a: {b_a}")
-                    d_q = to_chain.get_quote(to_bridge_token, to_token, b_a)
+                    d_q = to_chain.get_quote(to_bridge_token, to_token, amount_wei=b_a)
                     print(f">>>>>>>>>>>>> d_q: {d_q}")
                     assert d_q is not None, "No destination quote found"
 
                 q = SuperSwapQuote(from_token=from_token,to_token=to_token, from_bridge_token=from_bridge_token, to_bridge_token=to_bridge_token,
-                    amount_in=amount_in, origin_quote=o_q, destination_quote=d_q)
+                    amount_in=amount_in_wei, origin_quote=o_q, destination_quote=d_q)
         return q
 
     def swap_from_quote(self, quote: SuperSwapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
@@ -320,27 +320,29 @@ class AsyncSuperswap(SuperswapCommon):
     async def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperSwapQuote:
         q = None
 
+        amount_in_wei = from_token.to_wei(amount_in)
+
         async with get_async_chain_from_token(from_token) as from_chain, get_async_chain_from_token(to_token) as to_chain:
             from_bridge_token, to_bridge_token = await from_chain.get_superswap_connector_token(), await to_chain.get_superswap_connector_token()
 
             # are we bridging?
             if from_token == from_bridge_token and to_token == to_bridge_token:
-                q = SuperSwapQuote.bridge_quote(from_token=from_token, to_token=to_token, amount_in=amount_in)       
+                q = SuperSwapQuote.bridge_quote(from_token=from_token, to_token=to_token, amount_in_wei=amount_in_wei)
             else:
                 o_q, d_q = None, None
                 # we only need origin quote if we don't start with bridge token
                 if from_token != from_bridge_token:
-                    o_q = await from_chain.get_quote(from_token, from_bridge_token, amount_in)
+                    o_q = await from_chain.get_quote(from_token, from_bridge_token, amount_wei=amount_in_wei)
                     assert o_q is not None, "No origin quote found"
 
                 # we need destination quote if we don't end with bridge token
                 if to_token != to_bridge_token:
-                    b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, to_bridge_token, amount_in, o_q)
-                    d_q = await to_chain.get_quote(to_bridge_token, to_token, b_a)
+                    b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, to_bridge_token, amount_in_wei, o_q)
+                    d_q = await to_chain.get_quote(to_bridge_token, to_token, amount_wei=b_a)
                     assert d_q is not None, "No destination quote found"
 
                 q = SuperSwapQuote(from_token=from_token, to_token=to_token, from_bridge_token=from_bridge_token, to_bridge_token=to_bridge_token,
-                    amount_in=amount_in, origin_quote=o_q, destination_quote=d_q)
+                    amount_in=amount_in_wei, origin_quote=o_q, destination_quote=d_q)
 
         return q
 
