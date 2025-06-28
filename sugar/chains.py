@@ -23,7 +23,7 @@ from .config import ChainSettings, make_op_chain_settings, make_base_chain_setti
 from .config import XCHAIN_GAS_LIMIT_UPPERBOUND
 from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
 from .helpers import find_all_paths, time_it, atime_it, to_bytes32
-from .abi import get_abi
+from .abi import get_abi, bridge_transfer_from_abi, bridge_get_fee_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
 from .price import Price
@@ -237,27 +237,17 @@ class AsyncChain(CommonChain):
     
     @require_async_context
     async def get_bridge_fee(self, target_chain_id: int) -> int:
-        abi = [
-            {
-                "name": "quoteGasPayment",
-                "type": "function",
-                "stateMutability": "view",
-                "inputs": [
-                    {
-                    "name": "chainId",
-                    "type": "uint32"
-                    }
-                ],
-                "outputs": [
-                    {
-                    "name": "",
-                    "type": "uint256"
-                    }
-                ]
-            }
-        ]
-        contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=abi)
+        contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_get_fee_abi)
         return await contract.functions.quoteGasPayment(target_chain_id).call()
+
+    @require_async_context
+    async def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount: float, domain: int):
+        # XX: marking this API as "internal" for now
+        # TODO: remove destination_domain when get domain API stabilizes
+        amount_wei, fee = from_token.to_wei(amount), await self.get_bridge_fee(domain)
+        c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_from_abi)
+        await self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount_wei)
+        return await self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount_wei), value=fee)
     
     @require_async_context
     async def get_xchain_fee(self, destination_domain: int) -> int:
@@ -573,28 +563,18 @@ class Chain(CommonChain):
 
     @require_context
     def get_bridge_fee(self, target_chain_id: int) -> int:
-        abi = [
-            {
-                "name": "quoteGasPayment",
-                "type": "function",
-                "stateMutability": "view",
-                "inputs": [
-                    {
-                    "name": "chainId",
-                    "type": "uint32"
-                    }
-                ],
-                "outputs": [
-                    {
-                    "name": "",
-                    "type": "uint256"
-                    }
-                ]
-            }
-        ]
-        contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=abi)
+        contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_get_fee_abi)
         return contract.functions.quoteGasPayment(target_chain_id).call()
     
+    @require_context
+    def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount: float, domain: int):
+        # XX: marking this API as "internal" for now
+        # TODO: remove destination_domain when get domain API stabilizes
+        amount_wei, fee = from_token.to_wei(amount), self.get_bridge_fee(domain)
+        c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_from_abi)
+        self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount_wei)
+        return self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount_wei), value=fee)
+
     @require_context
     def get_xchain_fee(self, destination_domain: int) -> int:
         return self.ica_router.functions.quoteGasForCommitReveal(destination_domain, XCHAIN_GAS_LIMIT_UPPERBOUND).call()

@@ -274,6 +274,10 @@ class SuperSwapQuote:
     origin_quote: Optional[Quote] = None
     destination_quote: Optional[Quote] = None
 
+    @property
+    def is_bridge(self) -> bool:
+        return self.from_token.token_address == self.from_bridge_token.token_address and self.to_token.token_address == self.to_bridge_token.token_address
+
 @dataclass(frozen=True)
 class SuperSwapDataInput:
     from_token: Token
@@ -391,6 +395,7 @@ def build_super_swap_data(i: SuperSwapDataInput) -> SuperSwapData:
     destination_chain_planner = RoutePlanner()
 
     # TODO: confirm this is OK (destination quote check)
+    # i think this works because bridge -> bridge is handled in its own way
     starts_with_bridge_token = (i.from_token.token_address == i.from_bridge_token.token_address) and d_quote is not None
 
     # bridge command

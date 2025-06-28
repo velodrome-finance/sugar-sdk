@@ -143,6 +143,12 @@ class SuperSwapCommon:
     @property
     def ends_with_bridge_token(self): return self.to_token.token_address == self.destination_bridge_token.token_address
 
+    def get_bridge_quote(self, from_token: Token, to_token: Token, from_bridge: Token, to_bridge: Token,  amount_in: float) -> Optional[SuperSwapQuote]:
+        if from_token.token_address == from_bridge.token_address and to_token.token_address == to_bridge.token_address:
+            return SuperSwapQuote(from_token=from_token, to_token=to_token, from_bridge_token=from_bridge, to_bridge_token=to_bridge, amount_in=amount_in)
+        return None
+
+
     def check_chain_support(self, from_token: Token, to_token: Token) -> None:
         """Check if the given tokens are supported for superswap."""
         from_chain, to_chain = get_async_chain_from_token(from_token), get_async_chain_from_token(to_token)
@@ -241,9 +247,20 @@ class Superswap(SuperSwapCommon):
         self.chain_for_writes = chain_for_writes
         self.relayer = relayer or HTTPSuperswapRelayer()
 
+    def bridge_from_quote(self, quote: SuperSwapQuote) -> str:
+        assert quote.is_bridge, "bridge_from_quote can only be used for bridge quotes"
+        self.check_chain_support(quote.from_token, quote.to_token)
+        chain = self.chain_for_writes or get_chain_from_token(quote.from_token)
+        if not chain.account: raise ValueError("Cannot bridge without an account. Please connect your wallet first.")
+        from_token, to_token, amount = quote.from_token, quote.to_token, quote.amount_in
+        with chain:
+            tx = chain._internal_bridge_token(from_token, to_token, amount, get_domain(int(to_token.chain_id)))
+            return f'0x{tx["transactionHash"].hex()}'
+
     def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None) -> str:
         self.check_chain_support(from_token, to_token)
         quote = self.get_super_quote(from_token=from_token, to_token=to_token, amount_in=amount)
+        if quote.is_bridge: return self.bridge_from_quote(quote)
         return self.swap_from_quote(quote=quote, slippage=slippage)
 
     def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperSwapQuote:
@@ -252,6 +269,17 @@ class Superswap(SuperSwapCommon):
         with self.from_chain, self.to_chain:
             self.origin_bridge_token = self.from_chain.get_superswap_connector_token()
             self.destination_bridge_token = self.to_chain.get_superswap_connector_token()
+
+            # are we bridging?
+            bridge_quote = self.get_bridge_quote(
+                from_token=from_token,
+                to_token=to_token,
+                from_bridge=self.origin_bridge_token,
+                to_bridge=self.destination_bridge_token,
+                amount_in=amount_in
+            )
+
+            if bridge_quote: return bridge_quote
 
             # we only need origin quote if we don't start with oUSDT
             if not self.starts_with_bridge_token:
@@ -267,6 +295,8 @@ class Superswap(SuperSwapCommon):
 
     def swap_from_quote(self, quote: SuperSwapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
         self.check_chain_support(quote.from_token, quote.to_token)
+
+        if quote.is_bridge: return await self.bridge_from_quote(quote)
 
         origin_quote, destination_quote = quote.origin_quote, quote.destination_quote
 
@@ -310,9 +340,20 @@ class AsyncSuperswap(SuperSwapCommon):
         self.chain_for_writes = chain_for_writes
         self.relayer = relayer or HTTPSuperswapRelayer()    
 
+    async def bridge_from_quote(self, quote: SuperSwapQuote) -> str:
+        assert quote.is_bridge, "bridge_from_quote can only be used for bridge quotes"
+        self.check_chain_support(quote.from_token, quote.to_token)
+        chain = self.chain_for_writes or get_async_chain_from_token(quote.from_token)
+        if not chain.account: raise ValueError("Cannot bridge without an account. Please connect your wallet first.")
+        from_token, to_token, amount = quote.from_token, quote.to_token, quote.amount_in
+        async with chain:
+            tx = await chain._internal_bridge_token(from_token, to_token, amount, await get_domain_async(int(to_token.chain_id)))
+            return f'0x{tx["transactionHash"].hex()}'
+
     async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None) -> str:
         self.check_chain_support(from_token, to_token)
         quote = await self.get_super_quote(from_token=from_token, to_token=to_token, amount_in=amount)
+        if quote.is_bridge: return await self.bridge_from_quote(quote)
         return await self.swap_from_quote(quote=quote, slippage=slippage)
 
     async def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperSwapQuote:
@@ -321,6 +362,17 @@ class AsyncSuperswap(SuperSwapCommon):
         async with self.from_chain, self.to_chain:
             self.origin_bridge_token = await self.from_chain.get_superswap_connector_token()
             self.destination_bridge_token = await self.to_chain.get_superswap_connector_token()
+
+            # are we bridging?
+            bridge_quote = self.get_bridge_quote(
+                from_token=from_token,
+                to_token=to_token,
+                from_bridge=self.origin_bridge_token,
+                to_bridge=self.destination_bridge_token,
+                amount_in=amount_in
+        )
+
+            if bridge_quote: return bridge_quote
 
             # we only need origin quote if we don't start with oUSDT
             if not self.starts_with_bridge_token:
@@ -336,6 +388,8 @@ class AsyncSuperswap(SuperSwapCommon):
 
     async def swap_from_quote(self, quote: SuperSwapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
         self.check_chain_support(quote.from_token, quote.to_token)
+
+        if quote.is_bridge: return await self.bridge_from_quote(quote)
 
         async with self.from_chain, self.to_chain:
             if not self.from_chain.account: raise ValueError("Cannot superswap without an account. Please connect your wallet first.")
