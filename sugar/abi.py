@@ -58,13 +58,24 @@ bridge_transfer_from_abi = [
 # %% ../src/abi.ipynb 5
 abis_dir="abis"
 
-def download_contract_abi(name, address, abis_dir=os.path.join("sugar", abis_dir), etherscan_api_url="https://api-optimistic.etherscan.io/api"):
+def download_contract_abi(name, address, abis_dir=os.path.join("sugar", abis_dir), etherscan_api_url="https://api.etherscan.io/v2/api"):
     api_key = os.getenv("ETHERSCAN_API_KEY")
     if not api_key: raise Exception("ETHERSCAN_API_KEY not set in environment variables")
-    response = requests.get(etherscan_api_url, params={ "chainid": 1, "module": "contract", "action": "getabi", "address": address, "apikey": api_key })
-    if response.status_code != 200: raise Exception(f"API request failed with status code {response.status_code}")
+    params = {
+        "chainid": "10",
+        "module": "contract", 
+        "action": "getabi",
+        "address": address,
+        "apikey": api_key
+    }
+    
+    response = requests.get(etherscan_api_url, params=params)
+    if response.status_code != 200: 
+        raise Exception(f"API request failed with status code {response.status_code}")
+    
     response_data = response.json()
-    if response_data.get("message") != "OK": raise Exception(f"API request failed with message: {response_data.get('message')}")
+    if response_data.get("message") != "OK": 
+        raise Exception(f"API request failed with message: {response_data.get('message')}")
     os.makedirs(abis_dir, exist_ok=True)
     with open(os.path.join(abis_dir, f"{name}.json"), "w") as file:
         json.dump(json.loads(response_data.get("result")), file, indent=4)
