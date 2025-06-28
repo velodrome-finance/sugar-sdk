@@ -274,9 +274,37 @@ class SuperSwapQuote:
     origin_quote: Optional[Quote] = None
     destination_quote: Optional[Quote] = None
 
+    @staticmethod
+    def bridge_quote(from_token: Token, to_token: Token, amount_in: float) -> 'SuperSwapQuote':
+        return SuperSwapQuote(from_token=from_token, to_token=to_token, from_bridge_token=from_token, to_bridge_token=to_token, amount_in=amount_in)
+
+    @staticmethod
+    def calc_bridged_amount(from_token: Token, to_token: Token, from_bridge_token: Token, to_bridge_token: Token,
+        amount_in: float, origin_quote: Optional[Quote] = None
+    ) -> float:
+        if from_token != from_bridge_token:
+            assert origin_quote is not None, "origin_quote must be set"
+            return from_bridge_token.to_decimal(origin_quote.amount_out) 
+        else: return amount_in
+
     @property
-    def is_bridge(self) -> bool:
-        return self.from_token.token_address == self.from_bridge_token.token_address and self.to_token.token_address == self.to_bridge_token.token_address
+    def bridged_amount(self) -> float: 
+        return SuperSwapQuote.calc_bridged_amount(
+            from_token=self.from_token, to_token=self.to_token,
+            from_bridge_token=self.from_bridge_token, to_bridge_token=self.to_bridge_token,
+            amount_in=self.amount_in, origin_quote=self.origin_quote
+        )
+
+    @property
+    def bridged_amount_wei(self) -> int:
+        ba = self.from_bridge_token.to_wei(self.bridged_amount)
+        return self.from_token.to_wei(ba) if self.from_token == self.from_bridge_token else self.from_bridge_token.to_wei(ba)
+
+    @property
+    def is_bridge(self) -> bool: return self.from_token == self.from_bridge_token and self.to_token == self.to_bridge_token
+
+    @property
+    def amount_in_wei(self) -> int: return self.from_token.to_wei(self.amount_in)
 
 @dataclass(frozen=True)
 class SuperSwapDataInput:
@@ -295,12 +323,32 @@ class SuperSwapDataInput:
     destination_router: str
     destination_domain: int
     slippage: float
-    bridged_amount: int
     swapper_contract_addr: str
-    destination_quote: Optional[Quote]
     salt: str
     bridge_fee: int 
     xchain_fee: int
+    destination_quote: Optional[Quote]
+
+    @staticmethod
+    def build(
+            quote: SuperSwapQuote, account: str,
+            user_ICA: str, user_ICA_balance: int,
+            origin_domain: int, origin_bridge: str, origin_hook: str, origin_ICA_router: str,
+            destination_ICA_router: str, destination_router: str, destination_domain: int,
+            slippage: float,
+            swapper_contract_addr: str, salt: str,
+            bridge_fee: int, xchain_fee: int
+        ) -> 'SuperSwapDataInput':
+        return SuperSwapDataInput(
+            from_token=quote.from_token, to_token=quote.to_token, from_bridge_token=quote.from_bridge_token, to_bridge_token=quote.to_bridge_token,
+            account=account, user_ICA=user_ICA, user_ICA_balance=user_ICA_balance,
+            origin_domain=origin_domain, origin_bridge=origin_bridge, origin_hook=origin_hook, origin_ICA_router=origin_ICA_router,
+            destination_ICA_router=destination_ICA_router, destination_router=destination_router, destination_domain=destination_domain,
+            slippage=slippage,
+            swapper_contract_addr=swapper_contract_addr, salt=salt,
+            bridge_fee=bridge_fee, xchain_fee=xchain_fee,
+            destination_quote=quote.destination_quote
+        )
 
 @dataclass(frozen=True)
 class SuperSwapData:
@@ -404,7 +452,7 @@ def build_super_swap_data(i: SuperSwapDataInput) -> SuperSwapData:
         i.user_ICA if needs_relay else i.account,
         i.from_bridge_token.token_address,
         i.origin_bridge,
-        d_quote.amount_in_wei if starts_with_bridge_token else CONTRACT_BALANCE_FOR_V3_SWAPS,
+        d_quote.amount_in if starts_with_bridge_token else CONTRACT_BALANCE_FOR_V3_SWAPS,
         i.bridge_fee,
         i.destination_domain,
         starts_with_bridge_token,

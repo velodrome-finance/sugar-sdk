@@ -2,10 +2,11 @@
 
 # %% auto 0
 __all__ = ['domains_abi', 'supported_chains', 'get_domain_async', 'get_domain', 'SuperswapRelayer', 'HTTPSuperswapRelayer',
-           'MockSuperswapRelayer', 'SuperSwapCommon', 'Superswap', 'AsyncSuperswap']
+           'MockSuperswapRelayer', 'SuperswapCommon', 'Superswap', 'AsyncSuperswap']
 
 # %% ../src/superswap.ipynb 2
 import json, requests
+from dataclasses import dataclass
 from .swap import build_super_swap_data, SuperSwapData, SuperSwapQuote, setup_planner, SuperSwapDataInput
 from .token import Token
 from .quote import Quote
@@ -117,37 +118,14 @@ class MockSuperswapRelayer(SuperswapRelayer):
 # %% ../src/superswap.ipynb 7
 supported_chains = ["OP", "Lisk", "Uni"]
 
-class SuperSwapCommon:
-    amount_in: Optional[float] = None
-    from_token: Optional[Token] = None
-    to_token: Optional[Token] = None
-    from_chain: Optional[Union[Chain, AsyncChain]] = None
-    to_chain: Optional[Union[Chain, AsyncChain]] = None
-    origin_bridge_token: Optional[Token] = None
-    destination_bridge_token: Optional[Token] = None
-    origin_quote: Optional[Quote] = None
-    destination_quote: Optional[Quote] = None
-
-    @property
-    def starts_with_bridge_token(self): return self.from_token.token_address == self.origin_bridge_token.token_address
-
-    @property
-    def bridged_amount(self) -> float: 
-        assert self.amount_in is not None, "amount_in must be set before accessing bridged_amount"
-        if not self.starts_with_bridge_token:
-            return float(self.origin_quote.amount_out / 10 ** self.origin_bridge_token.decimals)
-        else:
-            print(f">>>>>>>>>> serving bridged amount as {self.amount_in} because we start with bridge token")
-            return float(self.amount_in / 10 ** self.origin_bridge_token.decimals)
-
-    @property
-    def ends_with_bridge_token(self): return self.to_token.token_address == self.destination_bridge_token.token_address
-
-    def get_bridge_quote(self, from_token: Token, to_token: Token, from_bridge: Token, to_bridge: Token,  amount_in: float) -> Optional[SuperSwapQuote]:
-        if from_token.token_address == from_bridge.token_address and to_token.token_address == to_bridge.token_address:
-            return SuperSwapQuote(from_token=from_token, to_token=to_token, from_bridge_token=from_bridge, to_bridge_token=to_bridge, amount_in=amount_in)
-        return None
-
+class SuperswapCommon:
+    # @property
+    # def bridged_amount(self, from_token: Token, to_token: Token, amount_in: float, from_bridge: Token, origin_quote: Optional[Quote]) -> float:
+    #     if from_token != from_bridge:
+    #         assert origin_quote is not None, "origin_quote must be set"
+    #         return from_bridge.to_decimal(origin_quote.amount_out) 
+    #     else:
+    #         return from_token.to_decimal(amount_in)
 
     def check_chain_support(self, from_token: Token, to_token: Token) -> None:
         """Check if the given tokens are supported for superswap."""
@@ -155,62 +133,38 @@ class SuperSwapCommon:
         if from_chain.name not in supported_chains or to_chain.name not in supported_chains:
             raise ValueError(f"Superswap only supports {supported_chains}. Got {from_chain.name} -> {to_chain.name}")
 
-    def init(self, from_token: Token, to_token: Token, amount_in: float, sync: bool = True):
-        """Shared prep for sync and async versions."""
-
-        self.from_token, self.to_token, self.amount_in = from_token, to_token, amount_in
-
-        print(f"inittialied {self.from_token.symbol} -> {self.to_token.symbol} with amount {self.amount_in}")
-
-        if sync:
-            self.from_chain, self.to_chain = get_chain_from_token(from_token), get_chain_from_token(to_token)
-        else:    
-            self.from_chain, self.to_chain = get_async_chain_from_token(from_token), get_async_chain_from_token(to_token)
-
-    def prepare_super_quote(self) -> SuperSwapQuote:
-        return SuperSwapQuote(
-            from_token=self.from_token,
-            to_token=self.to_token,
-            from_bridge_token=self.origin_bridge_token,
-            to_bridge_token=self.destination_bridge_token,
-            amount_in=self.amount_in,
-            origin_quote=self.origin_quote,
-            destination_quote=self.destination_quote
-        )
-
-    def prepare_super_swap(self, user_ica_address: str, user_ICA_balance: int, origin_domain: int, destination_domain: int,
-        origin_hook: str, slippage: float, bridge_fee: int, xchain_fee: int, salt: Optional[str] = None) -> None:
-        swap_data = build_super_swap_data(SuperSwapDataInput(
-            from_token=self.from_token,
-            to_token=self.to_token,
-            from_bridge_token=self.origin_bridge_token,
-            to_bridge_token=self.destination_bridge_token,
-            account=self.from_chain.account.address,
+    def prepare_super_swap(
+        self, 
+        quote: SuperSwapQuote,
+        from_chain: Union[Chain, AsyncChain], to_chain: Union[Chain, AsyncChain],
+        user_ica_address: str, user_ICA_balance: int, origin_domain: int, destination_domain: int,
+        origin_hook: str, slippage: float, bridge_fee: int, xchain_fee: int, salt: Optional[str] = None
+    ):
+        swap_data = build_super_swap_data(SuperSwapDataInput.build(
+            quote=quote,
+            account=from_chain.account.address,
             user_ICA=user_ica_address,
             user_ICA_balance=user_ICA_balance,
             origin_domain=origin_domain,
-            origin_bridge=self.from_chain.settings.bridge_contract_addr,
+            origin_bridge=from_chain.settings.bridge_contract_addr,
             origin_hook=origin_hook,
-            origin_ICA_router=self.from_chain.settings.interchain_router_contract_addr,
-            destination_ICA_router=self.to_chain.settings.interchain_router_contract_addr,
-            destination_router=self.to_chain.settings.swapper_contract_addr,
+            origin_ICA_router=from_chain.settings.interchain_router_contract_addr,
+            destination_ICA_router=to_chain.settings.interchain_router_contract_addr,
+            destination_router=to_chain.settings.swapper_contract_addr,
             destination_domain=destination_domain,
             slippage=slippage,
-            bridged_amount=self.bridged_amount,
-            swapper_contract_addr=self.to_chain.settings.swapper_contract_addr,
-            destination_quote=self.destination_quote,
+            swapper_contract_addr=to_chain.settings.swapper_contract_addr,
+            salt=salt if salt else get_salt(),
             bridge_fee=bridge_fee,
             xchain_fee=xchain_fee,
-            salt=salt if salt else get_salt()
         ))
-
         origin_planner = setup_planner(
-            quote=self.origin_quote,
+            quote=quote.origin_quote,
             slippage=slippage,
             # money goes to the universal router (aka swapper) for bridging
-            account=self.from_chain.settings.swapper_contract_addr, 
-            router_address=self.from_chain.settings.swapper_contract_addr
-        ) if self.origin_quote else None
+            account=from_chain.settings.swapper_contract_addr, 
+            router_address=from_chain.settings.swapper_contract_addr
+        ) if quote.origin_quote else None
 
         cmds, inputs = "", [] 
 
@@ -223,11 +177,10 @@ class SuperSwapCommon:
 
         return cmds, inputs, swap_data
 
-    def prepare_write(self, total_fee: int) -> tuple[int, int]:
-        assert self.amount_in is not None, "amount_in must be set before preparing write"
-        value = self.amount_in * (10 ** self.from_token.decimals)
+    def prepare_write(self, quote: SuperSwapQuote, total_fee: int) -> tuple[int, int]:
+        value = quote.amount_in_wei
         # TODO: extend this to proper native token support
-        message_fee = value + total_fee if self.from_token.wrapped_token_address else total_fee
+        message_fee = value + total_fee if quote.from_token.wrapped_token_address else total_fee
         return value, message_fee
 
     def prepare_result(self, swap_data: SuperSwapData, tx) -> str:
@@ -242,10 +195,9 @@ class SuperSwapCommon:
 
 
 # %% ../src/superswap.ipynb 9
-class Superswap(SuperSwapCommon):
+class Superswap(SuperswapCommon):
     def __init__(self, relayer: Optional[SuperswapRelayer] = None, chain_for_writes: Optional[Chain] = None):
-        self.chain_for_writes = chain_for_writes
-        self.relayer = relayer or HTTPSuperswapRelayer()
+        self.chain_for_writes, self.relayer = chain_for_writes, relayer or HTTPSuperswapRelayer()
 
     def bridge_from_quote(self, quote: SuperSwapQuote) -> str:
         assert quote.is_bridge, "bridge_from_quote can only be used for bridge quotes"
@@ -260,85 +212,95 @@ class Superswap(SuperSwapCommon):
     def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None) -> str:
         self.check_chain_support(from_token, to_token)
         quote = self.get_super_quote(from_token=from_token, to_token=to_token, amount_in=amount)
-        if quote.is_bridge: return self.bridge_from_quote(quote)
         return self.swap_from_quote(quote=quote, slippage=slippage)
 
     def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperSwapQuote:
-        self.init(from_token, to_token, amount_in, sync=True)
+        q = None
 
-        with self.from_chain, self.to_chain:
-            self.origin_bridge_token = self.from_chain.get_superswap_connector_token()
-            self.destination_bridge_token = self.to_chain.get_superswap_connector_token()
+        with get_chain_from_token(from_token) as from_chain, get_chain_from_token(to_token) as to_chain:
+            from_bridge_token, to_bridge_token = from_chain.get_superswap_connector_token(), to_chain.get_superswap_connector_token()
 
             # are we bridging?
-            bridge_quote = self.get_bridge_quote(
-                from_token=from_token,
-                to_token=to_token,
-                from_bridge=self.origin_bridge_token,
-                to_bridge=self.destination_bridge_token,
-                amount_in=amount_in
-            )
+            if from_token == from_bridge_token and to_token == to_bridge_token:
+                q = SuperSwapQuote.bridge_quote(from_token=from_token, to_token=to_token, amount_in=amount_in)       
+            else:
+                o_q, d_q = None, None
+                # we only need origin quote if we don't start with bridge token
+                if from_token != from_bridge_token:
+                    o_q = from_chain.get_quote(from_token, from_bridge_token, amount_in)
+                    assert o_q is not None, "No origin quote found"
 
-            if bridge_quote: return bridge_quote
+                # we need destination quote if we don't end with oUSDT
+                if to_token != to_bridge_token:
+                    b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, to_bridge_token, amount_in, o_q)
+                    print(f">>>>>>>>>>>>> b_a: {b_a}")
+                    d_q = to_chain.get_quote(to_bridge_token, to_token, b_a)
+                    print(f">>>>>>>>>>>>> d_q: {d_q}")
+                    assert d_q is not None, "No destination quote found"
 
-            # we only need origin quote if we don't start with oUSDT
-            if not self.starts_with_bridge_token:
-                self.origin_quote = self.from_chain.get_quote(from_token, self.origin_bridge_token, amount_in)
-                assert self.origin_quote is not None, "No origin quote found"
-
-            # we need destination quote if we don't end with oUSDT
-            if not self.ends_with_bridge_token:
-                self.destination_quote = self.to_chain.get_quote(self.destination_bridge_token, to_token, self.bridged_amount)
-                assert self.destination_quote is not None, "No destination quote found"
-
-            return self.prepare_super_quote()
+                q = SuperSwapQuote(from_token=from_token,to_token=to_token, from_bridge_token=from_bridge_token, to_bridge_token=to_bridge_token,
+                    amount_in=amount_in, origin_quote=o_q, destination_quote=d_q)
+        return q
 
     def swap_from_quote(self, quote: SuperSwapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
         self.check_chain_support(quote.from_token, quote.to_token)
 
         if quote.is_bridge: return self.bridge_from_quote(quote)
 
+        from_token, to_token = quote.from_token, quote.to_token
         origin_quote, destination_quote = quote.origin_quote, quote.destination_quote
 
-        with self.from_chain, self.to_chain:
-            if not self.from_chain.account: raise ValueError("Cannot superswap without an account. Please connect your wallet first.")
+        with get_chain_from_token(from_token) as from_chain, get_chain_from_token(to_token) as to_chain:
+            if not from_chain.account: raise ValueError("Cannot superswap without an account. Please connect your wallet first.")
             
-            slippage = slippage if slippage is not None else self.from_chain.settings.swap_slippage
+            slippage = slippage if slippage is not None else from_chain.settings.swap_slippage
             
             # TODO: use chain.get_domain() when all chains support domains
-            origin_domain = get_domain(int(self.from_chain.chain_id))
-            destination_domain = get_domain(int(self.to_chain.chain_id))
-            user_ica_address= self.from_chain.get_remote_interchain_account(destination_domain)
-            bridge_fee = self.from_chain.get_bridge_fee(int(self.to_chain.chain_id))
-            xchain_fee = self.from_chain.get_xchain_fee(destination_domain)            
+            origin_domain = get_domain(int(from_chain.chain_id))
+            destination_domain = get_domain(int(to_chain.chain_id))
+            user_ica_address= from_chain.get_remote_interchain_account(destination_domain)
+            bridge_fee = from_chain.get_bridge_fee(int(to_chain.chain_id))
+            xchain_fee = from_chain.get_xchain_fee(destination_domain)            
             total_fee = bridge_fee + xchain_fee if quote.to_token.token_address != quote.to_bridge_token.token_address else bridge_fee 
 
             cmds, inputs, swap_data = self.prepare_super_swap(
-                user_ica_address=user_ica_address,
-                user_ICA_balance=self.to_chain.get_user_ica_balance(user_ica_address),
-                origin_domain=origin_domain,
-                destination_domain=destination_domain,
-                origin_hook=self.from_chain.get_ica_hook(),
+                quote,
+                from_chain=from_chain, to_chain=to_chain,
+                user_ica_address=user_ica_address, user_ICA_balance=to_chain.get_user_ica_balance(user_ica_address),
+                origin_domain=origin_domain, destination_domain=destination_domain,
+                origin_hook=from_chain.get_ica_hook(),
                 slippage=slippage,
                 bridge_fee=bridge_fee,
                 xchain_fee=xchain_fee,
                 salt=salt
             )
 
-            return self.write(chain=self.chain_for_writes or self.from_chain, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
+            return self.write(quote, chain=self.chain_for_writes or self.from_chain, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
 
-    def write(self, chain: AsyncChain, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
-        value, message_fee = self.prepare_write(total_fee)
+    def write(self, quote: SuperSwapQuote, chain: AsyncChain, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
+        value, message_fee = self.prepare_write(quote, total_fee)
+        print(f">>>>>>>>>> gonn write {value} wei with message fee {message_fee} wei", quote, swap_data)
         with chain:
-            chain.set_token_allowance(self.from_token, chain.settings.swapper_contract_addr, value)
+            chain.set_token_allowance(quote.from_token, chain.settings.swapper_contract_addr, value)
+
+            tx_function = chain.swapper.functions.execute(*[cmds, inputs])
+            built_tx = tx_function.build_transaction({
+                'value': message_fee,
+                'from': chain.account.address,
+                'gas': 2000000,  # adjust as needed
+                'gasPrice': chain.web3.eth.gas_price
+            })
+
+            print(f"Built transaction: {built_tx}")
+
+
             tx = chain.sign_and_send_tx(chain.swapper.functions.execute(*[cmds, inputs]), value=message_fee)
             return self.prepare_result(swap_data, tx)
 
 # %% ../src/superswap.ipynb 11
-class AsyncSuperswap(SuperSwapCommon):
+class AsyncSuperswap(SuperswapCommon):
     def __init__(self, relayer: Optional[SuperswapRelayer] = None, chain_for_writes: Optional[AsyncChain] = None):
-        self.chain_for_writes = chain_for_writes
-        self.relayer = relayer or HTTPSuperswapRelayer()    
+        self.chain_for_writes, self.relayer = chain_for_writes, relayer or HTTPSuperswapRelayer()
 
     async def bridge_from_quote(self, quote: SuperSwapQuote) -> str:
         assert quote.is_bridge, "bridge_from_quote can only be used for bridge quotes"
@@ -353,101 +315,73 @@ class AsyncSuperswap(SuperSwapCommon):
     async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None) -> str:
         self.check_chain_support(from_token, to_token)
         quote = await self.get_super_quote(from_token=from_token, to_token=to_token, amount_in=amount)
-        if quote.is_bridge: return await self.bridge_from_quote(quote)
         return await self.swap_from_quote(quote=quote, slippage=slippage)
 
     async def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperSwapQuote:
-        self.init(from_token, to_token, amount_in, sync=False)
+        q = None
 
-        async with self.from_chain, self.to_chain:
-            self.origin_bridge_token = await self.from_chain.get_superswap_connector_token()
-            self.destination_bridge_token = await self.to_chain.get_superswap_connector_token()
+        async with get_async_chain_from_token(from_token) as from_chain, get_async_chain_from_token(to_token) as to_chain:
+            from_bridge_token, to_bridge_token = await from_chain.get_superswap_connector_token(), await to_chain.get_superswap_connector_token()
 
             # are we bridging?
-            bridge_quote = self.get_bridge_quote(
-                from_token=from_token,
-                to_token=to_token,
-                from_bridge=self.origin_bridge_token,
-                to_bridge=self.destination_bridge_token,
-                amount_in=amount_in
-        )
+            if from_token == from_bridge_token and to_token == to_bridge_token:
+                q = SuperSwapQuote.bridge_quote(from_token=from_token, to_token=to_token, amount_in=amount_in)       
+            else:
+                o_q, d_q = None, None
+                # we only need origin quote if we don't start with bridge token
+                if from_token != from_bridge_token:
+                    o_q = await from_chain.get_quote(from_token, from_bridge_token, amount_in)
+                    assert o_q is not None, "No origin quote found"
 
-            if bridge_quote: return bridge_quote
+                # we need destination quote if we don't end with bridge token
+                if to_token != to_bridge_token:
+                    b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, to_bridge_token, amount_in, o_q)
+                    d_q = await to_chain.get_quote(to_bridge_token, to_token, b_a)
+                    assert d_q is not None, "No destination quote found"
 
-            # we only need origin quote if we don't start with oUSDT
-            if not self.starts_with_bridge_token:
-                self.origin_quote = await self.from_chain.get_quote(from_token, self.origin_bridge_token, amount_in)
-                assert self.origin_quote is not None, "No origin quote found"
+                q = SuperSwapQuote(from_token=from_token, to_token=to_token, from_bridge_token=from_bridge_token, to_bridge_token=to_bridge_token,
+                    amount_in=amount_in, origin_quote=o_q, destination_quote=d_q)
 
-            # we need destination quote if we don't end with oUSDT
-            if not self.ends_with_bridge_token:
-                self.destination_quote = await self.to_chain.get_quote(self.destination_bridge_token, to_token, self.bridged_amount)
-                assert self.destination_quote is not None, "No destination quote found"
-
-            return self.prepare_super_quote()
+        return q
 
     async def swap_from_quote(self, quote: SuperSwapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
         self.check_chain_support(quote.from_token, quote.to_token)
 
         if quote.is_bridge: return await self.bridge_from_quote(quote)
 
-        async with self.from_chain, self.to_chain:
-            if not self.from_chain.account: raise ValueError("Cannot superswap without an account. Please connect your wallet first.")
+        from_token, to_token = quote.from_token, quote.to_token
+        origin_quote, destination_quote = quote.origin_quote, quote.destination_quote
+
+        async with get_async_chain_from_token(from_token) as from_chain, get_async_chain_from_token(to_token) as to_chain:
+            if not from_chain.account: raise ValueError("Cannot superswap without an account. Please connect your wallet first.")
             
-            slippage = slippage if slippage is not None else self.from_chain.settings.swap_slippage
+            slippage = slippage if slippage is not None else from_chain.settings.swap_slippage
             
             # TODO: use chain.get_domain() when all chains support domains
-            origin_domain = await get_domain_async(int(self.from_chain.chain_id))
-            destination_domain = await get_domain_async(int(self.to_chain.chain_id))
-            user_ica_address=await self.from_chain.get_remote_interchain_account(destination_domain)
-            bridge_fee = await self.from_chain.get_bridge_fee(int(self.to_chain.chain_id))
-            xchain_fee = await self.from_chain.get_xchain_fee(destination_domain)            
+            origin_domain = await get_domain_async(int(from_chain.chain_id))
+            destination_domain = await get_domain_async(int(to_chain.chain_id))
+            user_ica_address = await from_chain.get_remote_interchain_account(destination_domain)
+            bridge_fee = await from_chain.get_bridge_fee(int(to_chain.chain_id))
+            xchain_fee = await from_chain.get_xchain_fee(destination_domain)            
             total_fee = bridge_fee + xchain_fee if quote.to_token.token_address != quote.to_bridge_token.token_address else bridge_fee 
 
-            print(f"fees: bridge={bridge_fee}, xchain={xchain_fee}, total={total_fee}")
-
             cmds, inputs, swap_data = self.prepare_super_swap(
-                user_ica_address=user_ica_address,
-                user_ICA_balance=await self.to_chain.get_user_ica_balance(user_ica_address),
-                origin_domain=origin_domain,
-                destination_domain=destination_domain,
-                origin_hook=await self.from_chain.get_ica_hook(),
+                quote,
+                from_chain=from_chain, to_chain=to_chain,
+                user_ica_address=user_ica_address, user_ICA_balance=await to_chain.get_user_ica_balance(user_ica_address),
+                origin_domain=origin_domain, destination_domain=destination_domain,
+                origin_hook=await from_chain.get_ica_hook(),
                 slippage=slippage,
                 bridge_fee=bridge_fee,
                 xchain_fee=xchain_fee,
                 salt=salt
             )
 
-            print(">>>>>>>> cmds:", cmds)
-            print(">>>>>>>> inputs:", inputs)
+            return await self.write(quote, chain=self.chain_for_writes or from_chain, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
 
-            return await self.write(chain=self.chain_for_writes or self.from_chain, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
-
-    async def write(self, chain: AsyncChain, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
-        value, message_fee = self.prepare_write(total_fee)
-
+    async def write(self, quote: SuperSwapQuote, chain: AsyncChain, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
+        value, message_fee = self.prepare_write(quote, total_fee)
         async with chain:
-            await chain.set_token_allowance(self.from_token, chain.settings.swapper_contract_addr, value)
-
-            
-
-            print(f"set allowance >>>>> {self.from_token} {chain.settings.swapper_contract_addr} {value}")
-            print("allownance is", await chain.check_token_allowance(self.from_token, chain.settings.swapper_contract_addr))
-
-
-            # tx_function = chain.swapper.functions.execute(*[cmds, inputs])
-            # built_tx = await tx_function.build_transaction({
-            #     'value': message_fee,
-            #     'from': chain.account.address,
-            #     'gas': 2000000,  # adjust as needed
-            #     'gasPrice': await chain.web3.eth.gas_price
-            # })
-
-            # # Inspect the payload
-            # print(f"Transaction data (payload): {built_tx['data']}")
-            # print(f"To address: {built_tx['to']}")
-            # print(f"Value: {built_tx['value']}")
-            # print(f"Full transaction: {built_tx}")
-
+            await chain.set_token_allowance(quote.from_token, chain.settings.swapper_contract_addr, value)
             tx = await chain.sign_and_send_tx(chain.swapper.functions.execute(*[cmds, inputs]), value=message_fee)
             return self.prepare_result(swap_data, tx)

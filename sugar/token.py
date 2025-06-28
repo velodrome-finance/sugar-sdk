@@ -23,9 +23,17 @@ class Token:
     listed: bool
     wrapped_token_address: str = None
 
+    def __eq__(self, other):
+        t1, t2 = normalize_address(self.token_address), normalize_address(other.token_address)
+        return  t1 == t2 and self.chain_id == other.chain_id
+
     def to_wei(self, value: float) -> int:
         """Convert a value to wei based on the token's decimals."""
         return int(value * 10**self.decimals)
+
+    def to_decimal(self, value: int) -> float:
+        """Convert a value from wei to decimal based on the token's decimals."""
+        return float(value / 10 ** self.decimals)
 
     @property
     def is_native(self) -> bool: return self.wrapped_token_address is not None
