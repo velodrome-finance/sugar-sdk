@@ -3,7 +3,10 @@
 # %% auto 0
 __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_response', 'require_context', 'require_async_context',
            'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain', 'OPChain', 'BaseChainCommon',
-           'AsyncBaseChain', 'BaseChain']
+           'AsyncBaseChain', 'BaseChain', 'LiskChainCommon', 'AsyncLiskChain', 'LiskChain', 'UniChainCommon',
+           'AsyncUniChain', 'UniChain', 'get_chain', 'get_async_chain', 'get_chain_from_token',
+           'get_async_chain_from_token', 'AsyncOPChainSimnet', 'AsyncBaseChainSimnet', 'OPChainSimnet',
+           'BaseChainSimnet', 'LiskChainSimnet', 'AsyncLiskChainSimnet']
 
 # %% ../src/chains.ipynb 3
 import os, asyncio
@@ -16,10 +19,11 @@ from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account
 from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
-from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings
-from .helpers import normalize_address, MAX_UINT256, float_to_uint256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
-from .helpers import find_all_paths, time_it, atime_it
-from .abi import get_abi
+from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings, make_lisk_chain_settings
+from .config import XCHAIN_GAS_LIMIT_UPPERBOUND
+from .helpers import normalize_address, MAX_UINT256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
+from .helpers import find_all_paths, time_it, atime_it, to_bytes32
+from .abi import get_abi, bridge_transfer_from_abi, bridge_get_fee_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
 from .price import Price
@@ -58,6 +62,12 @@ class CommonChain:
     @property
     def account(self) -> Account: return self.web3.eth.account.from_key(os.getenv("SUGAR_PK"))
 
+    @property
+    def chain_id(self) -> str: return self.settings.chain_id
+
+    @property
+    def name(self) -> str: return self.settings.chain_name
+
     pools: Optional[List[LiquidityPool]] = None
     pools_for_swap: Optional[List[LiquidityPoolForSwap]] = None
 
@@ -78,10 +88,23 @@ class CommonChain:
         return contract_wrapper(address=token.wrapped_token_address or token.token_address, abi=ERC20_ABI)
     
     def prepare_tokens(self, tokens: List[Tuple], listed_only: bool) -> List[Token]:
-        native = Token.make_native_token(self.settings.native_token_symbol, self.settings.wrapped_native_token_addr, self.settings.native_token_decimals)
-        ts = list(map(lambda t: Token.from_tuple(t), tokens))
+        native = Token.make_native_token(self.settings.native_token_symbol,
+                                         self.settings.wrapped_native_token_addr,
+                                         self.settings.native_token_decimals,
+                                         chain_id=self.chain_id,
+                                         chain_name=self.name)
+        ts = list(map(lambda t: Token.from_tuple(t, chain_id=self.chain_id, chain_name=self.name), tokens))
         return [native] + (list(filter(lambda t: t.listed, ts)) if listed_only else ts)
     
+    def find_token_by_address(self, tokens: List[Token], address: str) -> Optional[Token]:
+        address = normalize_address(address)
+        return next((t for t in tokens if t.token_address == address), None)
+
+    def _get_superswap_connector_token(self, tokens: List[Token]) -> Token:
+        connector = next((t for t in tokens if t.token_address == self.settings.bridge_token_addr), None)
+        if not connector: raise ValueError(f"Superswap bridge token not found on {self.name} chain.")
+        return connector
+
     def _prepare_prices(self, tokens: List[Token], rates: List[int]) -> Dict[str, int]:
         # token_address => normalized rate
         result = {}
@@ -108,10 +131,10 @@ class CommonChain:
     
     def prepare_pools(self, pools: List[Tuple], tokens: List[Token], prices: List[Price]) -> List[LiquidityPool]:
         tokens, prices = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}
-        return list(filter(lambda p: p is not None, map(lambda p: LiquidityPool.from_tuple(p, tokens, prices), pools)))
+        return list(filter(lambda p: p is not None, map(lambda p: LiquidityPool.from_tuple(p, tokens, prices, chain_id=self.chain_id, chain_name=self.name), pools)))
     
     def prepare_pools_for_swap(self, pools: List[Tuple]) -> List[LiquidityPoolForSwap]:
-        return list(map(lambda p: LiquidityPoolForSwap.from_tuple(p), pools))
+        return list(map(lambda p: LiquidityPoolForSwap.from_tuple(p, chain_id=self.chain_id, chain_name=self.name), pools))
 
     def prepare_pool_epochs(self, epochs: List[Tuple], pools: List[LiquidityPool], tokens: List[Token], prices: List[Price]) -> List[LiquidityPoolEpoch]:
         tokens, prices, pools = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}, {p.lp: p for p in pools}
@@ -166,7 +189,7 @@ class CommonChain:
                 self.settings.connector_tokens_addrs,
                 10 # threshold_filter
             ))
-        return batch        
+        return batch
 
 # %% ../src/chains.ipynb 8
 class AsyncChain(CommonChain):
@@ -190,6 +213,9 @@ class AsyncChain(CommonChain):
         self.router = self.web3.eth.contract(address=self.settings.router_contract_addr, abi=get_abi("router"))
         self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=get_abi("quoter"))
         self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=get_abi("swapper"))
+        if hasattr(self.settings, "interchain_router_contract_addr"):
+            # TODO: clean this up when interchain jazz is fully implemented
+            self.ica_router = self.web3.eth.contract(address=self.settings.interchain_router_contract_addr, abi=get_abi("interchain_router"))
 
         # set up caching for price oracle
         self._get_prices = alru_cache(ttl=self.settings.pricing_cache_timeout_seconds)(self._get_prices)
@@ -208,12 +234,96 @@ class AsyncChain(CommonChain):
                 for offset, limit in batch: batcher.add(f(limit, offset))
                 return sum(await batcher.async_execute(), [])
         return sum(await asyncio.gather(*[process_batch(batch) for batch in self.get_pool_paginator()]), [])
+    
+    @require_async_context
+    async def get_bridge_fee(self, target_chain_id: int) -> int:
+        contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_get_fee_abi)
+        return await contract.functions.quoteGasPayment(target_chain_id).call()
+
+    @require_async_context
+    async def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount_wei: int, domain: int):
+        # XX: marking this API as "internal" for now
+        # TODO: remove destination_domain when get domain API stabilizes
+        fee = await self.get_bridge_fee(domain)
+        c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_from_abi)
+        await self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount_wei)
+        return await self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount_wei), value=fee)
+    
+    @require_async_context
+    async def get_xchain_fee(self, destination_domain: int) -> int:
+        return await self.ica_router.functions.quoteGasForCommitReveal(destination_domain, XCHAIN_GAS_LIMIT_UPPERBOUND).call()
+
+    @require_async_context
+    async def get_remote_interchain_account(self, destination_domain: int):
+        abi = [{
+            "name": "getRemoteInterchainAccount",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [
+                {
+                    "name": "",
+                    "type": "uint32"
+                },
+                {
+                    "name": "",
+                    "type": "address"
+                },
+                {
+                    "name": "",
+                    "type": "bytes32"
+                }
+            ],
+            "outputs": [
+                {
+                "name": "userICA",
+                "type": "address"
+                }
+            ]
+        }]
+        contract = self.web3.eth.contract(address=self.settings.interchain_router_contract_addr, abi=abi)
+        return await contract.functions.getRemoteInterchainAccount(
+            destination_domain,
+            self.settings.swapper_contract_addr,
+            to_bytes32(self.account.address),
+        ).call()
+
+    @require_async_context
+    async def get_ica_hook(self): return await self.ica_router.functions.hook().call()
+
+    @require_async_context
+    async def get_user_ica_balance(self, user_ica: str) -> int:
+        abi = [{
+            "type": 'function',
+            "name": 'balanceOf',
+            "stateMutability": 'view',
+            "inputs": [
+                {
+                    "name": 'account',
+                    "type": 'address',
+                }
+            ],
+            "outputs": [
+                {
+                    "type": 'uint256',
+                }
+            ]
+        }]
+        contract = self.web3.eth.contract(address=self.settings.bridge_token_addr, abi=abi)
+        return await contract.functions.balanceOf(user_ica).call()
 
     @require_async_context
     @alru_cache(maxsize=None)
     async def get_all_tokens(self, listed_only: bool = False) -> List[Token]:
         def get_tokens(limit, offset): return self.sugar.functions.tokens(limit, offset, ADDRESS_ZERO, [])
         return self.prepare_tokens(await self.apaginate(get_tokens), listed_only)
+    
+    @require_async_context
+    async def get_token(self, address: str) -> Optional[Token]:
+        """Get token by address"""
+        return self.find_token_by_address(await self.get_all_tokens(), address)
+
+    @require_async_context
+    async def get_superswap_connector_token(self) -> Token: return self._get_superswap_connector_token(await self.get_all_tokens())
 
     async def _get_prices(self, tokens: Tuple[Token]):
         async with self.web3.batch_requests() as batch:
@@ -272,8 +382,10 @@ class AsyncChain(CommonChain):
             return self.prepare_quotes(inputs, await batch.async_execute())
 
     @require_async_context
-    async def get_quote(self, from_token: Token, to_token: Token, amount: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
-        amount_in = float_to_uint256(amount, decimals=from_token.decimals)
+    async def get_quote(self, from_token: Token, to_token: Token, amount: Optional[float] = None, amount_wei: Optional[int] = None, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+        if amount is None and amount_wei is None: raise ValueError("Either amount or amount_wei must be provided")
+        if amount is not None and amount_wei is not None: raise ValueError("Only one of amount or amount_wei should be provided")
+        amount_in = amount_wei or from_token.to_wei(amount)
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=await self.get_pools_for_swaps())
         paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
         quotes = sum(await asyncio.gather(*[self._get_quotes_for_paths(from_token, to_token, amount_in, pools, paths) for paths in chunk(paths, 500)]), [])
@@ -282,8 +394,8 @@ class AsyncChain(CommonChain):
         return max(quotes, key=lambda q: q.amount_out) if len(quotes) > 0 else None
     
     @require_async_context
-    async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None):
-        q = await self.get_quote(from_token, to_token, amount)
+    async def swap(self, from_token: Token, to_token: Token, amount: Optional[float] = None, amount_wei: Optional[int] = None, slippage: Optional[float] = None):
+        q = await self.get_quote(from_token, to_token, amount=amount, amount_wei=amount_wei)
         if not q: raise ValueError("No quotes found")
         return await self.swap_from_quote(q, slippage=slippage)
         
@@ -315,7 +427,7 @@ class AsyncChain(CommonChain):
     @require_async_context
     async def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
         spender = self.account.address
-        tx = await tx.build_transaction({ 'from': spender, 'value': value, 'nonce': await self.web3.eth.get_transaction_count(spender) })
+        tx = await tx.build_transaction({ 'from': spender, 'value': value, 'nonce': await self.web3.eth.get_transaction_count(spender, "pending") })
         signed_tx = self.account.sign_transaction(tx)
         tx_hash = await self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
         return await self.web3.eth.wait_for_transaction_receipt(tx_hash) if wait else tx_hash
@@ -329,7 +441,7 @@ class AsyncChain(CommonChain):
             pool.token1.token_address,
             pool.is_stable,
             pool.factory,
-            float_to_uint256(amount_token0, pool.token0.decimals),
+            pool.token0.to_wei(amount_token0),
             MAX_UINT256
         ).call()
         print(f"Quote: {pool.token0.symbol} {token0_amount / 10 ** pool.token0.decimals} -> {pool.token1.symbol} {token1_amount / 10 ** pool.token1.decimals}")
@@ -415,6 +527,10 @@ class Chain(CommonChain):
         self.quoter = self.web3.eth.contract(address=self.settings.quoter_contract_addr, abi=get_abi("quoter"))
         self.swapper = self.web3.eth.contract(address=self.settings.swapper_contract_addr, abi=get_abi("swapper"))
 
+        if hasattr(self.settings, "interchain_router_contract_addr"):
+            # TODO: clean this up when interchain jazz is fully implemented
+            self.ica_router = self.web3.eth.contract(address=self.settings.interchain_router_contract_addr, abi=get_abi("interchain_router"))
+
         # set up caching for price oracle
         self._get_prices = cached(TTLCache(ttl=self.settings.pricing_cache_timeout_seconds, maxsize=self.settings.price_batch_size * 10))(self._get_prices)
 
@@ -447,11 +563,86 @@ class Chain(CommonChain):
 
         return results
 
+    @require_context
+    def get_bridge_fee(self, target_chain_id: int) -> int:
+        contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_get_fee_abi)
+        return contract.functions.quoteGasPayment(target_chain_id).call()
+    
+    @require_context
+    def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount_wei: int, domain: int):
+        # XX: marking this API as "internal" for now
+        # TODO: remove destination_domain when get domain API stabilizes
+        fee = self.get_bridge_fee(domain)
+        c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_from_abi)
+        self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount_wei)
+        return self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount_wei), value=fee)
+
+    @require_context
+    def get_xchain_fee(self, destination_domain: int) -> int:
+        return self.ica_router.functions.quoteGasForCommitReveal(destination_domain, XCHAIN_GAS_LIMIT_UPPERBOUND).call()
+
+    @require_context
+    def get_remote_interchain_account(self, destination_domain: int):
+        abi = [{
+            "name": "getRemoteInterchainAccount",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [
+                {
+                    "name": "",
+                    "type": "uint32"
+                },
+                {
+                    "name": "",
+                    "type": "address"
+                },
+                {
+                    "name": "",
+                    "type": "bytes32"
+                }
+            ],
+            "outputs": [
+                {
+                "name": "userICA",
+                "type": "address"
+                }
+            ]
+        }]
+        contract = self.web3.eth.contract(address=self.settings.interchain_router_contract_addr, abi=abi)
+        return contract.functions.getRemoteInterchainAccount(
+            destination_domain,
+            self.settings.swapper_contract_addr,
+            to_bytes32(self.account.address),
+        ).call()
+
+    @require_context
+    def get_ica_hook(self): return self.ica_router.functions.hook().call()
+
+    @require_context
+    def get_user_ica_balance(self, user_ica: str) -> int:
+        abi = [{
+            "type": 'function',
+            "name": 'balanceOf',
+            "stateMutability": 'view',
+            "inputs": [
+                {
+                    "name": 'account',
+                    "type": 'address',
+                }
+            ],
+            "outputs": [
+                {
+                    "type": 'uint256',
+                }
+            ]
+        }]
+        contract = self.web3.eth.contract(address=self.settings.bridge_token_addr, abi=abi)
+        return contract.functions.balanceOf(user_ica).call()
 
     @require_context
     def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
         spender = self.account.address
-        tx = tx.build_transaction({ 'from': spender, 'value': value, 'nonce': self.web3.eth.get_transaction_count(spender) })
+        tx = tx.build_transaction({ 'from': spender, 'value': value, 'nonce': self.web3.eth.get_transaction_count(spender, "pending") })
         signed_tx = self.account.sign_transaction(tx)
         tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
         return self.web3.eth.wait_for_transaction_receipt(tx_hash) if wait else tx_hash
@@ -466,7 +657,15 @@ class Chain(CommonChain):
     def get_all_tokens(self, listed_only: bool = False) -> List[Token]:
         def get_tokens(limit, offset): return self.sugar.functions.tokens(limit, offset, ADDRESS_ZERO, [])
         return self.prepare_tokens(self.paginate(get_tokens), listed_only)
-    
+
+    @require_context
+    def get_token(self, address: str) -> Optional[Token]:
+        """Get token by address"""
+        return self.find_token_by_address(self.get_all_tokens(), address)
+
+    @require_context
+    def get_superswap_connector_token(self) -> Token: return self._get_superswap_connector_token(self.get_all_tokens())
+
     def _get_prices(self, tokens: Tuple[Token]) -> List[int]:
         # token_address => normalized rate
         with self.web3.batch_requests() as batch:
@@ -525,8 +724,10 @@ class Chain(CommonChain):
             return self.prepare_quotes(inputs, batch.execute())
     
     @require_context
-    def get_quote(self, from_token: Token, to_token: Token, amount: float, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
-        amount_in = float_to_uint256(amount, decimals=from_token.decimals)
+    def get_quote(self, from_token: Token, to_token: Token, amount: Optional[float] = None, amount_wei: Optional[int] = None, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
+        if amount is None and amount_wei is None: raise ValueError("Either amount or amount_wei must be provided")
+        if amount is not None and amount_wei is not None: raise ValueError("Only one of amount or amount_wei should be provided")
+        amount_in = amount_wei or from_token.to_wei(amount)
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=self.get_pools_for_swaps())
         paths = self.get_paths_for_quote(from_token, to_token, pools, self.settings.excluded_tokens_addrs)
         path_chunks = list(chunk(paths, 500))
@@ -559,8 +760,8 @@ class Chain(CommonChain):
         return max(all_quotes, key=lambda q: q.amount_out) if len(all_quotes) > 0 else None
     
     @require_context
-    def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None):
-        q = self.get_quote(from_token, to_token, amount)
+    def swap(self, from_token: Token, to_token: Token, amount: Optional[float] = None, amount_wei: Optional[int] = None, slippage: Optional[float] = None):
+        q = self.get_quote(from_token, to_token, amount=amount, amount_wei=amount_wei)
         if not q: raise ValueError("No quotes found")
         return self.swap_from_quote(q, slippage=slippage)
         
@@ -573,11 +774,20 @@ class Chain(CommonChain):
         return self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
 
 # %% ../src/chains.ipynb 12
+_op_settings = make_op_chain_settings()
+
 class OPChainCommon():
-    usdc: Token = Token(token_address='0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
-    velo: Token = Token(token_address='0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', symbol='VELO', decimals=18, listed=True, wrapped_token_address=None)
-    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
-    
+    usdc: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
+                        token_address='0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', symbol='USDC',
+                        decimals=6, listed=True, wrapped_token_address=None)
+    velo: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
+                        token_address='0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db', symbol='VELO', decimals=18, listed=True, wrapped_token_address=None)
+    eth: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
+                       token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006') 
+    o_usdt: Token = Token(chain_id=_op_settings.chain_id, chain_name=_op_settings.chain_name,
+                         token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT',
+                         decimals=6, listed=True, wrapped_token_address=None)
+
 class AsyncOPChain(AsyncChain, OPChainCommon):
     def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs), **kwargs)
 
@@ -586,13 +796,79 @@ class OPChain(Chain, OPChainCommon):
 
 
 # %% ../src/chains.ipynb 14
+_base_settings = make_base_chain_settings()
+
 class BaseChainCommon():
-    usdc: Token = Token(token_address='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
-    aero: Token = Token(token_address='0x940181a94A35A4569E4529A3CDfB74e38FD98631', symbol='AERO', decimals=18, listed=True, wrapped_token_address=None)
-    eth: Token = Token(token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    usdc: Token = Token(chain_id=_base_settings.chain_id, chain_name=_base_settings.chain_name,
+                        token_address='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
+    aero: Token = Token(chain_id=_base_settings.chain_id, chain_name=_base_settings.chain_name,
+                        token_address='0x940181a94A35A4569E4529A3CDfB74e38FD98631', symbol='AERO', decimals=18, listed=True, wrapped_token_address=None)
+    eth: Token = Token(chain_id=_base_settings.chain_id, chain_name=_base_settings.chain_name,
+                       token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
     
 class AsyncBaseChain(AsyncChain, BaseChainCommon):
     def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs), **kwargs)
 
 class BaseChain(Chain, BaseChainCommon):
     def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 16
+class LiskChainCommon():
+    o_usdt: Token = Token(chain_id='1135', chain_name='Lisk', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
+    lsk: Token = Token(chain_id='1135', chain_name='Lisk', token_address='0xac485391EB2d7D88253a7F1eF18C37f4242D1A24', symbol='LSK', decimals=18, listed=True, wrapped_token_address=None)
+    eth: Token = Token(chain_id='1135', chain_name='Lisk', token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    usdt: Token = Token(chain_id='1135', chain_name='Lisk', token_address='0x05D032ac25d322df992303dCa074EE7392C117b9', symbol='USDT', decimals=6, listed=True, wrapped_token_address=None)
+
+class AsyncLiskChain(AsyncChain, LiskChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_lisk_chain_settings(**kwargs), **kwargs)
+
+class LiskChain(Chain, LiskChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_lisk_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 18
+class UniChainCommon():
+    o_usdt: Token = Token(chain_id='130', chain_name='Uni', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
+    usdc: Token = Token(chain_id='130', chain_name='Uni', token_address='0x078D782b760474a361dDA0AF3839290b0EF57AD6', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
+    
+class AsyncUniChain(AsyncChain, UniChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
+
+class UniChain(Chain, UniChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
+
+# %% ../src/chains.ipynb 19
+def get_chain(chain_id: str, **kwargs) -> Chain:
+    if chain_id == '10': return OPChain(**kwargs)
+    elif chain_id == '8453': return BaseChain(**kwargs)
+    elif chain_id == '130': return UniChain(**kwargs)
+    elif chain_id == '1135': return LiskChain(**kwargs)
+    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+
+def get_async_chain(chain_id: str, **kwargs) -> AsyncChain:
+    if chain_id == '10': return AsyncOPChain(**kwargs)
+    elif chain_id == '8453': return AsyncBaseChain(**kwargs)
+    elif chain_id == '130': return AsyncUniChain(**kwargs)
+    elif chain_id == '1135': return AsyncLiskChain(**kwargs)
+    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+
+def get_chain_from_token(t: Token, **kwargs) -> Chain: return get_chain(t.chain_id, **kwargs)
+def get_async_chain_from_token(t: Token, **kwargs) -> AsyncChain: return get_async_chain(t.chain_id, **kwargs)
+
+# %% ../src/chains.ipynb 21
+class AsyncOPChainSimnet(AsyncOPChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
+
+class AsyncBaseChainSimnet(AsyncBaseChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
+
+class OPChainSimnet(OPChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
+
+class BaseChainSimnet(BaseChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
+
+class LiskChainSimnet(LiskChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", **kwargs)
+
+class AsyncLiskChainSimnet(AsyncLiskChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)

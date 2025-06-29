@@ -3,17 +3,21 @@
 # %% auto 0
 __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'normalize_address', 'chunk', 'amount_to_k_string', 'format_currency',
            'format_percentage', 'amount_to_m_string', 'float_to_uint256', 'get_future_timestamp', 'apply_slippage',
-           'Pair', 'find_all_paths', 'Timer', 'time_it', 'atime_it']
+           'parse_ether', 'get_unique_str', 'get_salt', 'to_bytes32', 'to_bytes32_str', 'Pair', 'find_all_paths',
+           'ICACallData', 'hash_ICA_calls', 'serialize_ica_calls', 'Timer', 'time_it', 'atime_it', 'require_supersim']
 
 # %% ../src/helpers.ipynb 2
+from json import dumps
 from web3 import Web3, constants
+from eth_abi import encode
 from typing import List, Tuple, Optional, Callable
-from decimal import Decimal
+from decimal import Decimal, getcontext
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 import networkx as nx
-import math, time, asyncio
+import math, time, asyncio, decimal, secrets, socket
 from contextlib import contextmanager, asynccontextmanager
+from fastcore.test import test_eq
 
 # %% ../src/helpers.ipynb 3
 def normalize_address(address: str) -> str: return Web3.to_checksum_address(address.lower())
@@ -45,10 +49,10 @@ def amount_to_m_string(amount: float) -> str:
     return f"{round(amount/1000000, 2)}M"
 
 # %% ../src/helpers.ipynb 4
-def float_to_uint256(amount: float, decimals: int = 18) -> int:
+def float_to_uint256(value: float, decimals: int = 18) -> int:
     """Convert float to uint256 with decimal scaling"""
     # Convert float to Decimal for precision
-    amount_decimal = Decimal(str(amount))
+    amount_decimal = Decimal(str(value))
     # Scale by decimals
     scaled_amount = amount_decimal * Decimal(10 ** decimals)
     # Convert to integer
@@ -65,7 +69,59 @@ def apply_slippage(amount: int, slippage: float) -> int:
     if slippage < 0 or slippage > 1: raise ValueError("Slippage must be between 0 and 1")
     return int(math.ceil(amount * (1 - slippage)))
 
+# %% ../src/helpers.ipynb 9
+def parse_ether(ether: str) -> int:
+    # Set precision high enough to handle 18 decimal places
+    getcontext().prec = 50
+    
+    try:
+        # Convert to Decimal for precise arithmetic
+        ether_decimal = Decimal(str(ether))
+        
+        # Convert to wei (multiply by 10^18)
+        wei_decimal = ether_decimal * Decimal('1000000000000000000')
+        
+        # Convert to integer
+        return int(wei_decimal)
+    
+    except (ValueError, TypeError, decimal.InvalidOperation) as e:
+        raise ValueError(f"Invalid ether value: {ether}") from e
+
+# %% ../src/helpers.ipynb 10
+def get_unique_str(length: int) -> str:
+    """
+    Generate a cryptographically secure random string of specified length.
+    
+    This is the Python equivalent of the TypeScript function using crypto.getRandomValues().
+    Uses secrets module for cryptographic security.
+    
+    Args:
+        length: Desired length of the random string
+        
+    Returns:
+        str: Random string of specified length containing digits
+        
+    Examples:
+        >>> len(get_unique_str(10))
+        10
+        >>> get_unique_str(5).isdigit()
+        True
+    """
+    # Generate random bytes and convert to string of digits
+    random_bytes = secrets.token_bytes(length)
+    return ''.join(str(byte % 10) for byte in random_bytes)[:length]
+
+def get_salt() -> str: return f"0x{get_unique_str(64)}" 
+
 # %% ../src/helpers.ipynb 12
+def to_bytes32(val: str) -> bytes: 
+    # Remove 0x prefix and pad to 64 hex characters (32 bytes)
+    hex_val = val.replace('0x', '').zfill(64)
+    return bytes.fromhex(hex_val)
+
+def to_bytes32_str(val: str) -> str: return f"0x{to_bytes32(val).hex()}"
+
+# %% ../src/helpers.ipynb 18
 # Claude 3.7 sonnet made this
 
 @dataclass
@@ -123,7 +179,24 @@ def find_all_paths(pairs: List[Pair], start_token: str, end_token: str, cutoff=3
     return uniques
 
 
-# %% ../src/helpers.ipynb 15
+# %% ../src/helpers.ipynb 21
+# TODO: get rid of ICACallData, use tuples instead
+@dataclass(frozen=True)
+class ICACallData: to: str; value: int; data: str
+
+
+def hash_ICA_calls(calls: List[ICACallData], salt: str) -> bytes:
+  call_tuples = [(bytes.fromhex(call.to.replace('0x', '')), call.value, bytes.fromhex(call.data.replace('0x', '')))  for call in calls]
+  encoded = encode(["(bytes32,uint256,bytes)[]"], [call_tuples])
+  return Web3.keccak(hexstr=f"{salt}{encoded.hex()}")
+
+def serialize_ica_calls(calls: List[ICACallData]) -> List[dict]:
+    """
+    Convert a list of ICACallData to JSON string.
+    """
+    return list(map(lambda call: {"to": call.to, "value": str(call.value), "data": call.data}, calls))
+
+# %% ../src/helpers.ipynb 25
 # Claude 4 sonnet made this
 
 class Timer:
@@ -181,3 +254,16 @@ async def atime_it(name: str = "Operation", precision: int = 4, callback: Option
     timer = Timer(name, precision, callback)
     async with timer:
         yield timer
+
+# %% ../src/helpers.ipynb 28
+def require_supersim():
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        result = sock.connect_ex(('127.0.0.1', 4444))
+        # are you running supersim?
+        test_eq(result, 0)
+    except socket.error as err:
+        test_eq(err, None)
+    finally:
+        sock.close()

@@ -10,13 +10,15 @@ settings =  make_op_chain_settings()
 abi_config = {
     'sugar': settings.sugar_contract_addr,
     'sugar_rewards': settings.sugar_rewards_contract_addr,
-    'slipstream': settings.slipstream_contract_addr,
-    'nfpm': settings.nfpm_contract_addr,
+    #'slipstream': settings.slipstream_contract_addr,
+    #'nfpm': settings.nfpm_contract_addr,
     'price_oracle': settings.price_oracle_contract_addr,
     'router': settings.router_contract_addr,
     'quoter': settings.quoter_contract_addr,
     'swapper': settings.swapper_contract_addr,
+    'interchain_router': settings.interchain_router_contract_addr,
 }
 for name, addr in abi_config.items():
+    print(f"Downloading {name} ABI from address {addr}")
     download_contract_abi(name=name, address=addr)
     print(f"Downloaded {name} ABI")

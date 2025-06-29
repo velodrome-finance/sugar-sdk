@@ -15,82 +15,7 @@
                     },
                     {
                         "internalType": "address",
-                        "name": "seaportV1_5",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "seaportV1_4",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "openseaConduit",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "nftxZap",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "x2y2",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "foundation",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "sudoswap",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "elementMarket",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "nft20Zap",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "cryptopunks",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "looksRareV2",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "routerRewardsDistributor",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "looksRareRewardsDistributor",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "looksRareToken",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
                         "name": "v2Factory",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "v2Implementation",
                         "type": "address"
                     },
                     {
@@ -99,12 +24,42 @@
                         "type": "address"
                     },
                     {
+                        "internalType": "bytes32",
+                        "name": "pairInitCodeHash",
+                        "type": "bytes32"
+                    },
+                    {
+                        "internalType": "bytes32",
+                        "name": "poolInitCodeHash",
+                        "type": "bytes32"
+                    },
+                    {
                         "internalType": "address",
-                        "name": "clImplementation",
+                        "name": "v4PoolManager",
                         "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "veloV2Factory",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "veloCLFactory",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "bytes32",
+                        "name": "veloV2InitCodeHash",
+                        "type": "bytes32"
+                    },
+                    {
+                        "internalType": "bytes32",
+                        "name": "veloCLInitCodeHash",
+                        "type": "bytes32"
                     }
                 ],
-                "internalType": "struct RouterParameters",
+                "internalType": "struct RouterDeployParameters",
                 "name": "params",
                 "type": "tuple"
             }
@@ -119,12 +74,29 @@
     },
     {
         "inputs": [],
-        "name": "BuyPunkFailed",
+        "name": "ContractLocked",
         "type": "error"
     },
     {
-        "inputs": [],
-        "name": "ContractLocked",
+        "inputs": [
+            {
+                "internalType": "Currency",
+                "name": "currency",
+                "type": "address"
+            }
+        ],
+        "name": "DeltaNotNegative",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "Currency",
+                "name": "currency",
+                "type": "address"
+            }
+        ],
+        "name": "DeltaNotPositive",
         "type": "error"
     },
     {
@@ -155,6 +127,16 @@
     },
     {
         "inputs": [],
+        "name": "InputLengthMismatch",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "InsufficientBalance",
+        "type": "error"
+    },
+    {
+        "inputs": [],
         "name": "InsufficientETH",
         "type": "error"
     },
@@ -171,6 +153,17 @@
     {
         "inputs": [
             {
+                "internalType": "uint8",
+                "name": "bridgeType",
+                "type": "uint8"
+            }
+        ],
+        "name": "InvalidBridgeType",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
                 "internalType": "uint256",
                 "name": "commandType",
                 "type": "uint256"
@@ -181,12 +174,7 @@
     },
     {
         "inputs": [],
-        "name": "InvalidOwnerERC1155",
-        "type": "error"
-    },
-    {
-        "inputs": [],
-        "name": "InvalidOwnerERC721",
+        "name": "InvalidEthSender",
         "type": "error"
     },
     {
@@ -196,12 +184,17 @@
     },
     {
         "inputs": [],
+        "name": "InvalidRecipient",
+        "type": "error"
+    },
+    {
+        "inputs": [],
         "name": "InvalidReserves",
         "type": "error"
     },
     {
         "inputs": [],
-        "name": "InvalidSpender",
+        "name": "InvalidTokenAddress",
         "type": "error"
     },
     {
@@ -211,7 +204,7 @@
     },
     {
         "inputs": [],
-        "name": "NotUniversalRouter",
+        "name": "NotPoolManager",
         "type": "error"
     },
     {
@@ -231,12 +224,18 @@
     },
     {
         "inputs": [],
-        "name": "UnableToClaim",
+        "name": "UnsafeCast",
         "type": "error"
     },
     {
-        "inputs": [],
-        "name": "UnsafeCast",
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "action",
+                "type": "uint256"
+            }
+        ],
+        "name": "UnsupportedAction",
         "type": "error"
     },
     {
@@ -280,29 +279,265 @@
         "type": "error"
     },
     {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "minAmountOutReceived",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "amountReceived",
+                "type": "uint256"
+            }
+        ],
+        "name": "V4TooLittleReceived",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "maxAmountInRequested",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "amountRequested",
+                "type": "uint256"
+            }
+        ],
+        "name": "V4TooMuchRequested",
+        "type": "error"
+    },
+    {
         "anonymous": false,
         "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "caller",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "localRouter",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint32",
+                "name": "destinationDomain",
+                "type": "uint32"
+            },
+            {
+                "indexed": false,
+                "internalType": "bytes32",
+                "name": "commitment",
+                "type": "bytes32"
+            }
+        ],
+        "name": "CrossChainSwap",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "sender",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "recipient",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            },
             {
                 "indexed": false,
                 "internalType": "uint256",
                 "name": "amount",
                 "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint32",
+                "name": "domain",
+                "type": "uint32"
             }
         ],
-        "name": "RewardsSent",
+        "name": "UniversalRouterBridge",
         "type": "event"
     },
     {
+        "anonymous": false,
         "inputs": [
             {
-                "internalType": "bytes",
-                "name": "looksRareClaim",
-                "type": "bytes"
+                "indexed": true,
+                "internalType": "address",
+                "name": "sender",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "recipient",
+                "type": "address"
             }
         ],
-        "name": "collectRewards",
-        "outputs": [],
-        "stateMutability": "nonpayable",
+        "name": "UniversalRouterSwap",
+        "type": "event"
+    },
+    {
+        "inputs": [],
+        "name": "OPTIMISM_CHAIN_ID",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "PERMIT2",
+        "outputs": [
+            {
+                "internalType": "contract IPermit2",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "UNISWAP_V2_FACTORY",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "UNISWAP_V2_PAIR_INIT_CODE_HASH",
+        "outputs": [
+            {
+                "internalType": "bytes32",
+                "name": "",
+                "type": "bytes32"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "UNISWAP_V3_FACTORY",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "UNISWAP_V3_POOL_INIT_CODE_HASH",
+        "outputs": [
+            {
+                "internalType": "bytes32",
+                "name": "",
+                "type": "bytes32"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "VELODROME_CL_FACTORY",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "VELODROME_CL_POOL_INIT_CODE_HASH",
+        "outputs": [
+            {
+                "internalType": "bytes32",
+                "name": "",
+                "type": "bytes32"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "VELODROME_V2_FACTORY",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "VELODROME_V2_INIT_CODE_HASH",
+        "outputs": [
+            {
+                "internalType": "bytes32",
+                "name": "",
+                "type": "bytes32"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "WETH9",
+        "outputs": [
+            {
+                "internalType": "contract IWETH9",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -347,162 +582,29 @@
         "type": "function"
     },
     {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "",
-                "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256[]",
-                "name": "",
-                "type": "uint256[]"
-            },
-            {
-                "internalType": "uint256[]",
-                "name": "",
-                "type": "uint256[]"
-            },
-            {
-                "internalType": "bytes",
-                "name": "",
-                "type": "bytes"
-            }
-        ],
-        "name": "onERC1155BatchReceived",
+        "inputs": [],
+        "name": "msgSender",
         "outputs": [
             {
-                "internalType": "bytes4",
+                "internalType": "address",
                 "name": "",
-                "type": "bytes4"
+                "type": "address"
             }
         ],
-        "stateMutability": "pure",
+        "stateMutability": "view",
         "type": "function"
     },
     {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "",
-                "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            },
-            {
-                "internalType": "bytes",
-                "name": "",
-                "type": "bytes"
-            }
-        ],
-        "name": "onERC1155Received",
+        "inputs": [],
+        "name": "poolManager",
         "outputs": [
             {
-                "internalType": "bytes4",
-                "name": "",
-                "type": "bytes4"
-            }
-        ],
-        "stateMutability": "pure",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
+                "internalType": "contract IPoolManager",
                 "name": "",
                 "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            },
-            {
-                "internalType": "bytes",
-                "name": "",
-                "type": "bytes"
             }
         ],
-        "name": "onERC721Received",
-        "outputs": [
-            {
-                "internalType": "bytes4",
-                "name": "",
-                "type": "bytes4"
-            }
-        ],
-        "stateMutability": "pure",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "token",
-                "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "from",
-                "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "to",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            }
-        ],
-        "name": "stf",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "bytes4",
-                "name": "interfaceId",
-                "type": "bytes4"
-            }
-        ],
-        "name": "supportsInterface",
-        "outputs": [
-            {
-                "internalType": "bool",
-                "name": "",
-                "type": "bool"
-            }
-        ],
-        "stateMutability": "pure",
+        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -525,6 +627,25 @@
         ],
         "name": "uniswapV3SwapCallback",
         "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "bytes",
+                "name": "data",
+                "type": "bytes"
+            }
+        ],
+        "name": "unlockCallback",
+        "outputs": [
+            {
+                "internalType": "bytes",
+                "name": "",
+                "type": "bytes"
+            }
+        ],
         "stateMutability": "nonpayable",
         "type": "function"
     },

@@ -17,12 +17,13 @@ QUOTER_STABLE_POOL_FILLER, QUOTER_VOLATILE_POOL_FILLER = 2097152, 4194304
 
 @dataclass
 class PreparedRoute:
-    types: List[str]; values: List[Union[str, int]]
+    types: List[str]; values: List[Union[str, int, bool]]
 
     @property
     def encoded(self) -> bytes: return encode_packed(self.types, self.values)
 
-def pack_path(path: List[Tuple[LiquidityPoolForSwap, bool]]) -> PreparedRoute:
+def pack_path(path: List[Tuple[LiquidityPoolForSwap, bool]], for_swap: bool = False) -> PreparedRoute:
+    is_v2_swap = for_swap and any(pool.is_basic for pool, _ in path)
     types, values = reduce(lambda s, pool: s + pool, [["address", "int24"] for i in range(len(path))], []) + ["address"], []
     for node in path:
         pool, reversed = node
@@ -31,7 +32,15 @@ def pack_path(path: List[Tuple[LiquidityPoolForSwap, bool]]) -> PreparedRoute:
         else: filler =  QUOTER_STABLE_POOL_FILLER if pool.is_stable else QUOTER_VOLATILE_POOL_FILLER
         if len(values) == 0: values = [token0, filler, token1]
         else: values += [filler, token1]
+    
+    if is_v2_swap:
+        types = list(map(lambda t: "bool" if t == "int24" else t, types))
+        for i in range(len(values)):
+            if values[i] == QUOTER_STABLE_POOL_FILLER: values[i] = True
+            elif values[i] == QUOTER_VOLATILE_POOL_FILLER: values[i] = False
+
     return PreparedRoute(types=types, values=values)
+  
 
 @dataclass
 class QuoteInput:
@@ -47,6 +56,9 @@ class QuoteInput:
     @property
     def route(self) -> PreparedRoute: return pack_path(self.path)
 
+    @property
+    def route_for_swap(self) -> PreparedRoute: return pack_path(self.path, for_swap=True)
+
 @dataclass
 class Quote:
     input: QuoteInput; amount_out: int
@@ -59,3 +71,4 @@ class Quote:
     def path(self) -> List[Tuple[LiquidityPoolForSwap, bool]]: return self.input.path
     @property
     def amount_in(self) -> int: return self.input.amount_in
+
