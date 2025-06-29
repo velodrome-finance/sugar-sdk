@@ -44,7 +44,7 @@ def pack_path(path: List[Tuple[LiquidityPoolForSwap, bool]], for_swap: bool = Fa
 
 @dataclass
 class QuoteInput:
-    from_token: Token; to_token: Token; path: List[Tuple[LiquidityPoolForSwap, bool]]; amount_in: float
+    from_token: Token; to_token: Token; path: List[Tuple[LiquidityPoolForSwap, bool]]; amount_in: int
 
     def to_tuple(self) -> tuple: return (self.from_token, self.to_token, tuple(self.path), self.amount_in, self.amount_out)
 
@@ -70,7 +70,5 @@ class Quote:
     @property
     def path(self) -> List[Tuple[LiquidityPoolForSwap, bool]]: return self.input.path
     @property
-    def amount_in(self) -> float: return self.input.amount_in
-    @property
-    def amount_in_wei(self) -> int: return self.from_token.to_wei(self.amount_in)
+    def amount_in(self) -> int: return self.input.amount_in
 
