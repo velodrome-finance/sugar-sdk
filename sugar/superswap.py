@@ -274,10 +274,10 @@ class Superswap(SuperswapCommon):
                 xchain_fee=xchain_fee,
                 salt=salt
             )
+            return self.write(quote, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
 
-            return self.write(quote, chain=self.chain_for_writes or self.from_chain, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
-
-    def write(self, quote: SuperSwapQuote, chain: AsyncChain, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
+    def write(self, quote: SuperSwapQuote, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
+        chain = self.chain_for_writes or get_chain_from_token(quote.from_token)
         value, message_fee = self.prepare_write(quote, total_fee)
         print(f">>>>>>>>>> gonn write {value} wei with message fee {message_fee} wei", quote, swap_data)
         with chain:
@@ -379,9 +379,10 @@ class AsyncSuperswap(SuperswapCommon):
                 salt=salt
             )
 
-            return await self.write(quote, chain=self.chain_for_writes or from_chain, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
+            return await self.write(quote, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
 
-    async def write(self, quote: SuperSwapQuote, chain: AsyncChain, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
+    async def write(self, quote: SuperSwapQuote, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
+        chain=self.chain_for_writes or get_async_chain_from_token(quote.from_token)
         value, message_fee = self.prepare_write(quote, total_fee)
         async with chain:
             await chain.set_token_allowance(quote.from_token, chain.settings.swapper_contract_addr, value)
