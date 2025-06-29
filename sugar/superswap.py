@@ -119,14 +119,6 @@ class MockSuperswapRelayer(SuperswapRelayer):
 supported_chains = ["OP", "Lisk", "Uni"]
 
 class SuperswapCommon:
-    # @property
-    # def bridged_amount(self, from_token: Token, to_token: Token, amount_in: float, from_bridge: Token, origin_quote: Optional[Quote]) -> float:
-    #     if from_token != from_bridge:
-    #         assert origin_quote is not None, "origin_quote must be set"
-    #         return from_bridge.to_decimal(origin_quote.amount_out) 
-    #     else:
-    #         return from_token.to_decimal(amount_in)
-
     def check_chain_support(self, from_token: Token, to_token: Token) -> None:
         """Check if the given tokens are supported for superswap."""
         from_chain, to_chain = get_async_chain_from_token(from_token), get_async_chain_from_token(to_token)
@@ -215,8 +207,7 @@ class Superswap(SuperswapCommon):
         return self.swap_from_quote(quote=quote, slippage=slippage)
 
     def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperSwapQuote:
-        q = None
-        amount_in_wei = from_token.to_wei(amount_in)
+        q, amount_in_wei = None, from_token.to_wei(amount_in)
         with get_chain_from_token(from_token) as from_chain, get_chain_from_token(to_token) as to_chain:
             from_bridge_token, to_bridge_token = from_chain.get_superswap_connector_token(), to_chain.get_superswap_connector_token()
 
@@ -233,9 +224,7 @@ class Superswap(SuperswapCommon):
                 # we need destination quote if we don't end with oUSDT
                 if to_token != to_bridge_token:
                     b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, to_bridge_token, amount_in_wei, o_q)
-                    print(f">>>>>>>>>>>>> b_a: {b_a}")
                     d_q = to_chain.get_quote(to_bridge_token, to_token, amount_wei=b_a)
-                    print(f">>>>>>>>>>>>> d_q: {d_q}")
                     assert d_q is not None, "No destination quote found"
 
                 q = SuperSwapQuote(from_token=from_token,to_token=to_token, from_bridge_token=from_bridge_token, to_bridge_token=to_bridge_token,
@@ -279,21 +268,8 @@ class Superswap(SuperswapCommon):
     def write(self, quote: SuperSwapQuote, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
         chain = self.chain_for_writes or get_chain_from_token(quote.from_token)
         value, message_fee = self.prepare_write(quote, total_fee)
-        print(f">>>>>>>>>> gonn write {value} wei with message fee {message_fee} wei", quote, swap_data)
         with chain:
             chain.set_token_allowance(quote.from_token, chain.settings.swapper_contract_addr, value)
-
-            tx_function = chain.swapper.functions.execute(*[cmds, inputs])
-            built_tx = tx_function.build_transaction({
-                'value': message_fee,
-                'from': chain.account.address,
-                'gas': 2000000,  # adjust as needed
-                'gasPrice': chain.web3.eth.gas_price
-            })
-
-            print(f"Built transaction: {built_tx}")
-
-
             tx = chain.sign_and_send_tx(chain.swapper.functions.execute(*[cmds, inputs]), value=message_fee)
             return self.prepare_result(swap_data, tx)
 
@@ -318,10 +294,7 @@ class AsyncSuperswap(SuperswapCommon):
         return await self.swap_from_quote(quote=quote, slippage=slippage)
 
     async def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperSwapQuote:
-        q = None
-
-        amount_in_wei = from_token.to_wei(amount_in)
-
+        q, amount_in_wei = None, from_token.to_wei(amount_in)
         async with get_async_chain_from_token(from_token) as from_chain, get_async_chain_from_token(to_token) as to_chain:
             from_bridge_token, to_bridge_token = await from_chain.get_superswap_connector_token(), await to_chain.get_superswap_connector_token()
 
@@ -382,7 +355,7 @@ class AsyncSuperswap(SuperswapCommon):
             return await self.write(quote, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
 
     async def write(self, quote: SuperSwapQuote, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
-        chain=self.chain_for_writes or get_async_chain_from_token(quote.from_token)
+        chain = self.chain_for_writes or get_async_chain_from_token(quote.from_token)
         value, message_fee = self.prepare_write(quote, total_fee)
         async with chain:
             await chain.set_token_allowance(quote.from_token, chain.settings.swapper_contract_addr, value)
