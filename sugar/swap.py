@@ -279,9 +279,7 @@ class SuperSwapQuote:
         return SuperSwapQuote(from_token=from_token, to_token=to_token, from_bridge_token=from_token, to_bridge_token=to_token, amount_in=amount_in_wei)
 
     @staticmethod
-    def calc_bridged_amount(from_token: Token, to_token: Token, from_bridge_token: Token, to_bridge_token: Token,
-        amount_in_wei: int, origin_quote: Optional[Quote] = None
-    ) -> int:
+    def calc_bridged_amount(from_token: Token, to_token: Token, from_bridge_token: Token, amount_in_wei: int, origin_quote: Optional[Quote] = None) -> int:
         if from_token != from_bridge_token:
             assert origin_quote is not None, "origin_quote must be set"
             return origin_quote.amount_out
@@ -291,8 +289,7 @@ class SuperSwapQuote:
     def bridged_amount(self) -> int: 
         return SuperSwapQuote.calc_bridged_amount(
             from_token=self.from_token, to_token=self.to_token,
-            from_bridge_token=self.from_bridge_token, to_bridge_token=self.to_bridge_token,
-            amount_in_wei=self.amount_in, origin_quote=self.origin_quote
+            from_bridge_token=self.from_bridge_token, amount_in_wei=self.amount_in, origin_quote=self.origin_quote
         )
 
     @property

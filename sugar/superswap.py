@@ -223,7 +223,7 @@ class Superswap(SuperswapCommon):
 
                 # we need destination quote if we don't end with oUSDT
                 if to_token != to_bridge_token:
-                    b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, to_bridge_token, amount_in_wei, o_q)
+                    b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, amount_in_wei, o_q)
                     d_q = to_chain.get_quote(to_bridge_token, to_token, amount_wei=b_a)
                     assert d_q is not None, "No destination quote found"
 
@@ -310,7 +310,7 @@ class AsyncSuperswap(SuperswapCommon):
 
                 # we need destination quote if we don't end with bridge token
                 if to_token != to_bridge_token:
-                    b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, to_bridge_token, amount_in_wei, o_q)
+                    b_a = SuperSwapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, amount_in_wei, o_q)
                     d_q = await to_chain.get_quote(to_bridge_token, to_token, amount_wei=b_a)
                     assert d_q is not None, "No destination quote found"
 
