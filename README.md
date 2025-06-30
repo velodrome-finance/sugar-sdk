@@ -168,6 +168,10 @@ Full list of configuration parameters for Sugar. Chain IDs can be found
 | excluded_tokens_addrs | `SUGAR_EXCLUDED_TOKENS_ADDRS_<CHAIN_ID>` | chain specific |
 | price_batch_size | `SUGAR_PRICE_BATCH_SIZE` | 40 |
 | price_threshold_filter | `SUGAR_PRICE_THRESHOLD_FILTER` | 10 |
+| interchain_router_contract_addr | `SUGAR_INTERCHAIN_ROUTER_CONTRACT_ADDR_<CHAIN_ID>` | chain specific |
+| bridge_contract_addr | `SUGAR_BRIDGE_CONTRACT_ADDR_<CHAIN_ID>` | chain specific |
+| bridge_token_addr | `SUGAR_BRIDGE_TOKEN_ADDR_<CHAIN_ID>` | chain specific |
+| message_module_contract_addr | `SUGAR_MESSAGE_MODULE_CONTRACT_ADDR_<CHAIN_ID>` | chain specific |
 | pool_page_size | `SUGAR_POOL_PAGE_SIZE` | 500 |
 | pools_count_upper_bound | `POOLS_COUNT_UPPER_BOUND_<CHAIN_ID>` | 2500 |
 | pagination_limit | `SUGAR_PAGINATION_LIMIT` | 2000 |
