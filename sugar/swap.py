@@ -2,15 +2,15 @@
 
 # %% auto 0
 __all__ = ['FLAG_ALLOW_REVERT', 'ABI_DEFINITION', 'CONTRACT_BALANCE_FOR_V3_SWAPS', 'CommandType', 'BridgeType', 'RoutePlanner',
-           'setup_planner', 'SuperSwapQuote', 'SuperSwapDataInput', 'SuperSwapData', 'build_super_swap_data']
+           'setup_planner', 'SuperSwapDataInput', 'SuperSwapData', 'build_super_swap_data']
 
 # %% ../src/swap.ipynb 3
 import copy
 from dataclasses import dataclass
 from .config import XCHAIN_GAS_LIMIT_UPPERBOUND
-from .quote import Quote, pack_path
+from .quote import Quote, SuperswapQuote, pack_path
 from .helpers import apply_slippage, ICACallData, hash_ICA_calls, to_bytes32, to_bytes32_str, MAX_UINT256
-from .helpers import ADDRESS_ZERO, normalize_address
+from .helpers import ADDRESS_ZERO
 from .token import Token
 from .pool import LiquidityPoolForSwap
 from enum import IntEnum
@@ -265,42 +265,6 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
 
 # %% ../src/swap.ipynb 8
 @dataclass(frozen=True)
-class SuperSwapQuote:
-    from_token: Token
-    to_token: Token
-    from_bridge_token: Token
-    to_bridge_token: Token
-    amount_in: int
-    origin_quote: Optional[Quote] = None
-    destination_quote: Optional[Quote] = None
-
-    @staticmethod
-    def bridge_quote(from_token: Token, to_token: Token, amount_in_wei: int) -> 'SuperSwapQuote':
-        return SuperSwapQuote(from_token=from_token, to_token=to_token, from_bridge_token=from_token, to_bridge_token=to_token, amount_in=amount_in_wei)
-
-    @staticmethod
-    def calc_bridged_amount(from_token: Token, to_token: Token, from_bridge_token: Token, amount_in_wei: int, origin_quote: Optional[Quote] = None) -> int:
-        if from_token != from_bridge_token:
-            assert origin_quote is not None, "origin_quote must be set"
-            return origin_quote.amount_out
-        else: return amount_in_wei
-
-    @property
-    def bridged_amount(self) -> int: 
-        return SuperSwapQuote.calc_bridged_amount(
-            from_token=self.from_token, to_token=self.to_token,
-            from_bridge_token=self.from_bridge_token, amount_in_wei=self.amount_in, origin_quote=self.origin_quote
-        )
-
-    @property
-    def bridged_amount_wei(self) -> int:
-        ba = self.from_bridge_token.to_wei(self.bridged_amount)
-        return self.from_token.to_wei(ba) if self.from_token == self.from_bridge_token else self.from_bridge_token.to_wei(ba)
-
-    @property
-    def is_bridge(self) -> bool: return self.from_token == self.from_bridge_token and self.to_token == self.to_bridge_token
-
-@dataclass(frozen=True)
 class SuperSwapDataInput:
     from_token: Token
     to_token: Token
@@ -325,7 +289,7 @@ class SuperSwapDataInput:
 
     @staticmethod
     def build(
-            quote: SuperSwapQuote, account: str,
+            quote: SuperswapQuote, account: str,
             user_ICA: str, user_ICA_balance: int,
             origin_domain: int, origin_bridge: str, origin_hook: str, origin_ICA_router: str,
             destination_ICA_router: str, destination_router: str, destination_domain: int,
