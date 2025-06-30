@@ -202,11 +202,11 @@ class Superswap(SuperswapCommon):
 
     def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None) -> str:
         self.check_chain_support(from_token, to_token)
-        quote = self.get_super_quote(from_token=from_token, to_token=to_token, amount_in=amount)
+        quote = self.get_super_quote(from_token=from_token, to_token=to_token, amount=amount)
         return self.swap_from_quote(quote=quote, slippage=slippage)
 
-    def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperswapQuote:
-        q, amount_in_wei = None, from_token.to_wei(amount_in)
+    def get_super_quote(self, from_token: Token, to_token: Token, amount: float) -> SuperswapQuote:
+        q, amount_in_wei = None, from_token.to_wei(amount)
         with get_chain_from_token(from_token) as from_chain, get_chain_from_token(to_token) as to_chain:
             from_bridge_token, to_bridge_token = from_chain.get_bridge_token(), to_chain.get_bridge_token()
 
@@ -288,11 +288,11 @@ class AsyncSuperswap(SuperswapCommon):
 
     async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None) -> str:
         self.check_chain_support(from_token, to_token)
-        quote = await self.get_super_quote(from_token=from_token, to_token=to_token, amount_in=amount)
+        quote = await self.get_super_quote(from_token=from_token, to_token=to_token, amount=amount)
         return await self.swap_from_quote(quote=quote, slippage=slippage)
 
-    async def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperswapQuote:
-        q, amount_in_wei = None, from_token.to_wei(amount_in)
+    async def get_super_quote(self, from_token: Token, to_token: Token, amount: float) -> SuperswapQuote:
+        q, amount_in_wei = None, from_token.to_wei(amount)
         async with get_async_chain_from_token(from_token) as from_chain, get_async_chain_from_token(to_token) as to_chain:
             from_bridge_token, to_bridge_token = await from_chain.get_bridge_token(), await to_chain.get_bridge_token()
 

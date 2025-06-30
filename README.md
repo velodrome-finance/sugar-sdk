@@ -152,7 +152,7 @@ from sugar import AsyncSuperswap, AsyncOPChain, AsyncLiskChain
 
 # get a superswap quote to swap 20 velo to lsk
 superswap = AsyncSuperswap()
-quote = await superswap.get_super_quote(from_token=AsyncOPChain.velo, to_token=AsyncLiskChain.lsk, amount_in=20)
+quote = await superswap.get_super_quote(from_token=AsyncOPChain.velo, to_token=AsyncLiskChain.lsk, amount=20)
 # check quote.amount_out (in wei)
 tx = await superswap.swap_from_quote(quote)
 ```
