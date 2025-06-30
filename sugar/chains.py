@@ -100,7 +100,7 @@ class CommonChain:
         address = normalize_address(address)
         return next((t for t in tokens if t.token_address == address), None)
 
-    def _get_superswap_connector_token(self, tokens: List[Token]) -> Token:
+    def _get_bridge_token(self, tokens: List[Token]) -> Token:
         connector = next((t for t in tokens if t.token_address == self.settings.bridge_token_addr), None)
         if not connector: raise ValueError(f"Superswap bridge token not found on {self.name} chain.")
         return connector
@@ -323,7 +323,7 @@ class AsyncChain(CommonChain):
         return self.find_token_by_address(await self.get_all_tokens(), address)
 
     @require_async_context
-    async def get_superswap_connector_token(self) -> Token: return self._get_superswap_connector_token(await self.get_all_tokens())
+    async def get_bridge_token(self) -> Token: return self._get_bridge_token(await self.get_all_tokens())
 
     async def _get_prices(self, tokens: Tuple[Token]):
         async with self.web3.batch_requests() as batch:
@@ -664,7 +664,7 @@ class Chain(CommonChain):
         return self.find_token_by_address(self.get_all_tokens(), address)
 
     @require_context
-    def get_superswap_connector_token(self) -> Token: return self._get_superswap_connector_token(self.get_all_tokens())
+    def get_bridge_token(self) -> Token: return self._get_bridge_token(self.get_all_tokens())
 
     def _get_prices(self, tokens: Tuple[Token]) -> List[int]:
         # token_address => normalized rate

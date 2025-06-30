@@ -208,7 +208,7 @@ class Superswap(SuperswapCommon):
     def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperswapQuote:
         q, amount_in_wei = None, from_token.to_wei(amount_in)
         with get_chain_from_token(from_token) as from_chain, get_chain_from_token(to_token) as to_chain:
-            from_bridge_token, to_bridge_token = from_chain.get_superswap_connector_token(), to_chain.get_superswap_connector_token()
+            from_bridge_token, to_bridge_token = from_chain.get_bridge_token(), to_chain.get_bridge_token()
 
             # are we bridging?
             if from_token == from_bridge_token and to_token == to_bridge_token:
@@ -294,7 +294,7 @@ class AsyncSuperswap(SuperswapCommon):
     async def get_super_quote(self, from_token: Token, to_token: Token, amount_in: float) -> SuperswapQuote:
         q, amount_in_wei = None, from_token.to_wei(amount_in)
         async with get_async_chain_from_token(from_token) as from_chain, get_async_chain_from_token(to_token) as to_chain:
-            from_bridge_token, to_bridge_token = await from_chain.get_superswap_connector_token(), await to_chain.get_superswap_connector_token()
+            from_bridge_token, to_bridge_token = await from_chain.get_bridge_token(), await to_chain.get_bridge_token()
 
             # are we bridging?
             if from_token == from_bridge_token and to_token == to_bridge_token:
