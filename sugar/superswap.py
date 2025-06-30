@@ -203,9 +203,12 @@ class Superswap(SuperswapCommon):
     def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None) -> str:
         self.check_chain_support(from_token, to_token)
         quote = self.get_super_quote(from_token=from_token, to_token=to_token, amount=amount)
+
+        if not quote: raise ValueError(f"No quote found for {from_token} -> {to_token}")
+
         return self.swap_from_quote(quote=quote, slippage=slippage)
 
-    def get_super_quote(self, from_token: Token, to_token: Token, amount: float) -> SuperswapQuote:
+    def get_super_quote(self, from_token: Token, to_token: Token, amount: float) -> Optional[SuperswapQuote]:
         q, amount_in_wei = None, from_token.to_wei(amount)
         with get_chain_from_token(from_token) as from_chain, get_chain_from_token(to_token) as to_chain:
             from_bridge_token, to_bridge_token = from_chain.get_bridge_token(), to_chain.get_bridge_token()
@@ -218,13 +221,13 @@ class Superswap(SuperswapCommon):
                 # we only need origin quote if we don't start with bridge token
                 if from_token != from_bridge_token:
                     o_q = from_chain.get_quote(from_token, from_bridge_token, amount_wei=amount_in_wei)
-                    assert o_q is not None, "No origin quote found"
+                    if o_q is None: return None
 
                 # we need destination quote if we don't end with oUSDT
                 if to_token != to_bridge_token:
                     b_a = SuperswapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, amount_in_wei, o_q)
                     d_q = to_chain.get_quote(to_bridge_token, to_token, amount_wei=b_a)
-                    assert d_q is not None, "No destination quote found"
+                    if d_q is None: return None
 
                 q = SuperswapQuote(from_token=from_token,to_token=to_token, from_bridge_token=from_bridge_token, to_bridge_token=to_bridge_token,
                     amount_in=amount_in_wei, origin_quote=o_q, destination_quote=d_q)
@@ -289,9 +292,12 @@ class AsyncSuperswap(SuperswapCommon):
     async def swap(self, from_token: Token, to_token: Token, amount: float, slippage: Optional[float] = None) -> str:
         self.check_chain_support(from_token, to_token)
         quote = await self.get_super_quote(from_token=from_token, to_token=to_token, amount=amount)
+
+        if not quote: raise ValueError(f"No quote found for {from_token} -> {to_token}")
+
         return await self.swap_from_quote(quote=quote, slippage=slippage)
 
-    async def get_super_quote(self, from_token: Token, to_token: Token, amount: float) -> SuperswapQuote:
+    async def get_super_quote(self, from_token: Token, to_token: Token, amount: float) -> Optional[SuperswapQuote]:
         q, amount_in_wei = None, from_token.to_wei(amount)
         async with get_async_chain_from_token(from_token) as from_chain, get_async_chain_from_token(to_token) as to_chain:
             from_bridge_token, to_bridge_token = await from_chain.get_bridge_token(), await to_chain.get_bridge_token()
@@ -304,13 +310,13 @@ class AsyncSuperswap(SuperswapCommon):
                 # we only need origin quote if we don't start with bridge token
                 if from_token != from_bridge_token:
                     o_q = await from_chain.get_quote(from_token, from_bridge_token, amount_wei=amount_in_wei)
-                    assert o_q is not None, "No origin quote found"
+                    if o_q is None: return None
 
                 # we need destination quote if we don't end with bridge token
                 if to_token != to_bridge_token:
                     b_a = SuperswapQuote.calc_bridged_amount(from_token, to_token, from_bridge_token, amount_in_wei, o_q)
                     d_q = await to_chain.get_quote(to_bridge_token, to_token, amount_wei=b_a)
-                    assert d_q is not None, "No destination quote found"
+                    if d_q is None: return None
 
                 q = SuperswapQuote(from_token=from_token, to_token=to_token, from_bridge_token=from_bridge_token, to_bridge_token=to_bridge_token,
                     amount_in=amount_in_wei, origin_quote=o_q, destination_quote=d_q)
