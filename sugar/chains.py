@@ -236,9 +236,9 @@ class AsyncChain(CommonChain):
         return sum(await asyncio.gather(*[process_batch(batch) for batch in self.get_pool_paginator()]), [])
     
     @require_async_context
-    async def get_bridge_fee(self, target_chain_id: int) -> int:
+    async def get_bridge_fee(self, domain: int) -> int:
         contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_get_fee_abi)
-        return await contract.functions.quoteGasPayment(target_chain_id).call()
+        return await contract.functions.quoteGasPayment(domain).call()
 
     @require_async_context
     async def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount_wei: int, domain: int):
@@ -564,9 +564,9 @@ class Chain(CommonChain):
         return results
 
     @require_context
-    def get_bridge_fee(self, target_chain_id: int) -> int:
+    def get_bridge_fee(self, domain: int) -> int:
         contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_get_fee_abi)
-        return contract.functions.quoteGasPayment(target_chain_id).call()
+        return contract.functions.quoteGasPayment(domain).call()
     
     @require_context
     def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount_wei: int, domain: int):
