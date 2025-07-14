@@ -67,7 +67,7 @@ ABI_DEFINITION = {
         "address",
         "uint256",
         "uint256",
-        "(address,address,bool)[]",
+        "bytes",
         "bool",
         "bool"  # isUni
     ],
