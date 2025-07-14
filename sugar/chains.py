@@ -23,7 +23,7 @@ from .config import ChainSettings, make_op_chain_settings, make_base_chain_setti
 from .config import XCHAIN_GAS_LIMIT_UPPERBOUND
 from .helpers import normalize_address, MAX_UINT256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
 from .helpers import find_all_paths, time_it, atime_it, to_bytes32
-from .abi import get_abi, bridge_transfer_from_abi, bridge_get_fee_abi
+from .abi import get_abi, bridge_transfer_remote_abi, bridge_get_fee_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
 from .price import Price
@@ -245,7 +245,7 @@ class AsyncChain(CommonChain):
         # XX: marking this API as "internal" for now
         # TODO: remove destination_domain when get domain API stabilizes
         fee = await self.get_bridge_fee(domain)
-        c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_from_abi)
+        c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_remote_abi)
         await self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount_wei)
         return await self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount_wei), value=fee)
     
@@ -573,7 +573,7 @@ class Chain(CommonChain):
         # XX: marking this API as "internal" for now
         # TODO: remove destination_domain when get domain API stabilizes
         fee = self.get_bridge_fee(domain)
-        c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_from_abi)
+        c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_remote_abi)
         self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount_wei)
         return self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount_wei), value=fee)
 
