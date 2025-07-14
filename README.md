@@ -258,6 +258,7 @@ Etherscan](https://optimistic.etherscan.io/).
 - keep an eye on the latest sugar contract deployment for your favorite
   chain
   [here](https://github.com/velodrome-finance/sugar/tree/main/deployments)
+- latest universal router contract (referred to as "swapper" in this sdk) deployment can be found [here](https://github.com/velodrome-finance/universal-router/tree/main/deployment-addresses)
 
 ## Chores and random release related gymnastics
 
