@@ -18,7 +18,7 @@ from typing import List, Any, Tuple, Optional
 from eth_abi import encode
 from eth_abi.packed import encode_packed
 from web3 import Web3
-from .abi import get_abi
+from .abi import get_abi, erc20_abi
 
 
 # %% ../src/swap.ipynb 4
@@ -93,7 +93,7 @@ ABI_DEFINITION = {
         "uint256"
     ],
     CommandType.TRANSFER_FROM: [
-        "address",  # sender
+        "address",  # token
         "address",  # recipient
         "uint256"   # amount
     ],
@@ -345,37 +345,22 @@ def build_super_swap_data(i: SuperSwapDataInput) -> SuperSwapData:
         ABI_DEFINITION[CommandType.TRANSFER_FROM],
         [i.to_bridge_token.token_address, account, CONTRACT_BALANCE]
     )
-    subplan_abi = ["bytes", "bytes[]"]
-
     destination_inputs = [
-        encode(subplan_abi, [swap_subplan_cmds, [destination_transfer_args] + destination_chain_swap_plan.inputs]),
-        encode(subplan_abi, [fallback_transfer_cmd, [fallback_transfer_args]]),
+        encode(ABI_DEFINITION[CommandType.EXECUTE_SUB_PLAN], [swap_subplan_cmds, [destination_transfer_args] + destination_chain_swap_plan.inputs]),
+        encode(ABI_DEFINITION[CommandType.EXECUTE_SUB_PLAN], [fallback_transfer_cmd, [fallback_transfer_args]]),
     ] if swap_subplan_cmds else None
 
-    # Encode Sub Plan commands
-    destination_cmds = encode_packed(
-        ["bytes", "bytes"],
-        [
-            bytes([CommandType.EXECUTE_SUB_PLAN | FLAG_ALLOW_REVERT]), 
-            bytes([CommandType.EXECUTE_SUB_PLAN | FLAG_ALLOW_REVERT])
-        ]
-    )
-
-    erc20_abi = [
-        {
-            "name": "approve",
-            "type": "function",
-            "inputs": [
-                {"name": "spender", "type": "address"},
-                {"name": "amount", "type": "uint256"}
-            ],
-            "outputs": [{"name": "", "type": "bool"}]
-        }
-    ]
-    
     calls = []
 
     if destination_inputs:
+        # Encode Sub Plan commands
+        destination_cmds = encode_packed(
+            ["bytes", "bytes"],
+            [
+                bytes([CommandType.EXECUTE_SUB_PLAN | FLAG_ALLOW_REVERT]), 
+                bytes([CommandType.EXECUTE_SUB_PLAN | FLAG_ALLOW_REVERT])
+            ]
+        )
         # ICA approves router to withdraw a very high amount
         calls.append(ICACallData(
             to=to_bytes32_str(i.to_bridge_token.token_address),

@@ -223,7 +223,7 @@ class Superswap(SuperswapCommon):
                     o_q = from_chain.get_quote(from_token, from_bridge_token, amount=amount)
                     if o_q is None: return None
 
-                # we need destination quote if we don't end with oUSDT
+                # we need destination quote if we don't end with bridge token
                 if to_token != to_bridge_token:
                     b_a = SuperswapQuote.calc_bridged_amount(from_token, from_bridge_token, amount, o_q)
                     d_q = to_chain.get_quote(to_bridge_token, to_token, amount=b_a)
@@ -249,8 +249,9 @@ class Superswap(SuperswapCommon):
             origin_domain = get_domain(int(from_chain.chain_id))
             destination_domain = get_domain(int(to_chain.chain_id))
             user_ica_address= from_chain.get_remote_interchain_account(destination_domain)
-            bridge_fee = from_chain.get_bridge_fee(int(to_chain.chain_id))
-            xchain_fee = from_chain.get_xchain_fee(destination_domain)            
+            # TODO: switch to get_bridge_fee without explicit domain ID when all chains support domains
+            bridge_fee = from_chain.get_bridge_fee(destination_domain)
+            xchain_fee = from_chain.get_xchain_fee(destination_domain) if quote.to_token != quote.to_bridge_token else 0           
             total_fee = bridge_fee + xchain_fee if quote.to_token.token_address != quote.to_bridge_token.token_address else bridge_fee 
 
             cmds, inputs, swap_data = self.prepare_super_swap(
@@ -339,8 +340,9 @@ class AsyncSuperswap(SuperswapCommon):
             origin_domain = await get_domain_async(int(from_chain.chain_id))
             destination_domain = await get_domain_async(int(to_chain.chain_id))
             user_ica_address = await from_chain.get_remote_interchain_account(destination_domain)
-            bridge_fee = await from_chain.get_bridge_fee(int(to_chain.chain_id))
-            xchain_fee = await from_chain.get_xchain_fee(destination_domain)            
+            # TODO: switch to get_bridge_fee without explicit domain ID when all chains support domains
+            bridge_fee = await from_chain.get_bridge_fee(destination_domain)
+            xchain_fee = await from_chain.get_xchain_fee(destination_domain) if quote.to_token != quote.to_bridge_token else 0
             total_fee = bridge_fee + xchain_fee if quote.to_token.token_address != quote.to_bridge_token.token_address else bridge_fee 
 
             cmds, inputs, swap_data = self.prepare_super_swap(
