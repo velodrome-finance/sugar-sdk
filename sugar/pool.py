@@ -29,18 +29,23 @@ class Price:
 @dataclass(frozen=True)
 class Amount:
     token: Token
-    amount: float
+    amount: int
     price: "Price"
 
     @classmethod
-    def build(cls, address: str, amount: float, tokens: Dict[str, Token], prices: Dict[str, "Price"]) -> "Amount":
+    def build(cls, address: str, amount: int, tokens: Dict[str, Token], prices: Dict[str, "Price"]) -> "Amount":
         address = normalize_address(address)
         if address not in tokens or address not in prices: return None
         token = tokens[address]
-        return Amount(token=token, amount=token.value_from_bigint(amount), price=prices[address])
+        return Amount(token=token, amount=amount, price=prices[address])
 
     @property
-    def amount_in_stable(self) -> float: return self.amount * self.price.price
+    def as_float(self) -> float:
+        """Returns the amount converted from wei/kwei/gwei/mwei to float on the token's decimals."""
+        return self.token.to_float(self.amount)
+
+    @property
+    def amount_in_stable(self) -> float: return self.as_float * self.price.price
 
 
 # %% ../src/pool.ipynb 6
@@ -254,9 +259,11 @@ class LiquidityPoolEpoch:
 
     @property
     def total_fees(self) -> float:
+        """Returns the total fees in USD"""
         return sum([fee.amount_in_stable for fee in self.fees]) if self.fees else 0
     @property
     def total_incentives(self) -> float:
+        """Returns the total incentives in USD"""
         return sum([incentive.amount_in_stable for incentive in self.incentives]) if self.incentives else 0
 
     @property

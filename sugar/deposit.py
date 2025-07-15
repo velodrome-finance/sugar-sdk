@@ -14,4 +14,4 @@ class Deposit:
     # pool to deposit into
     pool: LiquidityPool
     # amount of token0 for deposit
-    amount_token0: float
+    amount_token0: int
