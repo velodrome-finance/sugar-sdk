@@ -29,18 +29,23 @@ class Price:
 @dataclass(frozen=True)
 class Amount:
     token: Token
-    amount: float
+    amount: int
     price: "Price"
 
     @classmethod
-    def build(cls, address: str, amount: float, tokens: Dict[str, Token], prices: Dict[str, "Price"]) -> "Amount":
+    def build(cls, address: str, amount: int, tokens: Dict[str, Token], prices: Dict[str, "Price"]) -> "Amount":
         address = normalize_address(address)
         if address not in tokens or address not in prices: return None
         token = tokens[address]
-        return Amount(token=token, amount=token.value_from_bigint(amount), price=prices[address])
+        return Amount(token=token, amount=amount, price=prices[address])
 
     @property
-    def amount_in_stable(self) -> float: return self.amount * self.price.price
+    def friendly_amount(self) -> str:
+        """Returns the amount in a human-readable format"""
+        return self.token.to_decimal(self.amount)
+
+    @property
+    def amount_in_stable(self) -> float: return self.friendly_amount * self.price.price
 
 
 # %% ../src/pool.ipynb 6
