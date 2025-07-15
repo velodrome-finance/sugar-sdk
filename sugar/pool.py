@@ -40,12 +40,12 @@ class Amount:
         return Amount(token=token, amount=amount, price=prices[address])
 
     @property
-    def friendly_amount(self) -> str:
-        """Returns the amount in a human-readable format"""
+    def as_float(self) -> float:
+        """Returns the amount converted from wei/kwei/gwei/mwei to float on the token's decimals."""
         return self.token.to_float(self.amount)
 
     @property
-    def amount_in_stable(self) -> float: return self.friendly_amount * self.price.price
+    def amount_in_stable(self) -> float: return self.as_float * self.price.price
 
 
 # %% ../src/pool.ipynb 6
