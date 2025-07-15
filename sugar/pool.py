@@ -42,7 +42,7 @@ class Amount:
     @property
     def friendly_amount(self) -> str:
         """Returns the amount in a human-readable format"""
-        return self.token.to_decimal(self.amount)
+        return self.token.to_float(self.amount)
 
     @property
     def amount_in_stable(self) -> float: return self.friendly_amount * self.price.price
@@ -259,9 +259,11 @@ class LiquidityPoolEpoch:
 
     @property
     def total_fees(self) -> float:
+        """Returns the total fees in USD"""
         return sum([fee.amount_in_stable for fee in self.fees]) if self.fees else 0
     @property
     def total_incentives(self) -> float:
+        """Returns the total incentives in USD"""
         return sum([incentive.amount_in_stable for incentive in self.incentives]) if self.incentives else 0
 
     @property
