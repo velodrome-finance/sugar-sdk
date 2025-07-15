@@ -243,7 +243,7 @@ class AsyncChain(CommonChain):
     @require_async_context
     async def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount: int, domain: int):
         # XX: marking this API as "internal" for now
-        # TODO: remove destination_domain when get domain API stabilizes
+        # TODO: remove destination_domain when get domain API stabilizes and use destination_token instead
         c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_remote_abi)
         await self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount)
         return await self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount), value=await self.get_bridge_fee(domain))
@@ -567,7 +567,7 @@ class Chain(CommonChain):
     @require_context
     def _internal_bridge_token(self, from_token: Token, destination_token: Token, amount: int, domain: int):
         # XX: marking this API as "internal" for now
-        # TODO: remove destination_domain when get domain API stabilizes
+        # TODO: remove destination_domain when get domain API stabilizes and use destination_token instead
         c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_transfer_remote_abi)
         self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount)
         return self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount), value=self.get_bridge_fee(domain))
