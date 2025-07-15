@@ -302,6 +302,6 @@ d = { 'settings': { 'branch': 'main',
                              'sugar.token.Token.from_tuple': ('token.html#token.from_tuple', 'sugar/token.py'),
                              'sugar.token.Token.is_native': ('token.html#token.is_native', 'sugar/token.py'),
                              'sugar.token.Token.make_native_token': ('token.html#token.make_native_token', 'sugar/token.py'),
-                             'sugar.token.Token.to_decimal': ('token.html#token.to_decimal', 'sugar/token.py'),
-                             'sugar.token.Token.to_wei': ('token.html#token.to_wei', 'sugar/token.py'),
+                             'sugar.token.Token.parse_units': ('token.html#token.parse_units', 'sugar/token.py'),
+                             'sugar.token.Token.to_float': ('token.html#token.to_float', 'sugar/token.py'),
                              'sugar.token.Token.value_from_bigint': ('token.html#token.value_from_bigint', 'sugar/token.py')}}}

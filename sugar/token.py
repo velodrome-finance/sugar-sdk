@@ -27,12 +27,12 @@ class Token:
         t1, t2 = normalize_address(self.wrapped_token_address or self.token_address), normalize_address(other.wrapped_token_address or other.token_address)
         return  t1 == t2 and self.chain_id == other.chain_id
 
-    def to_wei(self, value: float) -> int:
-        """Convert a value to wei based on the token's decimals."""
+    def parse_units(self, value: float) -> int:
+        """Convert a value to wei/kwei/gwei/mwei based on the token's decimals."""
         return float_to_uint256(value=value, decimals=self.decimals)
 
-    def to_decimal(self, value: int) -> float:
-        """Convert a value from wei to decimal based on the token's decimals."""
+    def to_float(self, value: int) -> float:
+        """Convert a value from wei/kwei/gwei/mwei to decimal based on the token's decimals."""
         return float(value / 10 ** self.decimals)
 
     @property
