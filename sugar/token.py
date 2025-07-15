@@ -38,8 +38,6 @@ class Token:
     @property
     def is_native(self) -> bool: return self.wrapped_token_address is not None
 
-    def value_from_bigint(self, value: float) -> float: return value / 10**self.decimals
-
     @classmethod
     def make_native_token(cls, symbol: str, wrapped_address: str, decimals: int, chain_id: str, chain_name: str) -> "Token":
         return Token(chain_id=chain_id, chain_name=chain_name, token_address=symbol, symbol=symbol, decimals=decimals, listed=True, wrapped_token_address=wrapped_address)
