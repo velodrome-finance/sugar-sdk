@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TokenBalance:
     """Token balance configuration"""
-    token: str; address: str; amount: str
+    token: str  # Token name/symbol
+    address: str  # Token contract address
+    amount: int  # Amount in wei as integer
 
 @dataclass
 class ChainConfig:
@@ -28,44 +30,29 @@ class ChainConfig:
     balance: List[TokenBalance]
 
 @dataclass
-class WalletConfig:
-    """Wallet configuration"""
-    pk: str  # Private key
-
-@dataclass
 class Honey:
     """Main configuration class"""
-    description: str
-    wallet: WalletConfig
+    wallet: str  # Private key directly
     chains: List[ChainConfig]
-
-def load_honey_config(config_path: str = "honey.yaml") -> Honey:
-    """Load configuration from honey.yaml"""
-    try:
+    
+    @staticmethod
+    def from_config(config_path: str = "honey.yaml") -> 'Honey':
+        """Load configuration from honey.yaml"""
+        
         with open(config_path, 'r') as f:
             data = yaml.safe_load(f)
-        
-        honey_data = data['Honey']
-        
         # Parse the list structure in honey.yaml
-        description = ""
-        wallet_config = None
-        chains_list = []
-        
+        honey_data, wallet_pk, chains_list = data['Honey'], None, []
+
         for item in honey_data:
             if isinstance(item, dict):
-                # Check for description
-                if 'description' in item:
-                    description = item['description']
-                
                 # Check for wallet config
-                elif 'wallet' in item:
+                if 'wallet' in item:
                     wallet_list = item['wallet']
-                    wallet_dict = {}
                     for wallet_item in wallet_list:
-                        if isinstance(wallet_item, dict):
-                            wallet_dict.update(wallet_item)
-                    wallet_config = WalletConfig(pk=wallet_dict['pk'])
+                        if isinstance(wallet_item, dict) and 'pk' in wallet_item:
+                            wallet_pk = wallet_item['pk']
+                            break
                 
                 # Check for chains config
                 elif 'chains' in item:
@@ -79,7 +66,7 @@ def load_honey_config(config_path: str = "honey.yaml") -> Honey:
                                         balance_list.append(TokenBalance(
                                             token=balance_item['token'],
                                             address=balance_item['address'],
-                                            amount=balance_item['amount']
+                                            amount=int(balance_item['amount'])  # Convert to int
                                         ))
                             
                             chains_list.append(ChainConfig(
@@ -88,18 +75,16 @@ def load_honey_config(config_path: str = "honey.yaml") -> Honey:
                                 balance=balance_list
                             ))
         
-        if not wallet_config:
-            raise ValueError("No wallet configuration found in honey.yaml")
+        if not wallet_pk:
+            raise ValueError("No wallet private key found in honey.yaml")
         
         honey_config = Honey(
-            description=description,
-            wallet=wallet_config,
+            wallet=wallet_pk,
             chains=chains_list
         )
         
         logger.info("🍭 Loaded Honey configuration:")
-        logger.info(f"  Description: {honey_config.description}")
-        logger.info(f"  Wallet: {honey_config.wallet.pk[:10]}...")
+        logger.info(f"  Wallet: {honey_config.wallet[:10]}...")
         logger.info(f"  Chains: {len(honey_config.chains)} configured")
         for chain in honey_config.chains:
             logger.info(f"    {chain.name} (ID: {chain.id}) - {len(chain.balance)} token balances")
@@ -107,16 +92,12 @@ def load_honey_config(config_path: str = "honey.yaml") -> Honey:
                 logger.info(f"      {balance.token} ({balance.address[:10]}...): {balance.amount}")
         
         return honey_config
-        
-    except Exception as e:
-        logger.error(f"Failed to load honey.yaml: {e}")
-        raise
 
 # supported chains: op, base, lisk, uni
 
 # Load configuration from honey.yaml (mandatory)
-honey_config = load_honey_config()
-PREDEFINED_PRIVATE_KEY = honey_config.wallet.pk
+honey_config = Honey.from_config()
+PREDEFINED_PRIVATE_KEY = honey_config.wallet
 starting_port = 4444
 
 # Build chains configuration from honey.yaml
@@ -152,13 +133,13 @@ def create_wallet() -> Tuple[str, str]:
         # Derive address from private key
         result = subprocess.run([
             "cast", "wallet", "address", 
-            "--private-key", honey_config.wallet.pk
+            "--private-key", honey_config.wallet
         ], capture_output=True, text=True)
         
         if result.returncode == 0:
             address = result.stdout.strip()
             logger.info(f"Using wallet from honey config: {address}")
-            return address, honey_config.wallet.pk
+            return address, honey_config.wallet
         else:
             logger.error(f"Failed to derive address from honey config private key: {result.stderr}")
             raise Exception("Failed to create wallet from honey config")
@@ -343,7 +324,7 @@ if __name__ == "__main__":
             token_requests.append({
                 "token": balance.address,  # Using address as token identifier
                 "chain": chain_config.name,
-                "amount": balance.amount  # Use raw amount from config
+                "amount": str(balance.amount)  # Convert int to string for subprocess
             })
     
     if token_requests:
