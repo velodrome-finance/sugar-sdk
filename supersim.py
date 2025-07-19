@@ -18,8 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TokenBalance:
     """Token balance configuration"""
-    token: str  # Token contract address
-    amount: str  # Amount in wei as string
+    token: str; address: str; amount: str
 
 @dataclass
 class ChainConfig:
@@ -79,6 +78,7 @@ def load_honey_config(config_path: str = "honey.yaml") -> Honey:
                                     if isinstance(balance_item, dict):
                                         balance_list.append(TokenBalance(
                                             token=balance_item['token'],
+                                            address=balance_item['address'],
                                             amount=balance_item['amount']
                                         ))
                             
@@ -104,7 +104,7 @@ def load_honey_config(config_path: str = "honey.yaml") -> Honey:
         for chain in honey_config.chains:
             logger.info(f"    {chain.name} (ID: {chain.id}) - {len(chain.balance)} token balances")
             for balance in chain.balance:
-                logger.info(f"      Token: {balance.token[:10]}... Amount: {balance.amount}")
+                logger.info(f"      {balance.token} ({balance.address[:10]}...): {balance.amount}")
         
         return honey_config
         
@@ -114,44 +114,17 @@ def load_honey_config(config_path: str = "honey.yaml") -> Honey:
 
 # supported chains: op, base, lisk, uni
 
-# Load configuration from honey.yaml
-try:
-    honey_config = load_honey_config()
-    PREDEFINED_PRIVATE_KEY = honey_config.wallet.pk
-except Exception as e:
-    logger.warning(f"Failed to load honey.yaml, using defaults: {e}")
-    PREDEFINED_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-    honey_config = None
+# Load configuration from honey.yaml (mandatory)
+honey_config = load_honey_config()
+PREDEFINED_PRIVATE_KEY = honey_config.wallet.pk
 starting_port = 4444
 
-# Build chains configuration from honey.yaml or fallback to defaults
-if honey_config:
-    chains = [{"name": chain.name, "id": chain.id, "port": starting_port + i} 
-              for i, chain in enumerate(honey_config.chains)]
-else:
-    # Fallback to default chains if honey.yaml failed to load
-    chains = [chain | { "port": starting_port + i } for i, chain in enumerate([
-        { "name": "OP", "id": "10" },
-        { "name": "Unichain", "id": "130" },
-        { "name": "Lisk", "id": "1135" },
-        { "name": "Base", "id": "8453"}
-    ])]
+# Build chains configuration from honey.yaml
+chains = [{"name": chain.name, "id": chain.id, "port": starting_port + i} 
+          for i, chain in enumerate(honey_config.chains)]
 
-# Token configurations
-TOKENS = {
-    "VELO": {
-        "address": "0x9560e827af36c94d2ac33a39bce1fe78631088db",
-        "symbol": "VELO",
-        "large_holder": "0xF977814e90dA44bFA03b6295A0616a897441aceC",
-        "chains": ["OP"]  # VELO is native to OP
-    },
-    "USDC": {
-        "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-        "symbol": "USDC",
-        "large_holder": "0xF977814e90dA44bFA03b6295A0616a897441aceC",  # Same large holder often has many tokens
-        "chains": ["OP"]  # Native USDC on OP
-    }
-}
+# Default large holder for token transfers
+DEFAULT_LARGE_HOLDER = "0xF977814e90dA44bFA03b6295A0616a897441aceC"
 
 
 def check_supersim_ready(timeout_seconds=60):
@@ -173,8 +146,8 @@ def check_supersim_ready(timeout_seconds=60):
         time.sleep(2)
     return False
 
-def create_wallet() -> Tuple[Optional[str], Optional[str]]:
-    """Create or load a wallet and return address and private key"""
+def create_wallet() -> Tuple[str, str]:
+    """Load wallet from honey config and return address and private key"""
     try:
         # Derive address from private key
         result = subprocess.run([
@@ -184,12 +157,14 @@ def create_wallet() -> Tuple[Optional[str], Optional[str]]:
         
         if result.returncode == 0:
             address = result.stdout.strip()
-            logger.info(f"Using predefined wallet: {address}")
+            logger.info(f"Using wallet from honey config: {address}")
             return address, honey_config.wallet.pk
         else:
-            logger.error(f"Failed to derive address from predefined private key: {result.stderr}")
+            logger.error(f"Failed to derive address from honey config private key: {result.stderr}")
+            raise Exception("Failed to create wallet from honey config")
     except Exception as e:
-        logger.error(f"Error using predefined private key: {e}")
+        logger.error(f"Error using honey config private key: {e}")
+        raise
     
 def check_balance(address, chain_port):
     """Check ETH balance for an address on a specific chain"""
@@ -230,43 +205,6 @@ def check_token_balance(wallet_address: str, chain_port: int, token_address: str
         logger.error(f"Error checking token balance for {token_address} on port {chain_port}: {e}")
         return 0
 
-def add_tokens(wallet_address: str, chain_port: int, token_symbol: str, amount: int) -> bool:
-    """Add tokens to wallet by impersonating a large holder"""
-    if token_symbol not in TOKENS:
-        logger.error(f"Unknown token: {token_symbol}")
-        return False
-    
-    token_config = TOKENS[token_symbol]
-    token_address = token_config["address"]
-    large_holder = token_config["large_holder"]
-    
-    try:
-        # Impersonate the large holder
-        impersonate_result = subprocess.run([
-            "cast", "rpc", "anvil_impersonateAccount", large_holder,
-            "--rpc-url", f"http://localhost:{chain_port}"
-        ], capture_output=True, text=True)
-        
-        if impersonate_result.returncode != 0:
-            logger.error(f"Failed to impersonate account on port {chain_port}: {impersonate_result.stderr}")
-            return False
-        
-        # Transfer tokens
-        transfer_result = subprocess.run([
-            "cast", "send", token_address,
-            "transfer(address,uint256)", wallet_address, str(amount),
-            "--rpc-url", f"http://localhost:{chain_port}",
-            "--from", large_holder, "--unlocked"
-        ], capture_output=True, text=True)
-        
-        if transfer_result.returncode == 0:
-            return True
-        else:
-            logger.error(f"Failed to transfer {token_symbol} on port {chain_port}: {transfer_result.stderr}")
-            return False
-    except Exception as e:
-        logger.error(f"Error adding {token_symbol} tokens on port {chain_port}: {e}")
-        return False
 
 def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
     """Add multiple tokens to wallet using token addresses directly
@@ -287,8 +225,8 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
             logger.error(f"Unknown chain: {chain_name}")
             continue
         
-        # Use a default large holder (could be enhanced to look up by token)
-        large_holder = "0xF977814e90dA44bFA03b6295A0616a897441aceC"
+        # Use the default large holder
+        large_holder = DEFAULT_LARGE_HOLDER
         
         try:
             # Impersonate the large holder
@@ -316,40 +254,6 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
         except Exception as e:
             logger.error(f"Error adding tokens on {chain_name}: {e}")
 
-def add_tokens_to_wallet(wallet_address: str, token_requests: list) -> None:
-    """Add multiple tokens to wallet based on requests
-    
-    Args:
-        wallet_address: The wallet to fund
-        token_requests: List of dicts with 'token', 'chain', 'amount' keys
-        Example: [{"token": "VELO", "chain": "OP", "amount": "10000000000000000000"}]
-    """
-    for request in token_requests:
-        token_symbol = request["token"]
-        chain_name = request["chain"]
-        amount = int(request["amount"])  # Convert to int for raw amount
-        
-        # Find the chain port
-        chain = next((c for c in chains if c['name'] == chain_name), None)
-        if not chain:
-            logger.error(f"Unknown chain: {chain_name}")
-            continue
-            
-        # Check if token is available on this chain
-        if token_symbol not in TOKENS:
-            logger.error(f"Unknown token: {token_symbol}")
-            continue
-            
-        if chain_name not in TOKENS[token_symbol]["chains"]:
-            logger.warning(f"{token_symbol} not available on {chain_name}")
-            continue
-        
-        logger.info(f"Adding {amount} wei {token_symbol} tokens on {chain_name}...")
-        success = add_tokens(wallet_address, chain['port'], token_symbol, amount)
-        if success:
-            logger.info(f"  ✓ Successfully added {amount} wei {token_symbol} on {chain_name}")
-        else:
-            logger.warning(f"  ✗ Failed to add {token_symbol} on {chain_name}")
 
 def check_balances_all_chains(wallet_address: str) -> None:
     """Check ETH balances across all configured chains"""
@@ -364,29 +268,35 @@ def check_balances_all_chains(wallet_address: str) -> None:
 def check_token_balances_all_chains(wallet_address: str) -> None:
     """Check ETH and token balances across all configured chains"""
     logger.info("Checking balances across all chains:")
-    for chain in chains:
+    
+    for chain_config in honey_config.chains:
+        # Find the corresponding chain with port info
+        chain = next((c for c in chains if c['name'] == chain_config.name), None)
+        if not chain:
+            logger.warning(f"Chain {chain_config.name} not found in port configuration")
+            continue
+            
         # Check ETH balance
         eth_balance = check_balance(wallet_address, chain['port'])
         eth_str = f"{eth_balance} wei ETH" if eth_balance is not None else "Failed"
         
-        # Check token balances for tokens available on this chain
+        # Check token balances for tokens configured on this chain
         token_balances = []
-        for token_symbol, token_config in TOKENS.items():
-            if chain['name'] in token_config["chains"]:
-                token_balance = check_token_balance(
-                    wallet_address, 
-                    chain['port'], 
-                    token_config["address"]
-                )
-                if token_balance > 0:
-                    token_balances.append(f"{token_balance} wei {token_symbol}")
+        for token_config in chain_config.balance:
+            token_balance = check_token_balance(
+                wallet_address, 
+                chain['port'], 
+                token_config.address
+            )
+            if token_balance > 0:
+                token_balances.append(f"{token_balance} wei {token_config.token}")
         
         # Format output
         token_str = ""
         if token_balances:
             token_str = ", " + ", ".join(token_balances)
         
-        logger.info(f"  {chain['name']}: {eth_str}{token_str}")
+        logger.info(f"  {chain_config.name}: {eth_str}{token_str}")
 
 def run_supersim():
     logger.info("Starting supersim in background mode...")
@@ -415,48 +325,35 @@ if __name__ == "__main__":
     logger.info("Creating new wallet...")
     wallet_address, private_key = create_wallet()
     
-    if wallet_address and private_key:
-        logger.info(f"Wallet created: {wallet_address}")
-        
-        # Check initial balance on all chains
-        check_balances_all_chains(wallet_address)
-        
-        # Fund wallet with ETH for gas fees
-        # fund_wallet_all_chains(wallet_address)
-        
-        # Check balances after funding
-        check_balances_all_chains(wallet_address)
-        
-        # Add tokens to wallet based on honey config
-        if honey_config:
-            token_requests = []
-            for chain_config in honey_config.chains:
-                for balance in chain_config.balance:
-                    token_requests.append({
-                        "token": balance.token,  # Using address as token identifier
-                        "chain": chain_config.name,
-                        "amount": balance.amount  # Use raw amount from config
-                    })
-            
-            if token_requests:
-                logger.info("🍭 Adding tokens from honey.yaml configuration...")
-                add_tokens_by_address(wallet_address, token_requests)
-            else:
-                logger.info("🍭 No token balances configured in honey.yaml")
-        else:
-            # Fallback to hardcoded tokens if no honey config
-            token_requests = [
-                {"token": "VELO", "chain": "OP", "amount": "10000000000000000000"},
-                {"token": "USDC", "chain": "OP", "amount": "5000000000"}
-            ]
-            add_tokens_to_wallet(wallet_address, token_requests)
-
-        # Check final balances (ETH + tokens)
-        check_token_balances_all_chains(wallet_address)
+    logger.info(f"Wallet loaded: {wallet_address}")
+    
+    # Check initial balance on all chains
+    check_balances_all_chains(wallet_address)
+    
+    # Fund wallet with ETH for gas fees
+    # fund_wallet_all_chains(wallet_address)
+    
+    # Check balances after funding
+    check_balances_all_chains(wallet_address)
+    
+    # Add tokens to wallet from honey config
+    token_requests = []
+    for chain_config in honey_config.chains:
+        for balance in chain_config.balance:
+            token_requests.append({
+                "token": balance.address,  # Using address as token identifier
+                "chain": chain_config.name,
+                "amount": balance.amount  # Use raw amount from config
+            })
+    
+    if token_requests:
+        logger.info("🍭 Adding tokens from honey.yaml configuration...")
+        add_tokens_by_address(wallet_address, token_requests)
     else:
-        logger.error("Failed to create wallet")
-        process.terminate()
-        sys.exit(1)
+        logger.info("🍭 No token balances configured in honey.yaml")
+
+    # Check final balances (ETH + tokens)
+    check_token_balances_all_chains(wallet_address)
     
     try:
         process.wait()

@@ -1,15 +1,16 @@
 Honey:
   - description: "Configuration file for Honey testing helpers used by Sugar SDK."
   - wallet:
-      # preset from anvil
-      - pk: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+      - pk: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" # preset from anvil
   - chains:
       - name: "OP"
         id: "10"
         balance:
-          - token: "0x9560e827af36c94d2ac33a39bce1fe78631088db" # velo
+          - token: "velo"
+            address: "0x9560e827af36c94d2ac33a39bce1fe78631088db"
             amount: "1000000000000000000000"  # 1000 Velo
-          - token: "0x0b2c639c533813f4aa9d7837caf62653d097ff85" # usdc
+          - token: "usdc"
+            address: "0x0b2c639c533813f4aa9d7837caf62653d097ff85"
             amount: "1000000000"  # 1000 USDC
       # - name: "Unichain"
       #   id: "130"
