@@ -8,7 +8,9 @@ Honey:
         id: "10"
         balance:
           - token: "0x9560e827af36c94d2ac33a39bce1fe78631088db" # velo
-            amount: "10000000000000000000"  # 10 Velo in wei
+            amount: "1000000000000000000000"  # 1000 Velo
+          - token: "0x0b2c639c533813f4aa9d7837caf62653d097ff85" # usdc
+            amount: "1000000000"  # 1000 USDC
       # - name: "Unichain"
       #   id: "130"
       # - name: "Lisk"
