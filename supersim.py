@@ -82,6 +82,17 @@ def check_balance(address, chain_port):
         logger.error(f"Error checking balance on port {chain_port}: {e}")
         return None
 
+def check_balances_all_chains(wallet_address: str) -> None:
+    """Check ETH balances across all configured chains"""
+    logger.info("Checking ETH balances across all chains:")
+    for chain in chains:
+        balance = check_balance(wallet_address, chain['port'])
+        if balance is not None:
+            eth_balance = balance / 10**18  # Convert wei to ETH
+            logger.info(f"  {chain['name']}: {eth_balance:.6f} ETH")
+        else:
+            logger.warning(f"  {chain['name']}: Failed to check balance")
+
 def run_supersim():
     logger.info("Starting supersim in background mode...")
     process = subprocess.Popen([
@@ -113,14 +124,7 @@ if __name__ == "__main__":
         logger.info(f"Wallet created: {wallet_address}")
         
         # Check balance on all chains
-        logger.info("Checking ETH balances across all chains:")
-        for chain in chains:
-            balance = check_balance(wallet_address, chain['port'])
-            if balance is not None:
-                eth_balance = balance / 10**18  # Convert wei to ETH
-                logger.info(f"  {chain['name']}: {eth_balance:.6f} ETH")
-            else:
-                logger.warning(f"  {chain['name']}: Failed to check balance")
+        check_balances_all_chains(wallet_address)
     else:
         logger.error("Failed to create wallet")
         process.terminate()
