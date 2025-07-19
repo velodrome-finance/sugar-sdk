@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 # supported chains: op, base, lisk, uni
 
+# Configuration - set this to use a predefined wallet
+# If None, a new wallet will be generated each time
+PREDEFINED_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+
 starting_port = 4444
 chains = [chain | { "port": starting_port + i } for i, chain in enumerate([
     { "name": "OP", "id": "10" },
@@ -21,6 +25,25 @@ chains = [chain | { "port": starting_port + i } for i, chain in enumerate([
     { "name": "Lisk", "id": "1135" },
     { "name": "Base", "id": "8453"}
 ])]
+
+# Token configurations
+TOKENS = {
+    "VELO": {
+        "address": "0x9560e827af36c94d2ac33a39bce1fe78631088db",
+        "decimals": 18,
+        "symbol": "VELO",
+        "large_holder": "0xF977814e90dA44bFA03b6295A0616a897441aceC",
+        "chains": ["OP"]  # VELO is native to OP
+    },
+    "USDC": {
+        "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        "decimals": 6,
+        "symbol": "USDC",
+        "large_holder": "0xF977814e90dA44bFA03b6295A0616a897441aceC",  # Same large holder often has many tokens
+        "chains": ["OP"]  # Native USDC on OP
+    }
+}
+
 
 def check_supersim_ready(timeout_seconds=60):
     """Check if supersim is ready by calling a test contract"""
@@ -42,7 +65,26 @@ def check_supersim_ready(timeout_seconds=60):
     return False
 
 def create_wallet() -> Tuple[Optional[str], Optional[str]]:
-    """Create a new wallet and return address and private key"""
+    """Create or load a wallet and return address and private key"""
+    # Check if we have a predefined private key
+    if PREDEFINED_PRIVATE_KEY:
+        try:
+            # Derive address from private key
+            result = subprocess.run([
+                "cast", "wallet", "address", 
+                "--private-key", PREDEFINED_PRIVATE_KEY
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                address = result.stdout.strip()
+                logger.info(f"Using predefined wallet: {address}")
+                return address, PREDEFINED_PRIVATE_KEY
+            else:
+                logger.error(f"Failed to derive address from predefined private key: {result.stderr}")
+        except Exception as e:
+            logger.error(f"Error using predefined private key: {e}")
+    
+    # Generate new wallet if no predefined key or if predefined key failed
     try:
         result = subprocess.run(["cast", "wallet", "new"], capture_output=True, text=True)
         if result.returncode == 0:
@@ -57,6 +99,7 @@ def create_wallet() -> Tuple[Optional[str], Optional[str]]:
                     private_key = line.split(':', 1)[1].strip()
 
             if address and private_key:
+                logger.info(f"Generated new wallet: {address}")
                 return address, private_key
         
         logger.error(f"Failed to create wallet: {result.stderr}")
@@ -82,44 +125,11 @@ def check_balance(address, chain_port):
         logger.error(f"Error checking balance on port {chain_port}: {e}")
         return None
 
-def fund_wallet(wallet_address: str, chain_port: int) -> bool:
-    """Fund wallet with ETH from supersim's built-in faucet"""
-    try:
-        # Use supersim's built-in funding mechanism (sends from dev account)
-        result = subprocess.run([
-            "cast", "send", 
-            wallet_address,
-            "--value", "100ether",
-            "--rpc-url", f"http://localhost:{chain_port}",
-            "--private-key", "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"  # anvil test key
-        ], capture_output=True, text=True)
-        
-        if result.returncode == 0:
-            return True
-        else:
-            logger.error(f"Failed to fund wallet on port {chain_port}: {result.stderr}")
-            return False
-    except Exception as e:
-        logger.error(f"Error funding wallet on port {chain_port}: {e}")
-        return False
-
-def fund_wallet_all_chains(wallet_address: str) -> None:
-    """Fund wallet with ETH on all configured chains"""
-    logger.info("Funding wallet with ETH on all chains...")
-    for chain in chains:
-        logger.info(f"Funding wallet on {chain['name']}...")
-        success = fund_wallet(wallet_address, chain['port'])
-        if success:
-            logger.info(f"  ✓ Successfully funded wallet on {chain['name']}")
-        else:
-            logger.warning(f"  ✗ Failed to fund wallet on {chain['name']}")
-
-def check_velo_balance(wallet_address: str, chain_port: int) -> float:
-    """Check VELO token balance on a specific chain"""
-    velo_address = "0x9560e827af36c94d2ac33a39bce1fe78631088db"
+def check_token_balance(wallet_address: str, chain_port: int, token_address: str, decimals: int) -> float:
+    """Check ERC20 token balance on a specific chain"""
     try:
         result = subprocess.run([
-            "cast", "call", velo_address,
+            "cast", "call", token_address,
             "balanceOf(address)(uint256)", wallet_address,
             "--rpc-url", f"http://localhost:{chain_port}"
         ], capture_output=True, text=True)
@@ -129,19 +139,25 @@ def check_velo_balance(wallet_address: str, chain_port: int) -> float:
             # Handle scientific notation like "1000000000000000000000 [1e21]"
             if '[' in balance_str:
                 balance_str = balance_str.split('[')[0].strip()
-            return int(balance_str) / 10**18  # VELO has 18 decimals
+            return int(balance_str) / (10**decimals)
         else:
-            logger.debug(f"VELO balance check failed for port {chain_port}: {result.stderr}")
+            logger.debug(f"Token balance check failed for {token_address} on port {chain_port}: {result.stderr}")
             return 0.0
     except Exception as e:
-        logger.error(f"Error checking VELO balance on port {chain_port}: {e}")
+        logger.error(f"Error checking token balance for {token_address} on port {chain_port}: {e}")
         return 0.0
 
-def get_velo_tokens(wallet_address: str, chain_port: int, amount: float = 100.0) -> bool:
-    """Get VELO tokens by impersonating a large holder"""
-    velo_address = "0x9560e827af36c94d2ac33a39bce1fe78631088db"
-    large_holder = "0xF977814e90dA44bFA03b6295A0616a897441aceC"  # Large VELO holder
-    amount_wei = int(amount * 10**18)
+def add_tokens(wallet_address: str, chain_port: int, token_symbol: str, amount: float) -> bool:
+    """Add tokens to wallet by impersonating a large holder"""
+    if token_symbol not in TOKENS:
+        logger.error(f"Unknown token: {token_symbol}")
+        return False
+    
+    token_config = TOKENS[token_symbol]
+    token_address = token_config["address"]
+    decimals = token_config["decimals"]
+    large_holder = token_config["large_holder"]
+    amount_wei = int(amount * (10**decimals))
     
     try:
         # Impersonate the large holder
@@ -154,9 +170,9 @@ def get_velo_tokens(wallet_address: str, chain_port: int, amount: float = 100.0)
             logger.error(f"Failed to impersonate account on port {chain_port}: {impersonate_result.stderr}")
             return False
         
-        # Transfer VELO tokens
+        # Transfer tokens
         transfer_result = subprocess.run([
-            "cast", "send", velo_address,
+            "cast", "send", token_address,
             "transfer(address,uint256)", wallet_address, str(amount_wei),
             "--rpc-url", f"http://localhost:{chain_port}",
             "--from", large_holder, "--unlocked"
@@ -165,21 +181,46 @@ def get_velo_tokens(wallet_address: str, chain_port: int, amount: float = 100.0)
         if transfer_result.returncode == 0:
             return True
         else:
-            logger.error(f"Failed to transfer VELO on port {chain_port}: {transfer_result.stderr}")
+            logger.error(f"Failed to transfer {token_symbol} on port {chain_port}: {transfer_result.stderr}")
             return False
     except Exception as e:
-        logger.error(f"Error getting VELO tokens on port {chain_port}: {e}")
+        logger.error(f"Error adding {token_symbol} tokens on port {chain_port}: {e}")
         return False
 
-def get_velo_tokens_op_chain(wallet_address: str) -> None:
-    """Get VELO tokens on OP chain only (since VELO is OP-native)"""
-    op_chain = next(chain for chain in chains if chain['name'] == 'OP')
-    logger.info("Getting VELO tokens on OP chain...")
-    success = get_velo_tokens(wallet_address, op_chain['port'], amount=1000.0)
-    if success:
-        logger.info("  ✓ Successfully acquired 1000 VELO tokens on OP")
-    else:
-        logger.warning("  ✗ Failed to acquire VELO tokens on OP")
+def add_tokens_to_wallet(wallet_address: str, token_requests: list) -> None:
+    """Add multiple tokens to wallet based on requests
+    
+    Args:
+        wallet_address: The wallet to fund
+        token_requests: List of dicts with 'token', 'chain', 'amount' keys
+        Example: [{"token": "VELO", "chain": "OP", "amount": 1000.0}]
+    """
+    for request in token_requests:
+        token_symbol = request["token"]
+        chain_name = request["chain"]
+        amount = request["amount"]
+        
+        # Find the chain port
+        chain = next((c for c in chains if c['name'] == chain_name), None)
+        if not chain:
+            logger.error(f"Unknown chain: {chain_name}")
+            continue
+            
+        # Check if token is available on this chain
+        if token_symbol not in TOKENS:
+            logger.error(f"Unknown token: {token_symbol}")
+            continue
+            
+        if chain_name not in TOKENS[token_symbol]["chains"]:
+            logger.warning(f"{token_symbol} not available on {chain_name}")
+            continue
+        
+        logger.info(f"Adding {amount} {token_symbol} tokens on {chain_name}...")
+        success = add_tokens(wallet_address, chain['port'], token_symbol, amount)
+        if success:
+            logger.info(f"  ✓ Successfully added {amount} {token_symbol} on {chain_name}")
+        else:
+            logger.warning(f"  ✗ Failed to add {token_symbol} on {chain_name}")
 
 def check_balances_all_chains(wallet_address: str) -> None:
     """Check ETH balances across all configured chains"""
@@ -193,20 +234,32 @@ def check_balances_all_chains(wallet_address: str) -> None:
             logger.warning(f"  {chain['name']}: Failed to check balance")
 
 def check_token_balances_all_chains(wallet_address: str) -> None:
-    """Check both ETH and token balances across all configured chains"""
+    """Check ETH and token balances across all configured chains"""
     logger.info("Checking balances across all chains:")
     for chain in chains:
         # Check ETH balance
         eth_balance = check_balance(wallet_address, chain['port'])
         eth_str = f"{eth_balance / 10**18:.6f} ETH" if eth_balance is not None else "Failed"
         
-        # Check VELO balance (only on OP chain where it exists)
-        velo_str = ""
-        if chain['name'] == 'OP':
-            velo_balance = check_velo_balance(wallet_address, chain['port'])
-            velo_str = f", {velo_balance:.2f} VELO"
+        # Check token balances for tokens available on this chain
+        token_balances = []
+        for token_symbol, token_config in TOKENS.items():
+            if chain['name'] in token_config["chains"]:
+                token_balance = check_token_balance(
+                    wallet_address, 
+                    chain['port'], 
+                    token_config["address"], 
+                    token_config["decimals"]
+                )
+                if token_balance > 0:
+                    token_balances.append(f"{token_balance:.2f} {token_symbol}")
         
-        logger.info(f"  {chain['name']}: {eth_str}{velo_str}")
+        # Format output
+        token_str = ""
+        if token_balances:
+            token_str = ", " + ", ".join(token_balances)
+        
+        logger.info(f"  {chain['name']}: {eth_str}{token_str}")
 
 def run_supersim():
     logger.info("Starting supersim in background mode...")
@@ -242,13 +295,17 @@ if __name__ == "__main__":
         check_balances_all_chains(wallet_address)
         
         # Fund wallet with ETH for gas fees
-        fund_wallet_all_chains(wallet_address)
+        # fund_wallet_all_chains(wallet_address)
         
         # Check balances after funding
         check_balances_all_chains(wallet_address)
         
-        # Get VELO tokens on OP chain
-        get_velo_tokens_op_chain(wallet_address)
+        # Add tokens to wallet
+        token_requests = [
+            {"token": "VELO", "chain": "OP", "amount": 1000.0},
+            {"token": "USDC", "chain": "OP", "amount": 5000.0}
+        ]
+        add_tokens_to_wallet(wallet_address, token_requests)
 
         # Check final balances (ETH + tokens)
         check_token_balances_all_chains(wallet_address)
