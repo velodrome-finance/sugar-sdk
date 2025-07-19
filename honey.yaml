@@ -1,0 +1,15 @@
+Honey:
+  - description: "Configuration file for Honey testing helpers used by Sugar SDK."
+  - chains:
+      - name: "OP"
+        id: "10"
+        balance:
+          - token: "0x9560e827af36c94d2ac33a39bce1fe78631088db" # velo
+            amount: "10000000000000000000"  # 10 Velo in wei
+      - name: "Unichain"
+        id: "130"
+      - name: "Lisk"
+        id: "1135"
+      - name: "Base"
+        id: "8453"
+      

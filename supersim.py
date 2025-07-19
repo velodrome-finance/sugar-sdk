@@ -82,6 +82,112 @@ def check_balance(address, chain_port):
         logger.error(f"Error checking balance on port {chain_port}: {e}")
         return None
 
+def mint_eth(wallet_address: str, amount: int, chain_port: int, private_key: str) -> bool:
+    """Mint ETH on a specific chain"""
+    try:
+        result = subprocess.run([
+            "cast", "send", 
+            "0x420beeF000000000000000000000000000000001",  # ETH predeploy contract
+            "mint(address _to, uint256 _amount)",
+            wallet_address,
+            str(amount),
+            "--rpc-url", f"http://localhost:{chain_port}",
+            "--private-key", private_key,
+            "--gas-limit", "1000000",
+            "--gas-price", "1000000000"
+        ], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            return True
+        else:
+            logger.error(f"Failed to mint ETH on port {chain_port}: {result.stderr}")
+            return False
+    except Exception as e:
+        logger.error(f"Error minting ETH on port {chain_port}: {e}")
+        return False
+
+def mint_mock_token(wallet_address: str, amount: int, chain_port: int, private_key: str) -> bool:
+    """Mint L2NativeSuperchainERC20 (MOCK) tokens on a specific chain"""
+    try:
+        result = subprocess.run([
+            "cast", "send", 
+            "0x420beeF000000000000000000000000000000001",  # L2NativeSuperchainERC20 contract
+            "mint(address _to, uint256 _amount)",
+            wallet_address,
+            str(amount),
+            "--rpc-url", f"http://localhost:{chain_port}",
+            "--private-key", private_key,
+            "--gas-limit", "1000000",
+            "--gas-price", "1000000000"
+        ], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            return True
+        else:
+            logger.error(f"Failed to mint MOCK tokens on port {chain_port}: {result.stderr}")
+            return False
+    except Exception as e:
+        logger.error(f"Error minting MOCK tokens on port {chain_port}: {e}")
+        return False
+
+def mint_eth_all_chains(wallet_address: str, private_key: str, amount_eth: float = 10.0) -> None:
+    """Mint ETH on all configured chains"""
+    amount_wei = int(amount_eth * 10**18)  # Convert ETH to wei
+    logger.info(f"Minting {amount_eth} ETH on all chains...")
+    
+    for chain in chains:
+        logger.info(f"Minting ETH on {chain['name']}...")
+        success = mint_eth(wallet_address, amount_wei, chain['port'], private_key)
+        if success:
+            logger.info(f"  ✓ Successfully minted {amount_eth} ETH on {chain['name']}")
+        else:
+            logger.warning(f"  ✗ Failed to mint ETH on {chain['name']}")
+
+def mint_mock_tokens_all_chains(wallet_address: str, private_key: str, amount: float = 1000.0) -> None:
+    """Mint L2NativeSuperchainERC20 (MOCK) tokens on all configured chains"""
+    amount_tokens = int(amount * 10**18)  # Convert to base units (18 decimals)
+    logger.info(f"Minting {amount} MOCK tokens on all chains...")
+    
+    for chain in chains:
+        logger.info(f"Minting MOCK tokens on {chain['name']}...")
+        success = mint_mock_token(wallet_address, amount_tokens, chain['port'], private_key)
+        if success:
+            logger.info(f"  ✓ Successfully minted {amount} MOCK tokens on {chain['name']}")
+        else:
+            logger.warning(f"  ✗ Failed to mint MOCK tokens on {chain['name']}")
+
+def fund_wallet(wallet_address: str, chain_port: int) -> bool:
+    """Fund wallet with ETH from supersim's built-in faucet"""
+    try:
+        # Use supersim's built-in funding mechanism (sends from dev account)
+        result = subprocess.run([
+            "cast", "send", 
+            wallet_address,
+            "--value", "100ether",
+            "--rpc-url", f"http://localhost:{chain_port}",
+            "--private-key", "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"  # anvil test key
+        ], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            return True
+        else:
+            logger.error(f"Failed to fund wallet on port {chain_port}: {result.stderr}")
+            return False
+    except Exception as e:
+        logger.error(f"Error funding wallet on port {chain_port}: {e}")
+        return False
+
+def fund_wallet_all_chains(wallet_address: str) -> None:
+    """Fund wallet with ETH on all configured chains"""
+    logger.info("Funding wallet with ETH on all chains...")
+    for chain in chains:
+        logger.info(f"Funding wallet on {chain['name']}...")
+        success = fund_wallet(wallet_address, chain['port'])
+        if success:
+            logger.info(f"  ✓ Successfully funded wallet on {chain['name']}")
+        else:
+            logger.warning(f"  ✗ Failed to fund wallet on {chain['name']}")
+
 def check_balances_all_chains(wallet_address: str) -> None:
     """Check ETH balances across all configured chains"""
     logger.info("Checking ETH balances across all chains:")
@@ -123,7 +229,22 @@ if __name__ == "__main__":
     if wallet_address and private_key:
         logger.info(f"Wallet created: {wallet_address}")
         
-        # Check balance on all chains
+        # Check initial balance on all chains
+        check_balances_all_chains(wallet_address)
+        
+        # Fund wallet with ETH for gas fees
+        fund_wallet_all_chains(wallet_address)
+        
+        # Check balances after funding
+        check_balances_all_chains(wallet_address)
+        
+        # Mint ETH on all chains
+        mint_eth_all_chains(wallet_address, private_key, amount_eth=10.0)
+        
+        # Mint MOCK tokens (L2NativeSuperchainERC20) on all chains
+        # mint_mock_tokens_all_chains(wallet_address, private_key, amount=1000.0)
+        
+        # Check balances again after minting
         check_balances_all_chains(wallet_address)
     else:
         logger.error("Failed to create wallet")
