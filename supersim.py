@@ -1,7 +1,15 @@
 # @Claude we are primarily relying on https://github.com/ethereum-optimism/supersim and its dependencies here
 
 from dotenv import dotenv_values
-import subprocess, os, time, sys
+import subprocess, os, time, sys, logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='🍭 %(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # supported chains: op, base, lisk, uni
 
@@ -32,7 +40,7 @@ def check_supersim_ready(timeout=60):
     return False
 
 def run_supersim():
-    print("Starting supersim in background mode...")
+    logger.info("Starting supersim in background mode...")
     process = subprocess.Popen([
         "supersim", "fork", 
         "--l2.host=0.0.0.0", 
@@ -40,15 +48,14 @@ def run_supersim():
         "--chains=op,base"
     ], env=os.environ.copy() | dotenv_values(".env"))    
     
-    print("Waiting for supersim to be ready...")
-    
+    logger.info("Waiting for supersim to be ready...")
     if check_supersim_ready():
-        print("Supersim started successfully. Listening on ports:")
+        logger.info("Supersim started successfully. Listening on ports:")
         for chain in chains:
-            print(f"  {chain['name']} (Chain ID {chain['id']}): http://localhost:{chain['port']}")
+            logger.info(f"  {chain['name']} (Chain ID {chain['id']}): http://localhost:{chain['port']}")
         return process
     else:
-        print("Supersim failed to start or become ready within timeout")
+        logger.error("Supersim failed to start or become ready within timeout")
         process.terminate()
         sys.exit(1)
 
@@ -57,7 +64,7 @@ if __name__ == "__main__":
     try:
         process.wait()
     except KeyboardInterrupt:
-        print("\nShutting down supersim...")
+        logger.info("Shutting down supersim...")
         process.terminate()
         process.wait()
 
