@@ -5,6 +5,7 @@ __all__ = ['ERC20_ABI', 'TokenBalance', 'process_token_batch', 'get_token_balanc
 
 # %% ../src/wallet.ipynb 3
 import asyncio
+from typing import List, Optional
 from dataclasses import dataclass
 from . import AsyncChain
 from .token import Token
@@ -75,7 +76,7 @@ async def process_token_batch(self, token_batch, address, price_lookup=None):
     return valid_results
 
 # Monkey patch AsyncChain to add get_token_balances method
-async def get_token_balances(self: AsyncChain, address=None):
+async def get_token_balances(self: AsyncChain, tokens: Optional[List[Token]] = None, prices: Optional[List[Price]] = None,  address=None):
     """Get all token balances for a given address using batched requests
     
     This method uses asyncio.gather to make concurrent RPC calls in batches,
@@ -92,8 +93,8 @@ async def get_token_balances(self: AsyncChain, address=None):
     if address is None:
         address = self.account.address
     
-    balances, tokens = [], await self.get_all_tokens()
-    prices = await self.get_prices(tokens)
+    balances, tokens = [],  tokens or await self.get_all_tokens()
+    prices = prices or await self.get_prices(tokens)
     seen_addresses, erc20_tokens = set(), []
     
     # Build price lookup dictionary
@@ -134,7 +135,7 @@ async def get_token_balances(self: AsyncChain, address=None):
     for i in range(0, len(erc20_tokens), batch_size):
         batch = erc20_tokens[i:i + batch_size]
         # Process batch using batch_requests
-        batch_results = await self.process_token_batch(batch, address, price_lookup)
+        batch_results = await process_token_batch(self, batch, address, price_lookup)
         
         # Add non-zero balances to results
         for result in batch_results:
@@ -142,7 +143,3 @@ async def get_token_balances(self: AsyncChain, address=None):
                 balances.append(result)
     
     return balances
-
-# Add the methods to AsyncChain
-AsyncChain.process_token_batch = process_token_batch
-AsyncChain.get_token_balances = get_token_balances
