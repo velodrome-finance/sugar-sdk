@@ -12,10 +12,8 @@ honey:
           - token: "usdc"
             address: "0x0b2c639c533813f4aa9d7837caf62653d097ff85"
             amount: "1000000000"  # 1000 USDC
-      # - name: "Unichain"
-      #   id: "130"
-      # - name: "Lisk"
-      #   id: "1135"
-      # - name: "Base"
-      #   id: "8453"
+      - name: "Lisk"
+        id: "1135"
+      - name: "Base"
+        id: "8453"
       
