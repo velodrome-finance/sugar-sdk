@@ -1,7 +1,7 @@
 # @Claude we are primarily relying on https://github.com/ethereum-optimism/supersim and its dependencies here
 
 from dotenv import dotenv_values
-from typing import Optional, Tuple, List
+from typing import Tuple, List
 from dataclasses import dataclass
 import subprocess, os, time, sys, logging, yaml
 
