@@ -68,7 +68,6 @@ class Honey:
                                             address=balance_item['address'],
                                             amount=int(balance_item['amount'])  # Convert to int
                                         ))
-                            
                             chains_list.append(ChainConfig(
                                 name=chain_data['name'],
                                 id=chain_data['id'],
@@ -106,7 +105,6 @@ chains = [{"name": chain.name, "id": chain.id, "port": starting_port + i}
 
 # Default large holder for token transfers
 DEFAULT_LARGE_HOLDER = "0xF977814e90dA44bFA03b6295A0616a897441aceC"
-
 
 def check_supersim_ready(timeout_seconds=60):
     """Check if supersim is ready by calling a test contract"""
@@ -187,6 +185,7 @@ def check_token_balance(wallet_address: str, chain_port: int, token_address: str
         return 0
 
 
+
 def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
     """Add multiple tokens to wallet using token addresses directly
     
@@ -235,16 +234,6 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
         except Exception as e:
             logger.error(f"Error adding tokens on {chain_name}: {e}")
 
-
-def check_balances_all_chains(wallet_address: str) -> None:
-    """Check ETH balances across all configured chains"""
-    logger.info("Checking ETH balances across all chains:")
-    for chain in chains:
-        balance = check_balance(wallet_address, chain['port'])
-        if balance is not None:
-            logger.info(f"  {chain['name']}: {balance} wei ETH")
-        else:
-            logger.warning(f"  {chain['name']}: Failed to check balance")
 
 def check_token_balances_all_chains(wallet_address: str) -> None:
     """Check ETH and token balances across all configured chains"""
@@ -309,13 +298,7 @@ if __name__ == "__main__":
     logger.info(f"Wallet loaded: {wallet_address}")
     
     # Check initial balance on all chains
-    check_balances_all_chains(wallet_address)
-    
-    # Fund wallet with ETH for gas fees
-    # fund_wallet_all_chains(wallet_address)
-    
-    # Check balances after funding
-    check_balances_all_chains(wallet_address)
+    check_token_balances_all_chains(wallet_address)
     
     # Add tokens to wallet from honey config
     token_requests = []
@@ -332,7 +315,7 @@ if __name__ == "__main__":
         add_tokens_by_address(wallet_address, token_requests)
     else:
         logger.info("🍭 No token balances configured in honey.yaml")
-
+    
     # Check final balances (ETH + tokens)
     check_token_balances_all_chains(wallet_address)
     
