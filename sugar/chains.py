@@ -5,8 +5,8 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
            'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain', 'OPChain', 'BaseChainCommon',
            'AsyncBaseChain', 'BaseChain', 'LiskChainCommon', 'AsyncLiskChain', 'LiskChain', 'UniChainCommon',
            'AsyncUniChain', 'UniChain', 'get_chain', 'get_async_chain', 'get_chain_from_token',
-           'get_async_chain_from_token', 'AsyncOPChainSimnet', 'AsyncBaseChainSimnet', 'OPChainSimnet',
-           'BaseChainSimnet', 'LiskChainSimnet', 'AsyncLiskChainSimnet']
+           'get_async_chain_from_token', 'AsyncOPChainSimnet', 'OPChainSimnet', 'LiskChainSimnet',
+           'AsyncLiskChainSimnet', 'AsyncBaseChainSimnet', 'BaseChainSimnet']
 
 # %% ../src/chains.ipynb 3
 import os, asyncio
@@ -850,17 +850,17 @@ def get_async_chain_from_token(t: Token, **kwargs) -> AsyncChain: return get_asy
 class AsyncOPChainSimnet(AsyncOPChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
 
-class AsyncBaseChainSimnet(AsyncBaseChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
-
 class OPChainSimnet(OPChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
 
-class BaseChainSimnet(BaseChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
-
 class LiskChainSimnet(LiskChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", **kwargs)
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
 
 class AsyncLiskChainSimnet(AsyncLiskChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
+
+class AsyncBaseChainSimnet(AsyncBaseChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", **kwargs)
+
+class BaseChainSimnet(BaseChain):
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", **kwargs)
