@@ -40,8 +40,9 @@ jobs:
         run: supersim --version
       - name: Fork
         run: |
-          python supersim.py > /dev/null 2>&1 &
+          python supersim.py
           sleep 15
+      #> /dev/null 2>&1 &
       - name: Test fork
         run: cast call 0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2 "MAX_TOKENS()(uint256)" --rpc-url http://localhost:4444
       - uses: fastai/workflows/nbdev-ci@master
