@@ -42,7 +42,7 @@ class Honey:
         with open(config_path, 'r') as f:
             data = yaml.safe_load(f)
         # Parse the list structure in honey.yaml
-        honey_data, wallet_pk, chains_list = data['Honey'], None, []
+        honey_data, wallet_pk, chains_list = data['honey'], None, []
 
         for item in honey_data:
             if isinstance(item, dict):
