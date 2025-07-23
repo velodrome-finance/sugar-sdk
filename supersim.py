@@ -4,6 +4,7 @@ from dotenv import dotenv_values
 from typing import Tuple, List
 from dataclasses import dataclass
 import subprocess, os, time, sys, logging, yaml
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configure logging
 logging.basicConfig(
@@ -193,7 +194,12 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
         token_requests: List of dicts with 'token' (address), 'chain', 'amount', 'holder' keys
         Example: [{"token": "0x9560e827af36c94d2ac33a39bce1fe78631088db", "chain": "OP", "amount": "10000000000000000000", "holder": "0x..."}]
     """
-    for request in token_requests:
+    def process_token_request(request, delay_seconds=0):
+        """Process a single token request with retry logic for underpriced transactions"""
+        # Add delay to prevent nonce conflicts when using same holder
+        if delay_seconds > 0:
+            time.sleep(delay_seconds)
+            
         token_address = request["token"]
         chain_name = request["chain"]
         amount = request["amount"]  # Raw amount as string from config
@@ -203,33 +209,70 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
         chain = next((c for c in chains if c['name'] == chain_name), None)
         if not chain:
             logger.error(f"Unknown chain: {chain_name}")
-            continue
+            return
         
-        try:
-            # Impersonate the large holder
-            impersonate_result = subprocess.run([
-                "cast", "rpc", "anvil_impersonateAccount", large_holder,
-                "--rpc-url", f"http://localhost:{chain['port']}"
-            ], capture_output=True, text=True)
-            
-            if impersonate_result.returncode != 0:
-                logger.error(f"Failed to impersonate account on {chain_name}: {impersonate_result.stderr}")
-                continue
-            
-            # Transfer tokens using raw amount
-            transfer_result = subprocess.run([
-                "cast", "send", token_address,
-                "transfer(address,uint256)", wallet_address, str(amount),
-                "--rpc-url", f"http://localhost:{chain['port']}",
-                "--from", large_holder, "--unlocked"
-            ], capture_output=True, text=True)
-            
-            if transfer_result.returncode == 0:
-                logger.info(f"  ✓ Successfully added {amount} wei tokens ({token_address[:10]}...) on {chain_name}")
-            else:
-                logger.error(f"Failed to transfer tokens on {chain_name}: {transfer_result.stderr}")
-        except Exception as e:
-            logger.error(f"Error adding tokens on {chain_name}: {e}")
+        max_retries = 3
+        retry_delay = 2.0  # Start with 2 second delay
+        
+        for attempt in range(max_retries + 1):
+            try:
+                # Impersonate the large holder
+                impersonate_result = subprocess.run([
+                    "cast", "rpc", "anvil_impersonateAccount", large_holder,
+                    "--rpc-url", f"http://localhost:{chain['port']}"
+                ], capture_output=True, text=True)
+                
+                if impersonate_result.returncode != 0:
+                    logger.error(f"Failed to impersonate account on {chain_name}: {impersonate_result.stderr}")
+                    return
+                
+                # Transfer tokens using raw amount
+                transfer_result = subprocess.run([
+                    "cast", "send", token_address,
+                    "transfer(address,uint256)", wallet_address, str(amount),
+                    "--rpc-url", f"http://localhost:{chain['port']}",
+                    "--from", large_holder, "--unlocked"
+                ], capture_output=True, text=True)
+                
+                if transfer_result.returncode == 0:
+                    logger.info(f"  ✓ Successfully added {amount} wei tokens ({token_address[:10]}...) on {chain_name}")
+                    return  # Success, exit retry loop
+                else:
+                    error_msg = transfer_result.stderr
+                    
+                    # Check if it's an underpriced transaction error
+                    if "replacement transaction underpriced" in error_msg or "underpriced" in error_msg:
+                        if attempt < max_retries:
+                            logger.warning(f"  ⚠️  Underpriced transaction on {chain_name}, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries + 1})")
+                            time.sleep(retry_delay)
+                            retry_delay *= 1.5  # Exponential backoff
+                            continue
+                        else:
+                            logger.error(f"Failed to transfer tokens on {chain_name} after {max_retries + 1} attempts: {error_msg}")
+                    else:
+                        logger.error(f"Failed to transfer tokens on {chain_name}: {error_msg}")
+                        return  # Non-retryable error, exit
+                        
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"  ⚠️  Error on {chain_name}, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5
+                    continue
+                else:
+                    logger.error(f"Error adding tokens on {chain_name} after {max_retries + 1} attempts: {e}")
+                    return
+    
+    # Process token requests in parallel with retry logic handling conflicts
+    max_workers = min(len(token_requests), 4)  # Limit to 4 concurrent operations
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(process_token_request, request) for request in token_requests]
+        for future in as_completed(futures):
+            try:
+                future.result()  # This will raise any exception that occurred
+            except Exception as e:
+                logger.error(f"Token request failed: {e}")
 
 
 def check_token_balances_all_chains(wallet_address: str) -> None:
