@@ -38,9 +38,9 @@ jobs:
         run: brew install ethereum-optimism/tap/supersim
       - name: Confirm supersim is installed
         run: supersim --version
-      - name: Fork
+      - name: Run honey
         run: |
-          python supersim.py > /dev/null 2>&1 &
+          python honey.py > /dev/null 2>&1 &
           sleep 15
       - name: Test fork
         run: cast call 0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2 "MAX_TOKENS()(uint256)" --rpc-url http://localhost:4444
