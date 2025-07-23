@@ -4,9 +4,10 @@
 __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_response', 'require_context', 'require_async_context',
            'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain', 'OPChain', 'BaseChainCommon',
            'AsyncBaseChain', 'BaseChain', 'LiskChainCommon', 'AsyncLiskChain', 'LiskChain', 'UniChainCommon',
-           'AsyncUniChain', 'UniChain', 'get_chain', 'get_async_chain', 'get_chain_from_token',
-           'get_async_chain_from_token', 'AsyncOPChainSimnet', 'OPChainSimnet', 'LiskChainSimnet',
-           'AsyncLiskChainSimnet', 'AsyncBaseChainSimnet', 'BaseChainSimnet']
+           'AsyncUniChain', 'UniChain', 'AsyncOPChainSimnet', 'OPChainSimnet', 'LiskChainSimnet',
+           'AsyncLiskChainSimnet', 'AsyncBaseChainSimnet', 'BaseChainSimnet', 'get_chain', 'get_async_chain',
+           'get_simnet_chain', 'get_async_simnet_chain', 'get_chain_from_token', 'get_async_chain_from_token',
+           'get_simnet_chain_from_token', 'get_async_simnet_chain_from_token']
 
 # %% ../src/chains.ipynb 3
 import os, asyncio
@@ -828,25 +829,7 @@ class AsyncUniChain(AsyncChain, UniChainCommon):
 class UniChain(Chain, UniChainCommon):
     def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
 
-# %% ../src/chains.ipynb 19
-def get_chain(chain_id: str, **kwargs) -> Chain:
-    if chain_id == '10': return OPChain(**kwargs)
-    elif chain_id == '8453': return BaseChain(**kwargs)
-    elif chain_id == '130': return UniChain(**kwargs)
-    elif chain_id == '1135': return LiskChain(**kwargs)
-    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
-
-def get_async_chain(chain_id: str, **kwargs) -> AsyncChain:
-    if chain_id == '10': return AsyncOPChain(**kwargs)
-    elif chain_id == '8453': return AsyncBaseChain(**kwargs)
-    elif chain_id == '130': return AsyncUniChain(**kwargs)
-    elif chain_id == '1135': return AsyncLiskChain(**kwargs)
-    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
-
-def get_chain_from_token(t: Token, **kwargs) -> Chain: return get_chain(t.chain_id, **kwargs)
-def get_async_chain_from_token(t: Token, **kwargs) -> AsyncChain: return get_async_chain(t.chain_id, **kwargs)
-
-# %% ../src/chains.ipynb 21
+# %% ../src/chains.ipynb 20
 class AsyncOPChainSimnet(AsyncOPChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
 
@@ -864,3 +847,36 @@ class AsyncBaseChainSimnet(AsyncBaseChain):
 
 class BaseChainSimnet(BaseChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", **kwargs)
+
+# %% ../src/chains.ipynb 21
+def get_chain(chain_id: str, **kwargs) -> Chain:
+    if chain_id == '10': return OPChain(**kwargs)
+    elif chain_id == '8453': return BaseChain(**kwargs)
+    elif chain_id == '130': return UniChain(**kwargs)
+    elif chain_id == '1135': return LiskChain(**kwargs)
+    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+
+def get_async_chain(chain_id: str, **kwargs) -> AsyncChain:
+    if chain_id == '10': return AsyncOPChain(**kwargs)
+    elif chain_id == '8453': return AsyncBaseChain(**kwargs)
+    elif chain_id == '130': return AsyncUniChain(**kwargs)
+    elif chain_id == '1135': return AsyncLiskChain(**kwargs)
+    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+
+def get_simnet_chain(chain_id: str, **kwargs) -> Chain:
+    if chain_id == '10': return OPChainSimnet(**kwargs)
+    elif chain_id == '8453': return BaseChainSimnet(**kwargs)
+    elif chain_id == '1135': return LiskChainSimnet(**kwargs)
+    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+
+def get_async_simnet_chain(chain_id: str, **kwargs) -> AsyncChain:
+    if chain_id == '10': return AsyncOPChainSimnet(**kwargs)
+    elif chain_id == '8453': return AsyncBaseChainSimnet(**kwargs)
+    elif chain_id == '1135': return AsyncLiskChainSimnet(**kwargs)
+    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+
+def get_chain_from_token(t: Token, **kwargs) -> Chain: return get_chain(t.chain_id, **kwargs)
+def get_async_chain_from_token(t: Token, **kwargs) -> AsyncChain: return get_async_chain(t.chain_id, **kwargs)
+def get_simnet_chain_from_token(t: Token, **kwargs) -> Chain: return get_simnet_chain(t.chain_id, **kwargs)
+def get_async_simnet_chain_from_token(t: Token, **kwargs) -> AsyncChain: return get_async_simnet_chain(t.chain_id, **kwargs)
+
