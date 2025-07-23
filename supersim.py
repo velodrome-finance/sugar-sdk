@@ -279,12 +279,12 @@ def check_token_balances_all_chains(wallet_address: str) -> None:
     """Check ETH and token balances across all configured chains"""
     logger.info("Checking balances across all chains:")
     
-    for chain_config in honey_config.chains:
+    def check_chain_balances(chain_config):
+        """Check balances for a single chain"""
         # Find the corresponding chain with port info
         chain = next((c for c in chains if c['name'] == chain_config.name), None)
         if not chain:
-            logger.warning(f"Chain {chain_config.name} not found in port configuration")
-            continue
+            return chain_config.name, "Chain not found in port configuration", None
             
         # Check ETH balance
         eth_balance = check_balance(wallet_address, chain['port'])
@@ -306,7 +306,33 @@ def check_token_balances_all_chains(wallet_address: str) -> None:
         if token_balances:
             token_str = ", " + ", ".join(token_balances)
         
-        logger.info(f"  {chain_config.name}: {eth_str}{token_str}")
+        return chain_config.name, eth_str, token_str
+    
+    # Process all chains in parallel
+    max_workers = min(len(honey_config.chains), 4)
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(check_chain_balances, chain_config) 
+                  for chain_config in honey_config.chains]
+        
+        # Collect results and log them in order
+        results = []
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                logger.error(f"Error checking chain balances: {e}")
+        
+        # Sort results by chain name for consistent output
+        results.sort(key=lambda x: x[0])
+        
+        # Log all results
+        for chain_name, eth_str, token_str in results:
+            if token_str is None:  # Error case
+                logger.warning(f"  {chain_name}: {eth_str}")
+            else:
+                logger.info(f"  {chain_name}: {eth_str}{token_str}")
 
 def run_supersim():
     logger.info("Starting supersim in background mode...")
