@@ -29,7 +29,6 @@ honey:
             address: "0x1217bfe6c773eec6cc4a38b5dc45b92292b6e189"
             amount: "100000000"  # 100 oUSDT
             holder: "0xc8111b21B68B2615F55E5D5d69103335ed082916"
-            
       - name: "Base"
         id: "8453"
       
