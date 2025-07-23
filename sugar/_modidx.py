@@ -308,8 +308,4 @@ d = { 'settings': { 'branch': 'main',
                              'sugar.token.Token.is_native': ('token.html#token.is_native', 'sugar/token.py'),
                              'sugar.token.Token.make_native_token': ('token.html#token.make_native_token', 'sugar/token.py'),
                              'sugar.token.Token.parse_units': ('token.html#token.parse_units', 'sugar/token.py'),
-                             'sugar.token.Token.to_float': ('token.html#token.to_float', 'sugar/token.py')},
-            'sugar.wallet': { 'sugar.wallet.TokenBalance': ('wallet.html#tokenbalance', 'sugar/wallet.py'),
-                              'sugar.wallet.TokenBalance.balance_stable': ('wallet.html#tokenbalance.balance_stable', 'sugar/wallet.py'),
-                              'sugar.wallet.get_token_balances': ('wallet.html#get_token_balances', 'sugar/wallet.py'),
-                              'sugar.wallet.process_token_batch': ('wallet.html#process_token_batch', 'sugar/wallet.py')}}}
+                             'sugar.token.Token.to_float': ('token.html#token.to_float', 'sugar/token.py')}}}
