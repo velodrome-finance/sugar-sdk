@@ -21,6 +21,7 @@ class TokenBalance:
     token: str  # Token name/symbol
     address: str  # Token contract address
     amount: int  # Amount in wei as integer
+    holder: str  # Large holder address for token transfers
 
 @dataclass
 class ChainConfig:
@@ -66,7 +67,8 @@ class Honey:
                                         balance_list.append(TokenBalance(
                                             token=balance_item['token'],
                                             address=balance_item['address'],
-                                            amount=int(balance_item['amount'])  # Convert to int
+                                            amount=int(balance_item['amount']),  # Convert to int
+                                            holder=balance_item['holder']
                                         ))
                             chains_list.append(ChainConfig(
                                 name=chain_data['name'],
@@ -102,9 +104,6 @@ starting_port = 4444
 # Build chains configuration from honey.yaml
 chains = [{"name": chain.name, "id": chain.id, "port": starting_port + i} 
           for i, chain in enumerate(honey_config.chains)]
-
-# Default large holder for token transfers
-DEFAULT_LARGE_HOLDER = "0xF977814e90dA44bFA03b6295A0616a897441aceC"
 
 def check_supersim_ready(timeout_seconds=60):
     """Check if supersim is ready by calling a test contract"""
@@ -191,22 +190,20 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
     
     Args:
         wallet_address: The wallet to fund
-        token_requests: List of dicts with 'token' (address), 'chain', 'amount' keys
-        Example: [{"token": "0x9560e827af36c94d2ac33a39bce1fe78631088db", "chain": "OP", "amount": "10000000000000000000"}]
+        token_requests: List of dicts with 'token' (address), 'chain', 'amount', 'holder' keys
+        Example: [{"token": "0x9560e827af36c94d2ac33a39bce1fe78631088db", "chain": "OP", "amount": "10000000000000000000", "holder": "0x..."}]
     """
     for request in token_requests:
         token_address = request["token"]
         chain_name = request["chain"]
         amount = request["amount"]  # Raw amount as string from config
+        large_holder = request["holder"]  # Use custom holder from config
         
         # Find the chain port
         chain = next((c for c in chains if c['name'] == chain_name), None)
         if not chain:
             logger.error(f"Unknown chain: {chain_name}")
             continue
-        
-        # Use the default large holder
-        large_holder = DEFAULT_LARGE_HOLDER
         
         try:
             # Impersonate the large holder
@@ -307,7 +304,8 @@ if __name__ == "__main__":
             token_requests.append({
                 "token": balance.address,  # Using address as token identifier
                 "chain": chain_config.name,
-                "amount": str(balance.amount)  # Convert int to string for subprocess
+                "amount": str(balance.amount),  # Convert int to string for subprocess
+                "holder": balance.holder  # Use custom holder from config
             })
     
     if token_requests:
