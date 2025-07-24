@@ -1,3 +1,0 @@
-#!/bin/bash
-unset ANTHROPIC_API_KEY
-~/.claude/local/claude --dangerously-skip-permissions

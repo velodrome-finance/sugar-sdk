@@ -45,6 +45,8 @@ class Honey:
         wallet_item = next((item for item in data['honey'] if isinstance(item, dict) and 'wallet' in item), {})
         wallet_pk = next((w.get('pk') for w in wallet_item.get('wallet', []) if isinstance(w, dict) and 'pk' in w), None)
         
+        if not wallet_pk: raise ValueError("No wallet private key found in honey.yaml")
+
         # Extract chains
         chains_list = []
         chains_item = next((item for item in data['honey'] if isinstance(item, dict) and 'chains' in item), {})
@@ -64,10 +66,7 @@ class Honey:
                     balance=balance_list,
                     port=starting_port + len(chains_list)
                 ))
-        
-        if not wallet_pk:
-            raise ValueError("No wallet private key found in honey.yaml")
-        
+
         honey_config = Honey(
             wallet=wallet_pk,
             chains=chains_list,
@@ -77,16 +76,11 @@ class Honey:
         logger.info("🍯 Loaded Honey configuration:")
         logger.info(f"  Wallet: {honey_config.wallet[:10]}...")
         logger.info(f"  Chains: {len(honey_config.chains)} configured")
-        for chain in honey_config.chains:
-            logger.info(f"    {chain.name} (ID: {chain.id}) - {len(chain.balance)} token balances")
-            for balance in chain.balance:
-                logger.info(f"      {balance.token} ({balance.address[:10]}...): {balance.amount}")
-        
+
         return honey_config
 
 # Load configuration from honey.yaml (mandatory)  
 honey_config = Honey.from_config()
-
 
 def check_supersim_ready(timeout_seconds=60):
     """Check if supersim is ready by calling a test contract"""
@@ -102,8 +96,7 @@ def check_supersim_ready(timeout_seconds=60):
             ], capture_output=True, text=True, timeout=10)
             
             if result.returncode == 0 and result.stdout.strip(): return True
-        except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
-            pass
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError): pass
         time.sleep(2)
     return False
 
@@ -127,7 +120,7 @@ def create_wallet() -> Tuple[str, str]:
         logger.error(f"Error using honey config private key: {e}")
         raise
     
-def check_balance(address, chain_port):
+def check_eth_balance(address, chain_port):
     """Check ETH balance for an address on a specific chain"""
     try:
         result = subprocess.run([
@@ -135,8 +128,7 @@ def check_balance(address, chain_port):
             "--rpc-url", f"http://localhost:{chain_port}"
         ], capture_output=True, text=True)
         
-        if result.returncode == 0:
-            return int(result.stdout.strip())
+        if result.returncode == 0: return int(result.stdout.strip())
         else:
             logger.debug(f"Balance check failed for port {chain_port}: {result.stderr}")
             return None
@@ -179,24 +171,16 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
     def process_token_request(request, delay_seconds=0):
         """Process a single token request with retry logic for underpriced transactions"""
         # Add delay to prevent nonce conflicts when using same holder
-        if delay_seconds > 0:
-            time.sleep(delay_seconds)
-            
-        token_address = request["token"]
-        chain_name = request["chain"]
-        amount = request["amount"]  # Raw amount as string from config
-        large_holder = request["holder"]  # Use custom holder from config
-        
-        # Find the chain port
+        if delay_seconds > 0: time.sleep(delay_seconds)
+
+        token_address, chain_name, amount, large_holder = request["token"], request["chain"], request["amount"], request["holder"] 
         chain_config = next((c for c in honey_config.chains if c.name == chain_name), None)
-        if not chain_config:
-            logger.error(f"Unknown chain: {chain_name}")
-            return
+        if not chain_config: raise ValueError(f"Chain {chain_name} not found in honey config")
+
         chain = {"name": chain_config.name, "id": chain_config.id, "port": chain_config.port}
         
-        max_retries = 3
-        retry_delay = 2.0  # Start with 2 second delay
-        
+        max_retries, retry_delay = 3, 2.0
+
         for attempt in range(max_retries + 1):
             try:
                 # Impersonate the large holder
@@ -205,10 +189,8 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
                     "--rpc-url", f"http://localhost:{chain['port']}"
                 ], capture_output=True, text=True)
                 
-                if impersonate_result.returncode != 0:
-                    logger.error(f"Failed to impersonate account on {chain_name}: {impersonate_result.stderr}")
-                    return
-                
+                if impersonate_result.returncode != 0: raise Exception(f"Failed to impersonate account {large_holder} on {chain_name}")
+
                 # Transfer tokens using raw amount
                 transfer_result = subprocess.run([
                     "cast", "send", token_address,
@@ -265,25 +247,19 @@ def check_token_balances_all_chains(wallet_address: str) -> None:
     def check_chain_balances(chain_config):
         """Check balances for a single chain"""
         # Check ETH balance
-        eth_balance = check_balance(wallet_address, chain_config.port)
+        eth_balance = check_eth_balance(wallet_address, chain_config.port)
         eth_str = f"{eth_balance} ETH" if eth_balance is not None else "Failed"
         
         # Check token balances for tokens configured on this chain
         token_balances = []
         for token_config in chain_config.balance:
-            token_balance = check_token_balance(
-                wallet_address, 
-                chain_config.port, 
-                token_config.address
-            )
-            if token_balance > 0:
-                token_balances.append(f"{token_balance} {token_config.token}")
+            token_balance = check_token_balance(wallet_address, chain_config.port, token_config.address)
+            if token_balance > 0: token_balances.append(f"{token_balance} {token_config.token}")
         
         # Format output
         token_str = ""
-        if token_balances:
-            token_str = ", " + ", ".join(token_balances)
-        
+        if token_balances: token_str = ", " + ", ".join(token_balances)
+
         return chain_config.name, eth_str, token_str
     
     # Process all chains in parallel
@@ -322,6 +298,7 @@ def run_supersim():
     ], env=os.environ.copy() | dotenv_values(".env"))    
     
     logger.info("Waiting for supersim to be ready...")
+
     if check_supersim_ready():
         logger.info("Supersim started successfully. Listening on ports:")
         for chain in honey_config.chains:
@@ -340,10 +317,7 @@ if __name__ == "__main__":
     wallet_address, private_key = create_wallet()
     
     logger.info(f"Wallet loaded: {wallet_address}")
-    
-    # Check initial balance on all chains
-    check_token_balances_all_chains(wallet_address)
-    
+
     # Add tokens to wallet from honey config
     token_requests = []
     for chain_config in honey_config.chains:
