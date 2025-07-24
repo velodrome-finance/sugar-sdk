@@ -252,7 +252,7 @@ class Superswap(SuperswapCommon):
             # TODO: switch to get_bridge_fee without explicit domain ID when all chains support domains
             bridge_fee = from_chain.get_bridge_fee(destination_domain)
             xchain_fee = from_chain.get_xchain_fee(destination_domain) if quote.to_token != quote.to_bridge_token else 0           
-            total_fee = bridge_fee + xchain_fee if quote.to_token.token_address != quote.to_bridge_token.token_address else bridge_fee 
+            total_fee = bridge_fee + xchain_fee
 
             cmds, inputs, swap_data = self.prepare_super_swap(
                 quote,
@@ -343,7 +343,7 @@ class AsyncSuperswap(SuperswapCommon):
             # TODO: switch to get_bridge_fee without explicit domain ID when all chains support domains
             bridge_fee = await from_chain.get_bridge_fee(destination_domain)
             xchain_fee = await from_chain.get_xchain_fee(destination_domain) if quote.to_token != quote.to_bridge_token else 0
-            total_fee = bridge_fee + xchain_fee if quote.to_token.token_address != quote.to_bridge_token.token_address else bridge_fee 
+            total_fee = bridge_fee + xchain_fee
 
             cmds, inputs, swap_data = self.prepare_super_swap(
                 quote,
