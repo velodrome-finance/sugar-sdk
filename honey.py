@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='🍭 %(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='🍯 %(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
@@ -19,23 +19,17 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TokenBalance:
     """Token balance configuration"""
-    token: str  # Token name/symbol
-    address: str  # Token contract address
-    amount: int  # Amount in wei as integer
-    holder: str  # Large holder address for token transfers
+    token: str; address: str; amount: int; holder: str
 
 @dataclass
 class ChainConfig:
     """Chain configuration"""
-    name: str
-    id: str
-    balance: List[TokenBalance]
+    name: str; id: str; balance: List[TokenBalance]; port: int
 
 @dataclass
 class Honey:
     """Main configuration class"""
-    wallet: str  # Private key directly
-    chains: List[ChainConfig]
+    wallet: str; chains: List[ChainConfig]; starting_port: int
     
     @staticmethod
     def from_config(config_path: str = "honey.yaml") -> 'Honey':
@@ -43,49 +37,44 @@ class Honey:
         
         with open(config_path, 'r') as f:
             data = yaml.safe_load(f)
-        # Parse the list structure in honey.yaml
-        honey_data, wallet_pk, chains_list = data['honey'], None, []
 
-        for item in honey_data:
-            if isinstance(item, dict):
-                # Check for wallet config
-                if 'wallet' in item:
-                    wallet_list = item['wallet']
-                    for wallet_item in wallet_list:
-                        if isinstance(wallet_item, dict) and 'pk' in wallet_item:
-                            wallet_pk = wallet_item['pk']
-                            break
-                
-                # Check for chains config
-                elif 'chains' in item:
-                    for chain_data in item['chains']:
-                        if isinstance(chain_data, dict) and 'name' in chain_data:
-                            # Parse balance list
-                            balance_list = []
-                            if 'balance' in chain_data:
-                                for balance_item in chain_data['balance']:
-                                    if isinstance(balance_item, dict):
-                                        balance_list.append(TokenBalance(
-                                            token=balance_item['token'],
-                                            address=balance_item['address'],
-                                            amount=int(balance_item['amount']),  # Convert to int
-                                            holder=balance_item['holder']
-                                        ))
-                            chains_list.append(ChainConfig(
-                                name=chain_data['name'],
-                                id=chain_data['id'],
-                                balance=balance_list
-                            ))
+        # Extract configuration values
+        starting_port = next((item.get('starting_port') for item in data['honey'] if isinstance(item, dict) and 'starting_port' in item), 4444)
+        
+        # Extract wallet private key
+        wallet_item = next((item for item in data['honey'] if isinstance(item, dict) and 'wallet' in item), {})
+        wallet_pk = next((w.get('pk') for w in wallet_item.get('wallet', []) if isinstance(w, dict) and 'pk' in w), None)
+        
+        # Extract chains
+        chains_list = []
+        chains_item = next((item for item in data['honey'] if isinstance(item, dict) and 'chains' in item), {})
+        for chain_data in chains_item.get('chains', []):
+            if chain_data.get('name'):
+                balance_list = [
+                    TokenBalance(
+                        token=b.get('token', ''),
+                        address=b.get('address', ''),
+                        amount=int(b.get('amount', 0)),
+                        holder=b.get('holder', '')
+                    ) for b in chain_data.get('balance', []) if isinstance(b, dict)
+                ]
+                chains_list.append(ChainConfig(
+                    name=chain_data.get('name', ''),
+                    id=chain_data.get('id', ''),
+                    balance=balance_list,
+                    port=starting_port + len(chains_list)
+                ))
         
         if not wallet_pk:
             raise ValueError("No wallet private key found in honey.yaml")
         
         honey_config = Honey(
             wallet=wallet_pk,
-            chains=chains_list
+            chains=chains_list,
+            starting_port=starting_port
         )
         
-        logger.info("🍭 Loaded Honey configuration:")
+        logger.info("🍯 Loaded Honey configuration:")
         logger.info(f"  Wallet: {honey_config.wallet[:10]}...")
         logger.info(f"  Chains: {len(honey_config.chains)} configured")
         for chain in honey_config.chains:
@@ -95,16 +84,9 @@ class Honey:
         
         return honey_config
 
-# supported chains: op, base, lisk, uni
-
-# Load configuration from honey.yaml (mandatory)
+# Load configuration from honey.yaml (mandatory)  
 honey_config = Honey.from_config()
-PREDEFINED_PRIVATE_KEY = honey_config.wallet
-starting_port = 4444
 
-# Build chains configuration from honey.yaml
-chains = [{"name": chain.name, "id": chain.id, "port": starting_port + i} 
-          for i, chain in enumerate(honey_config.chains)]
 
 def check_supersim_ready(timeout_seconds=60):
     """Check if supersim is ready by calling a test contract"""
@@ -116,7 +98,7 @@ def check_supersim_ready(timeout_seconds=60):
                 # TODO: figure out what this address is supposed to be
                 "0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2", 
                 "MAX_TOKENS()(uint256)", 
-                "--rpc-url", f"http://localhost:{starting_port}"
+                "--rpc-url", f"http://localhost:{honey_config.starting_port}"
             ], capture_output=True, text=True, timeout=10)
             
             if result.returncode == 0 and result.stdout.strip(): return True
@@ -163,7 +145,7 @@ def check_balance(address, chain_port):
         return None
 
 def check_token_balance(wallet_address: str, chain_port: int, token_address: str) -> int:
-    """Check ERC20 token balance on a specific chain - returns raw wei amount"""
+    """Check ERC20 token balance on a specific chain - returns raw amount"""
     try:
         result = subprocess.run([
             "cast", "call", token_address,
@@ -206,10 +188,11 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
         large_holder = request["holder"]  # Use custom holder from config
         
         # Find the chain port
-        chain = next((c for c in chains if c['name'] == chain_name), None)
-        if not chain:
+        chain_config = next((c for c in honey_config.chains if c.name == chain_name), None)
+        if not chain_config:
             logger.error(f"Unknown chain: {chain_name}")
             return
+        chain = {"name": chain_config.name, "id": chain_config.id, "port": chain_config.port}
         
         max_retries = 3
         retry_delay = 2.0  # Start with 2 second delay
@@ -235,7 +218,7 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
                 ], capture_output=True, text=True)
                 
                 if transfer_result.returncode == 0:
-                    logger.info(f"  ✓ Successfully added {amount} wei tokens ({token_address[:10]}...) on {chain_name}")
+                    logger.info(f"  ✓ Successfully added {amount} tokens ({token_address[:10]}...) on {chain_name}")
                     return  # Success, exit retry loop
                 else:
                     error_msg = transfer_result.stderr
@@ -281,25 +264,20 @@ def check_token_balances_all_chains(wallet_address: str) -> None:
     
     def check_chain_balances(chain_config):
         """Check balances for a single chain"""
-        # Find the corresponding chain with port info
-        chain = next((c for c in chains if c['name'] == chain_config.name), None)
-        if not chain:
-            return chain_config.name, "Chain not found in port configuration", None
-            
         # Check ETH balance
-        eth_balance = check_balance(wallet_address, chain['port'])
-        eth_str = f"{eth_balance} wei ETH" if eth_balance is not None else "Failed"
+        eth_balance = check_balance(wallet_address, chain_config.port)
+        eth_str = f"{eth_balance} ETH" if eth_balance is not None else "Failed"
         
         # Check token balances for tokens configured on this chain
         token_balances = []
         for token_config in chain_config.balance:
             token_balance = check_token_balance(
                 wallet_address, 
-                chain['port'], 
+                chain_config.port, 
                 token_config.address
             )
             if token_balance > 0:
-                token_balances.append(f"{token_balance} wei {token_config.token}")
+                token_balances.append(f"{token_balance} {token_config.token}")
         
         # Format output
         token_str = ""
@@ -339,15 +317,15 @@ def run_supersim():
     process = subprocess.Popen([
         "supersim", "fork", 
         "--l2.host=0.0.0.0", 
-        f"--l2.starting.port={starting_port}",
-        f"--chains={','.join([chain['name'].lower() for chain in chains])}"
+        f"--l2.starting.port={honey_config.starting_port}",
+        f"--chains={','.join([chain.name.lower() for chain in honey_config.chains])}"
     ], env=os.environ.copy() | dotenv_values(".env"))    
     
     logger.info("Waiting for supersim to be ready...")
     if check_supersim_ready():
         logger.info("Supersim started successfully. Listening on ports:")
-        for chain in chains:
-            logger.info(f"  {chain['name']} (Chain ID {chain['id']}): http://localhost:{chain['port']}")
+        for chain in honey_config.chains:
+            logger.info(f"  {chain.name} (Chain ID {chain.id}): http://localhost:{chain.port}")
         return process
     else:
         logger.error("Supersim failed to start or become ready within timeout")
@@ -378,10 +356,10 @@ if __name__ == "__main__":
             })
     
     if token_requests:
-        logger.info("🍭 Adding tokens from honey.yaml configuration...")
+        logger.info("🍯 Adding tokens from honey.yaml configuration...")
         add_tokens_by_address(wallet_address, token_requests)
     else:
-        logger.info("🍭 No token balances configured in honey.yaml")
+        logger.info("🍯 No token balances configured in honey.yaml")
     
     # Check final balances (ETH + tokens)
     check_token_balances_all_chains(wallet_address)
@@ -392,16 +370,3 @@ if __name__ == "__main__":
         logger.info("Shutting down supersim...")
         process.terminate()
         process.wait()
-
-
-# @Claude: here are some additional commands that we have tested for various ops
-# we will likely want to run these using subprocess or smth along these lines
-
-# check my ETH balance on OP
-# cast balance 0x1e7A6B63F98484514610A9F0D5b399d4F7a9b1dA --rpc-url http://127.0.0.1:4444
-
-# check my ETH balance on Base
-#cast balance 0x1e7A6B63F98484514610A9F0D5b399d4F7a9b1dA --rpc-url http://127.0.0.1:4445
-# 3940090932400543
-# Add my ETH balance on OP
-# cast send 0x420beeF000000000000000000000000000000001 "mint(address _to, uint256 _amount)"  0x1e7A6B63F98484514610A9F0D5b399d4F7a9b1dA 1000  --rpc-url http://127.0.0.1:4444 --private-key PRIVATE_KEY

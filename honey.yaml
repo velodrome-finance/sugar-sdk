@@ -1,5 +1,6 @@
 honey:
   - description: "Configuration file for Honey testing helpers used by Sugar SDK."
+  - starting_port: 4444
   - wallet:
       - pk: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" # preset from anvil
   - chains:
