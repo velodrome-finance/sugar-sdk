@@ -125,7 +125,7 @@ Get a quote and swap:
 from sugar.chains import AsyncOPChain
 
 async with AsyncOPChain() as op:
-    quote = await op.get_quote(from_token=AsyncOPChain.velo, to_token=AsyncOPChain.eth, amount=10)
+    quote = await op.get_quote(from_token=AsyncOPChain.velo, to_token=AsyncOPChain.eth, amount=AsyncOPChain.velo.parse_units(10))
     if not quote:
         # no quote found 
     # check quote.amount_out (in wei)
@@ -138,7 +138,7 @@ async with AsyncOPChain() as op:
 from sugar.chains import AsyncOPChain
 
 async with AsyncOPChain() as op:
-    await op.swap(from_token=velo, to_token=eth, amount=10)
+    await op.swap(from_token=velo, to_token=eth, amount=velo.parse_units(10))
 ```
 
 > **NOTE**: amount you pass into quote/swap should be a float indicating
