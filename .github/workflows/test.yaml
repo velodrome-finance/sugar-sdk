@@ -1,14 +1,17 @@
-on:  [pull_request]
+on: [pull_request]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12']
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
       fail-fast: false
     env:
-      SUGAR_PK: ${{ secrets.SUGAR_PK }}
+      # OMG, there are private keys in this file. What is this amateur hour?
+      # Calm down, these are presets from Anvil. No need to panic.
+      # see https://getfoundry.sh/anvil/overview#getting-started
+      SUGAR_PK: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
       SUGAR_RPC_URI_10: ${{ secrets.SUGAR_RPC_URI_10 }}
       SUGAR_RPC_URI_8453: ${{ secrets.SUGAR_RPC_URI_8453 }}
       SUGAR_RPC_URI_130: ${{ secrets.SUGAR_RPC_URI_130 }}
@@ -17,6 +20,8 @@ jobs:
       SUPERSIM_RPC_URL_OP: ${{ secrets.SUPERSIM_RPC_URL_OP }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
       - name: Set up Homebrew
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@master
@@ -24,14 +29,21 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
       - name: Confirm forge is installed
         run: forge --version
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Python dependencies
+        run: |
+          pip install pyyaml python-dotenv
       - name: Install supersim
         run: brew install ethereum-optimism/tap/supersim
       - name: Confirm supersim is installed
         run: supersim --version
-      - name: Fork
+      - name: Run honey
         run: |
-          supersim fork  --l2.host=0.0.0.0 --l2.starting.port=4444 --chains=op,base,lisk > /dev/null 2>&1 &
-          sleep 10
+          python honey.py > /dev/null 2>&1 &
+          sleep 15
       - name: Test fork
         run: cast call 0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2 "MAX_TOKENS()(uint256)" --rpc-url http://localhost:4444
       - uses: fastai/workflows/nbdev-ci@master

@@ -1,0 +1,37 @@
+honey:
+  - description: "Configuration file for Honey testing helpers used by Sugar SDK."
+  - starting_port: 4444
+  - wallet:
+      # OMG, there are private keys in this file. What is this amateur hour?
+      # Calm down, these are presets from Anvil. No need to panic.
+      # see https://getfoundry.sh/anvil/overview#getting-started
+      - pk: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+  - chains:
+      - name: "OP"
+        id: "10"
+        balance:
+          - token: "velo"
+            address: "0x9560e827af36c94d2ac33a39bce1fe78631088db"
+            amount: "1000000000000000000000" # 1000 Velo
+            holder: "0xF977814e90dA44bFA03b6295A0616a897441aceC"
+          - token: "usdc"
+            address: "0x0b2c639c533813f4aa9d7837caf62653d097ff85"
+            amount: "1000000000" # 1000 USDC
+            holder: "0xF977814e90dA44bFA03b6295A0616a897441aceC"
+          - token: "ousdt"
+            address: "0x1217bfe6c773eec6cc4a38b5dc45b92292b6e189"
+            amount: "100000000" # 100 oUSDT
+            holder: "0x48A5A6a01bA89cDdF97D2D552923d5a11401Ed19"
+      - name: "Lisk"
+        id: "1135"
+        balance:
+          - token: "lsk"
+            address: "0xac485391eb2d7d88253a7f1ef18c37f4242d1a24"
+            amount: "1000000000000000000000" # 1000 LSK
+            holder: "0x14fA1c5759f22A5f12322409Ef6847b64041f33a"
+          - token: "ousdt"
+            address: "0x1217bfe6c773eec6cc4a38b5dc45b92292b6e189"
+            amount: "100000000" # 100 oUSDT
+            holder: "0xc8111b21B68B2615F55E5D5d69103335ed082916"
+      - name: "Base"
+        id: "8453"
