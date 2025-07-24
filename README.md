@@ -147,32 +147,29 @@ async with AsyncOPChain() as op:
 
 ## Superswaps
 
-Get a quote and then superswap:
+```python
+from sugar import OPChain, LiskChain, Superswap
+
+superswap = Superswap()
+quote = superswap.get_super_quote(from_token=OPChain.velo, to_token=LiskChain.lsk, amount=OPChain.velo.parse_units(100))
+superswap.swap_from_quote(quote)
+
+# feeling lucky Superswap
+Superswap().swap(from_token=OPChain.velo, to_token=LiskChain.lsk, amount=OPChain.velo.parse_units(100))
+```
+
+As always, async version is also available
 
 ```python
-from sugar import AsyncSuperswap, AsyncOPChain, AsyncLiskChain
+from sugar import OPChain, LiskChain, AsyncSuperswap
 
-# get a superswap quote to swap 20 velo to lsk
 superswap = AsyncSuperswap()
-quote = await superswap.get_super_quote(from_token=AsyncOPChain.velo, to_token=AsyncLiskChain.lsk, amount=20)
-if not quote:
-    # no quote found 
-# check quote.amount_out (in wei)
-tx = await superswap.swap_from_quote(quote)
+quote = await superswap.get_super_quote(from_token=OPChain.velo, to_token=LiskChain.lsk, amount=OPChain.velo.parse_units(100))
+await superswap.swap_from_quote(quote)
+
+# feeling lucky Superswap
+await AsyncSuperswap().swap(from_token=OPChain.velo, to_token=LiskChain.lsk, amount=OPChain.velo.parse_units(100))
 ```
-
-“I am Feeling lucky” superswap:
-
-``` python
-from sugar import AsyncSuperswap, AsyncOPChain, AsyncLiskChain
-
-# get a superswap quote to swap 20 velo to lsk
-tx = await AsyncSuperswap().swap(from_token=AsyncOPChain.velo, to_token=AsyncLiskChain.lsk, amount=20)
-```
-
-> **NOTE**: amount you pass into quote/swap should be a float indicating
-> decimal amount of input token **NOT** amount in wei. Sugar runs
-> conversion for you behind the scenes
 
 ## Configuration
 
