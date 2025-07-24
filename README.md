@@ -128,7 +128,7 @@ async with AsyncOPChain() as op:
     quote = await op.get_quote(from_token=AsyncOPChain.velo, to_token=AsyncOPChain.eth, amount=AsyncOPChain.velo.parse_units(10))
     if not quote:
         # no quote found 
-    # check quote.amount_out (in wei)
+    # check quote.amount_out
     await op.swap_from_quote(quote)
 ```
 
@@ -140,10 +140,6 @@ from sugar.chains import AsyncOPChain
 async with AsyncOPChain() as op:
     await op.swap(from_token=velo, to_token=eth, amount=velo.parse_units(10))
 ```
-
-> **NOTE**: amount you pass into quote/swap should be a float indicating
-> decimal amount of input token **NOT** amount in wei. Sugar runs
-> conversion for you behind the scenes
 
 ## Superswaps
 
