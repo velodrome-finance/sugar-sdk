@@ -1,14 +1,16 @@
-on:  [pull_request]
+on: [pull_request]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12']
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
       fail-fast: false
     env:
-      # preset from anvil
+      # OMG, there are private keys in this file. What is this amateur hour?
+      # Calm down, these are presets from Anvil. No need to panic.
+      # see https://getfoundry.sh/anvil/overview#getting-started
       SUGAR_PK: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
       SUGAR_RPC_URI_10: ${{ secrets.SUGAR_RPC_URI_10 }}
       SUGAR_RPC_URI_8453: ${{ secrets.SUGAR_RPC_URI_8453 }}
