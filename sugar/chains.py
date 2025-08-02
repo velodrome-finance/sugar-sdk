@@ -288,34 +288,17 @@ class AsyncChain(CommonChain):
         ).call()
 
     @require_async_context
-    async def balance_of(self, token_address: str, owner: str) -> int:
+    async def balance_of(self, token_address: str, owner_address: str) -> int:
         """Get token balance for given owner"""
         token_contract = self.web3.eth.contract(address=token_address, abi=erc20_abi)
-        return await token_contract.functions.balanceOf(owner).call()
+        return await token_contract.functions.balanceOf(owner_address).call()
 
     @require_async_context
     async def get_ica_hook(self): return await self.ica_router.functions.hook().call()
 
     @require_async_context
-    async def get_user_ica_balance(self, user_ica: str) -> int:
-        abi = [{
-            "type": 'function',
-            "name": 'balanceOf',
-            "stateMutability": 'view',
-            "inputs": [
-                {
-                    "name": 'account',
-                    "type": 'address',
-                }
-            ],
-            "outputs": [
-                {
-                    "type": 'uint256',
-                }
-            ]
-        }]
-        contract = self.web3.eth.contract(address=self.settings.bridge_token_addr, abi=abi)
-        return await contract.functions.balanceOf(user_ica).call()
+    async def get_user_ica_balance(self, user_ica: str) -> int: 
+        return await self.balance_of(token_address=self.settings.bridge_token_addr, owner_address=user_ica)
 
     @require_async_context
     @alru_cache(maxsize=None)
@@ -329,12 +312,12 @@ class AsyncChain(CommonChain):
         return self.find_token_by_address(await self.get_all_tokens(), address)
     
     @require_async_context
-    async def get_token_balance(self, token: Token, owner: Optional[str] = None) -> int:
+    async def get_token_balance(self, token: Token, owner_address: Optional[str] = None) -> int:
         # TODO: consider moving to native token wording just like velo app does
-        owner_address = owner or self.account.address
+        owner_address = owner_address or self.account.address
         if not owner_address: raise ValueError("Owner address is required to get token balance")
         if token.wrapped_token_address: return await self.web3.eth.get_balance(owner_address)
-        return await self.balance_of(token_address=token.wrapped_token_address or token.token_address, owner=owner_address)
+        return await self.balance_of(token_address=token.wrapped_token_address or token.token_address, owner_address=owner_address)
 
     @require_async_context
     async def get_bridge_token(self) -> Token: return self._get_bridge_token(await self.get_all_tokens())
@@ -630,24 +613,7 @@ class Chain(CommonChain):
 
     @require_context
     def get_user_ica_balance(self, user_ica: str) -> int:
-        abi = [{
-            "type": 'function',
-            "name": 'balanceOf',
-            "stateMutability": 'view',
-            "inputs": [
-                {
-                    "name": 'account',
-                    "type": 'address',
-                }
-            ],
-            "outputs": [
-                {
-                    "type": 'uint256',
-                }
-            ]
-        }]
-        contract = self.web3.eth.contract(address=self.settings.bridge_token_addr, abi=abi)
-        return contract.functions.balanceOf(user_ica).call()
+        return self.balance_of(token_address=self.settings.bridge_token_addr, owner_address=user_ica)
 
     @require_context
     def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
@@ -674,18 +640,18 @@ class Chain(CommonChain):
         return self.find_token_by_address(self.get_all_tokens(), address)
     
     @require_context
-    def balance_of(self, token_address: str, owner: str) -> int:
+    def balance_of(self, token_address: str, owner_address: str) -> int:
         """Get token balance for given owner"""
         token_contract = self.web3.eth.contract(address=token_address, abi=erc20_abi)
-        return token_contract.functions.balanceOf(owner).call()
+        return token_contract.functions.balanceOf(owner_address).call()
     
     @require_context
-    def get_token_balance(self, token: Token, owner: Optional[str] = None) -> int:
+    def get_token_balance(self, token: Token, owner_address: Optional[str] = None) -> int:
         # TODO: consider moving to native token wording just like velo app does
-        owner_address = owner or self.account.address
+        owner_address = owner_address or self.account.address
         if not owner_address: raise ValueError("Owner address is required to get token balance")
         if token.wrapped_token_address: return self.web3.eth.get_balance(owner_address)
-        return self.balance_of(token_address=token.wrapped_token_address or token.token_address, owner=owner_address)
+        return self.balance_of(token_address=token.wrapped_token_address or token.token_address, owner_address=owner_address)
 
     @require_context
     def get_bridge_token(self) -> Token: return self._get_bridge_token(self.get_all_tokens())
