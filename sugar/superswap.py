@@ -225,7 +225,12 @@ class Superswap(SuperswapCommon):
 
                 # we need destination quote if we don't end with bridge token
                 if to_token != to_bridge_token:
-                    b_a = SuperswapQuote.calc_bridged_amount(from_token, from_bridge_token, amount, o_q)
+                    # include bridge token balance of userICA as superswap will always use any existing bridge token balance as part of the swap
+                    destination_domain = get_domain(int(to_chain.chain_id))
+                    user_ica_address = from_chain.get_remote_interchain_account(destination_domain)
+                    user_ica_bridge_balance = to_chain.get_token_balance(token=to_bridge_token, owner_address=user_ica_address)
+
+                    b_a = SuperswapQuote.calc_bridged_amount(from_token, from_bridge_token, amount, o_q) + user_ica_bridge_balance
                     d_q = to_chain.get_quote(to_bridge_token, to_token, amount=b_a)
                     if d_q is None: return None
 
@@ -315,7 +320,12 @@ class AsyncSuperswap(SuperswapCommon):
 
                 # we need destination quote if we don't end with bridge token
                 if to_token != to_bridge_token:
-                    b_a = SuperswapQuote.calc_bridged_amount(from_token, from_bridge_token, amount, o_q)
+                    # include bridge token balance of userICA as superswap will always use any existing bridge token balance as part of the swap
+                    destination_domain = await get_domain_async(int(to_chain.chain_id))
+                    user_ica_address = await from_chain.get_remote_interchain_account(destination_domain)
+                    user_ica_bridge_balance = await to_chain.get_token_balance(token=to_bridge_token, owner_address=user_ica_address)
+
+                    b_a = SuperswapQuote.calc_bridged_amount(from_token, from_bridge_token, amount, o_q) + user_ica_bridge_balance
                     d_q = await to_chain.get_quote(to_bridge_token, to_token, amount=b_a)
                     if d_q is None: return None
 
