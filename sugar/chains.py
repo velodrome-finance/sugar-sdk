@@ -24,7 +24,7 @@ from .config import ChainSettings, make_op_chain_settings, make_base_chain_setti
 from .config import XCHAIN_GAS_LIMIT_UPPERBOUND
 from .helpers import normalize_address, MAX_UINT256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
 from .helpers import find_all_paths, time_it, atime_it, to_bytes32
-from .abi import get_abi, bridge_transfer_remote_abi, bridge_get_fee_abi
+from .abi import get_abi, bridge_transfer_remote_abi, bridge_get_fee_abi, erc20_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
 from .price import Price
@@ -288,6 +288,12 @@ class AsyncChain(CommonChain):
         ).call()
 
     @require_async_context
+    async def balance_of(self, token_address: str, owner: str) -> int:
+        """Get token balance for given owner"""
+        token_contract = self.web3.eth.contract(address=token_address, abi=erc20_abi)
+        return await token_contract.functions.balanceOf(owner).call()
+
+    @require_async_context
     async def get_ica_hook(self): return await self.ica_router.functions.hook().call()
 
     @require_async_context
@@ -321,6 +327,14 @@ class AsyncChain(CommonChain):
     async def get_token(self, address: str) -> Optional[Token]:
         """Get token by address"""
         return self.find_token_by_address(await self.get_all_tokens(), address)
+    
+    @require_async_context
+    async def get_token_balance(self, token: Token, owner: Optional[str] = None) -> int:
+        # TODO: consider moving to native token wording just like velo app does
+        owner_address = owner or self.account.address
+        if not owner_address: raise ValueError("Owner address is required to get token balance")
+        if token.wrapped_token_address: return await self.web3.eth.get_balance(owner_address)
+        return await self.balance_of(token_address=token.wrapped_token_address or token.token_address, owner=owner_address)
 
     @require_async_context
     async def get_bridge_token(self) -> Token: return self._get_bridge_token(await self.get_all_tokens())
@@ -658,6 +672,20 @@ class Chain(CommonChain):
     def get_token(self, address: str) -> Optional[Token]:
         """Get token by address"""
         return self.find_token_by_address(self.get_all_tokens(), address)
+    
+    @require_context
+    def balance_of(self, token_address: str, owner: str) -> int:
+        """Get token balance for given owner"""
+        token_contract = self.web3.eth.contract(address=token_address, abi=erc20_abi)
+        return token_contract.functions.balanceOf(owner).call()
+    
+    @require_context
+    def get_token_balance(self, token: Token, owner: Optional[str] = None) -> int:
+        # TODO: consider moving to native token wording just like velo app does
+        owner_address = owner or self.account.address
+        if not owner_address: raise ValueError("Owner address is required to get token balance")
+        if token.wrapped_token_address: return self.web3.eth.get_balance(owner_address)
+        return self.balance_of(token_address=token.wrapped_token_address or token.token_address, owner=owner_address)
 
     @require_context
     def get_bridge_token(self) -> Token: return self._get_bridge_token(self.get_all_tokens())

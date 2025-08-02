@@ -64,6 +64,13 @@ erc20_abi = [
             {"name": "amount", "type": "uint256"}
         ],
         "outputs": [{"name": "", "type": "bool"}]
+    },
+    {
+        "name": "balanceOf",
+        "type": "function",
+        "constant": True,
+        "inputs": [{"name": "owner", "type": "address"}],
+        "outputs": [{"name": "", "type": "uint256"}]
     }
 ]
 
