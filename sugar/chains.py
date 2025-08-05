@@ -317,7 +317,7 @@ class AsyncChain(CommonChain):
         owner_address = owner_address or self.account.address
         if not owner_address: raise ValueError("Owner address is required to get token balance")
         if token.wrapped_token_address: return await self.web3.eth.get_balance(owner_address)
-        return await self.balance_of(token_address=token.wrapped_token_address or token.token_address, owner_address=owner_address)
+        return await self.balance_of(token_address=token.token_address, owner_address=owner_address)
 
     @require_async_context
     async def get_bridge_token(self) -> Token: return self._get_bridge_token(await self.get_all_tokens())
@@ -651,7 +651,7 @@ class Chain(CommonChain):
         owner_address = owner_address or self.account.address
         if not owner_address: raise ValueError("Owner address is required to get token balance")
         if token.wrapped_token_address: return self.web3.eth.get_balance(owner_address)
-        return self.balance_of(token_address=token.wrapped_token_address or token.token_address, owner_address=owner_address)
+        return self.balance_of(token_address=token.token_address, owner_address=owner_address)
 
     @require_context
     def get_bridge_token(self) -> Token: return self._get_bridge_token(self.get_all_tokens())
