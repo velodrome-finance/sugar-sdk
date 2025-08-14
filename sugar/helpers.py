@@ -127,7 +127,7 @@ def pct_of(base: int, amount: int, wad: int = 18) -> int:
     """Returns the percentage of two numbers"""
     if base == 0: return 0
     numerator = amount * 100 * (10 ** wad)
-    return numerator / base
+    return int(numerator / base)
 
 def div_unsafe(x: int, y: int, wad_x: int = 18, wad_y: int = 18, wad: int = 18) -> int:
     """Returns the division of two big numbers"""
