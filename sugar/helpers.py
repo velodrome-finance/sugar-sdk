@@ -3,8 +3,9 @@
 # %% auto 0
 __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'normalize_address', 'chunk', 'amount_to_k_string', 'format_currency',
            'format_percentage', 'amount_to_m_string', 'float_to_uint256', 'get_future_timestamp', 'apply_slippage',
-           'parse_ether', 'get_unique_str', 'get_salt', 'to_bytes32', 'to_bytes32_str', 'Pair', 'find_all_paths',
-           'ICACallData', 'hash_ICA_calls', 'serialize_ica_calls', 'Timer', 'time_it', 'atime_it', 'require_supersim']
+           'parse_ether', 'get_unique_str', 'get_salt', 'to_bytes32', 'to_bytes32_str', 'pct_of', 'div_unsafe',
+           'mul_unsafe', 'Pair', 'find_all_paths', 'ICACallData', 'hash_ICA_calls', 'serialize_ica_calls', 'Timer',
+           'time_it', 'atime_it', 'require_supersim']
 
 # %% ../src/helpers.ipynb 2
 from json import dumps
@@ -121,7 +122,30 @@ def to_bytes32(val: str) -> bytes:
 
 def to_bytes32_str(val: str) -> str: return f"0x{to_bytes32(val).hex()}"
 
-# %% ../src/helpers.ipynb 18
+# %% ../src/helpers.ipynb 13
+def pct_of(base: int, amount: int, wad: int = 18) -> int:
+    """Returns the percentage of two numbers"""
+    if base == 0: return 0
+    numerator = amount * 100 * (10 ** wad)
+    return numerator / base
+
+def div_unsafe(x: int, y: int, wad_x: int = 18, wad_y: int = 18, wad: int = 18) -> int:
+    """Returns the division of two big numbers"""
+    if x == 0 or y == 0:
+        return 0
+    denominator = y * (10 ** wad_x)
+    numerator = x * (10 ** (wad_y + wad))
+    return numerator // denominator
+
+def mul_unsafe(x: int, y: int, wad_x: int = 18, wad_y: int = 18, wad: int = 18) -> int:
+    """Returns the multiplication of two big numbers"""
+    if x == 0 or y == 0:
+        return 0
+    numerator = x * y * (10 ** wad)
+    denominator = 10 ** (wad_x + wad_y)
+    return numerator // denominator
+
+# %% ../src/helpers.ipynb 19
 # Claude 3.7 sonnet made this
 
 @dataclass
@@ -179,7 +203,7 @@ def find_all_paths(pairs: List[Pair], start_token: str, end_token: str, cutoff=3
     return uniques
 
 
-# %% ../src/helpers.ipynb 21
+# %% ../src/helpers.ipynb 22
 # TODO: get rid of ICACallData, use tuples instead
 @dataclass(frozen=True)
 class ICACallData: to: str; value: int; data: str
@@ -196,7 +220,7 @@ def serialize_ica_calls(calls: List[ICACallData]) -> List[dict]:
     """
     return list(map(lambda call: {"to": call.to, "value": str(call.value), "data": call.data}, calls))
 
-# %% ../src/helpers.ipynb 25
+# %% ../src/helpers.ipynb 26
 # Claude 4 sonnet made this
 
 class Timer:
@@ -255,7 +279,7 @@ async def atime_it(name: str = "Operation", precision: int = 4, callback: Option
     async with timer:
         yield timer
 
-# %% ../src/helpers.ipynb 28
+# %% ../src/helpers.ipynb 29
 def require_supersim():
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

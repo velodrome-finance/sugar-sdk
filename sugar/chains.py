@@ -128,8 +128,12 @@ class CommonChain:
         # this gives us the price of 1 eth in usd with 18 decimals precision
         eth_usd_price = (eth_rate * 10 ** eth_decimals) // usd_rate
         # finally convert to prices in terms of stable
-        return [Price(token=t, price=(rates_in_eth[t.token_address] * eth_usd_price // 10 ** eth_decimals) / 10 ** eth_decimals) for t in tokens]
-    
+        prices = []
+        for t in tokens:
+            price_raw = rates_in_eth[t.token_address] * eth_usd_price // (10 ** eth_decimals)
+            prices.append(Price(token=t, price_raw=price_raw, price=price_raw / (10 ** eth_decimals)))
+        return prices
+
     def prepare_pools(self, pools: List[Tuple], tokens: List[Token], prices: List[Price]) -> List[LiquidityPool]:
         tokens, prices = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}
         return list(filter(lambda p: p is not None, map(lambda p: LiquidityPool.from_tuple(p, tokens, prices, chain_id=self.chain_id, chain_name=self.name), pools)))

@@ -18,6 +18,7 @@ class Price:
 
     token: Token
     price: float
+    price_raw: int
 
     @property
     def pretty_price(self) -> float: return round(self.price, 5)
