@@ -123,10 +123,20 @@ def to_bytes32(val: str) -> bytes:
 def to_bytes32_str(val: str) -> str: return f"0x{to_bytes32(val).hex()}"
 
 # %% ../src/helpers.ipynb 13
-def pct_of(base: int, amount: int, wad: int = 18) -> int:
-    """Returns the percentage of two numbers"""
+def pct_of(base: int, amount: int, decimal_notation: bool = True, wad: int = 18) -> int:
+    """Calculate the percentage of a given amount with respect to a base.
+
+    Args:
+        base (int): The base value to calculate the percentage of.
+        amount (int): The amount to calculate the percentage for.
+        decimal_notation (bool, optional): Whether to use decimal notation ([0, 1]). Defaults to True.
+        wad (int, optional): The number of decimal places to use. Defaults to 18.
+
+    Returns:
+        int: percentage base (10 ** wad)
+    """
     if base == 0: return 0
-    numerator = amount * 100 * (10 ** wad)
+    numerator = amount * (100 if not decimal_notation else 1) * (10 ** wad)
     return int(numerator / base)
 
 def div_unsafe(x: int, y: int, wad_x: int = 18, wad_y: int = 18, wad: int = 18) -> int:
