@@ -162,12 +162,17 @@ class CommonChain:
             inputs.append(q)
         return batcher, inputs
 
-    def prepare_quotes(self, quote_inputs: List[QuoteInput], responses):
+    def prepare_quotes(self, quote_inputs: List[QuoteInput], responses, prices: List[Price]) -> List[Quote]:
         if len(responses) != len(quote_inputs): raise ValueError(f"Number of responses {len(responses)} does not match number of quote inputs {len(quote_inputs)}")
         quotes = []
         for i, r in enumerate(responses):
             if isinstance(r, Exception): continue
-            else: quotes.append(Quote(input=quote_inputs[i], amount_out=r[0]))
+            else: 
+                from_token_price = next((p for p in prices if p.token == quote_inputs[i].from_token), None)
+                to_token_price = next((p for p in prices if p.token == quote_inputs[i].to_token), None)
+                if not from_token_price or not to_token_price:
+                    raise ValueError(f"Price for token {quote_inputs[i].from_token.token_address} or {quote_inputs[i].to_token.token_address} not found in prices")
+                quotes.append(Quote(input=quote_inputs[i], amount_out=r[0], from_token_price=from_token_price, to_token_price=to_token_price))
         return quotes
     
     def get_paths_for_quote(self, from_token: Token, to_token: Token, pools: List[LiquidityPoolForSwap], exclude_tokens: List[str]) -> List[List[Tuple]]:
@@ -380,7 +385,7 @@ class AsyncChain(CommonChain):
         path_pools = self.paths_to_pools(pools, paths)
         async with self.web3.batch_requests() as batch:
             batch, inputs = self.prepare_quote_batch(from_token, to_token, batch, path_pools, amount_in, paths)
-            return self.prepare_quotes(inputs, await batch.async_execute())
+            return self.prepare_quotes(inputs, await batch.async_execute(), await self.get_prices(await self.get_all_tokens()))
 
     @require_async_context
     async def get_quote(self, from_token: Token, to_token: Token, amount: int, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
@@ -715,8 +720,8 @@ class Chain(CommonChain):
         path_pools = self.paths_to_pools(pools, paths)
         with self.web3.batch_requests() as batch:
             batch, inputs = self.prepare_quote_batch(from_token, to_token, batch, path_pools, amount_in, paths)
-            return self.prepare_quotes(inputs, batch.execute())
-    
+            return self.prepare_quotes(inputs, batch.execute(), self.get_prices(self.get_all_tokens()))
+
     @require_context
     def get_quote(self, from_token: Token, to_token: Token, amount: int, filter_quotes: Optional[Callable[[Quote], bool]] = None) -> Optional[Quote]:
         pools = self.filter_pools_for_swap(from_token=from_token, to_token=to_token, pools=self.get_pools_for_swaps())

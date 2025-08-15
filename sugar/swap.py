@@ -13,6 +13,7 @@ from .helpers import apply_slippage, ICACallData, hash_ICA_calls, to_bytes32, to
 from .helpers import ADDRESS_ZERO
 from .token import Token
 from .pool import LiquidityPoolForSwap
+from .price import Price
 from enum import IntEnum
 from typing import List, Any, Tuple, Optional
 from eth_abi import encode

@@ -76,7 +76,7 @@ class QuoteInput:
 
 @dataclass
 class Quote:
-    input: QuoteInput; amount_out: int
+    input: QuoteInput; from_token_price: Price; to_token_price: Price; amount_out: int
 
     @property
     def from_token(self) -> Token: return self.input.from_token
@@ -87,13 +87,13 @@ class Quote:
     @property
     def amount_in(self) -> int: return self.input.amount_in
     
-    def get_price_impact(self, from_token_price: Price, to_token_price: Price) -> int:
-        """Calculates the price impact for a quote"""
+    @property
+    def price_impact(self) -> int:
         return calc_price_impact(
             amount_in=self.amount_in,
             amount_out=self.amount_out,
-            from_token_price=from_token_price.price_raw,
-            to_token_price=to_token_price.price_raw,
+            from_token_price=self.from_token_price.price_raw,
+            to_token_price=self.to_token_price.price_raw,
             from_token=self.from_token,
             to_token=self.to_token
         )
