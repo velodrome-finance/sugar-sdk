@@ -21,6 +21,7 @@ class Token:
     symbol: str
     decimals: int
     listed: bool
+    emerging: bool = False
     wrapped_token_address: str = None
 
     def __eq__(self, other):
@@ -44,7 +45,7 @@ class Token:
 
     @classmethod
     def from_tuple(cls, t: Tuple, chain_id: str, chain_name: str) -> "Token":
-        (token_address, symbol, decimals, _, listed) = t
+        (token_address, symbol, decimals, _, listed, emerging) = t
         return Token(
             chain_id=chain_id,
             chain_name=chain_name,
@@ -52,4 +53,5 @@ class Token:
             symbol=symbol,
             decimals=decimals,
             listed=listed,
+            emerging=emerging,
         )

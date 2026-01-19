@@ -334,7 +334,12 @@ class AsyncChain(CommonChain):
 
     @alru_cache(maxsize=None)
     async def get_raw_pools(self, for_swaps: bool):
-        return await self.apaginate(self.sugar.functions.forSwaps if for_swaps else self.sugar.functions.all)
+        if for_swaps:                                                                                                                                                                                                                                                                                                    
+          return await self.apaginate(self.sugar.functions.forSwaps)                                                                                                                                                                                                                                                   
+        else:                                                                                                                                                                                                                                                                                                            
+          return await self.apaginate(                                                                                                                                                                                                                                                                                 
+              lambda limit, offset: self.sugar.functions.all(limit, offset, 0)                                                                                                                                                                                                                                         
+          ) 
     
     @require_async_context
     async def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
@@ -669,7 +674,12 @@ class Chain(CommonChain):
     
     @lru_cache(maxsize=None)
     def get_raw_pools(self, for_swaps: bool):
-        return self.paginate(self.sugar.functions.forSwaps if for_swaps else self.sugar.functions.all)
+        if for_swaps:                                                                                                                                                                                                                                                                                                    
+          return self.paginate(self.sugar.functions.forSwaps)                                                                                                                                                                                                                                                          
+        else:                                                                                                                                                                                                                                                                                                            
+          return self.paginate(                                                                                                                                                                                                                                                                                        
+              lambda limit, offset: self.sugar.functions.all(limit, offset, 0)                                                                                                                                                                                                                                         
+          )  
 
     @require_context
     def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:

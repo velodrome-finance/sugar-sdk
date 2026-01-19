@@ -88,10 +88,26 @@
                     {
                         "name": "listed",
                         "type": "bool"
+                    },
+                    {
+                        "name": "emerging",
+                        "type": "bool"
                     }
                 ],
                 "name": "",
                 "type": "tuple[]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "count",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
             }
         ],
         "stateMutability": "view",
@@ -105,6 +121,10 @@
             },
             {
                 "name": "_offset",
+                "type": "uint256"
+            },
+            {
+                "name": "_filter",
                 "type": "uint256"
             }
         ],
@@ -197,6 +217,10 @@
                         "type": "address"
                     },
                     {
+                        "name": "emissions_cap",
+                        "type": "uint256"
+                    },
+                    {
                         "name": "pool_fee",
                         "type": "uint256"
                     },
@@ -211,6 +235,18 @@
                     {
                         "name": "token1_fees",
                         "type": "uint256"
+                    },
+                    {
+                        "name": "locked",
+                        "type": "uint256"
+                    },
+                    {
+                        "name": "emerging",
+                        "type": "uint256"
+                    },
+                    {
+                        "name": "created_at",
+                        "type": "uint32"
                     },
                     {
                         "name": "nfpm",
@@ -227,268 +263,6 @@
                 ],
                 "name": "",
                 "type": "tuple[]"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "name": "_address",
-                "type": "address"
-            }
-        ],
-        "name": "byAddress",
-        "outputs": [
-            {
-                "components": [
-                    {
-                        "name": "lp",
-                        "type": "address"
-                    },
-                    {
-                        "name": "symbol",
-                        "type": "string"
-                    },
-                    {
-                        "name": "decimals",
-                        "type": "uint8"
-                    },
-                    {
-                        "name": "liquidity",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "type",
-                        "type": "int24"
-                    },
-                    {
-                        "name": "tick",
-                        "type": "int24"
-                    },
-                    {
-                        "name": "sqrt_ratio",
-                        "type": "uint160"
-                    },
-                    {
-                        "name": "token0",
-                        "type": "address"
-                    },
-                    {
-                        "name": "reserve0",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "staked0",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "token1",
-                        "type": "address"
-                    },
-                    {
-                        "name": "reserve1",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "staked1",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "gauge",
-                        "type": "address"
-                    },
-                    {
-                        "name": "gauge_liquidity",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "gauge_alive",
-                        "type": "bool"
-                    },
-                    {
-                        "name": "fee",
-                        "type": "address"
-                    },
-                    {
-                        "name": "bribe",
-                        "type": "address"
-                    },
-                    {
-                        "name": "factory",
-                        "type": "address"
-                    },
-                    {
-                        "name": "emissions",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "emissions_token",
-                        "type": "address"
-                    },
-                    {
-                        "name": "pool_fee",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "unstaked_fee",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "token0_fees",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "token1_fees",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "nfpm",
-                        "type": "address"
-                    },
-                    {
-                        "name": "alm",
-                        "type": "address"
-                    },
-                    {
-                        "name": "root",
-                        "type": "address"
-                    }
-                ],
-                "name": "",
-                "type": "tuple"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "name": "_index",
-                "type": "uint256"
-            }
-        ],
-        "name": "byIndex",
-        "outputs": [
-            {
-                "components": [
-                    {
-                        "name": "lp",
-                        "type": "address"
-                    },
-                    {
-                        "name": "symbol",
-                        "type": "string"
-                    },
-                    {
-                        "name": "decimals",
-                        "type": "uint8"
-                    },
-                    {
-                        "name": "liquidity",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "type",
-                        "type": "int24"
-                    },
-                    {
-                        "name": "tick",
-                        "type": "int24"
-                    },
-                    {
-                        "name": "sqrt_ratio",
-                        "type": "uint160"
-                    },
-                    {
-                        "name": "token0",
-                        "type": "address"
-                    },
-                    {
-                        "name": "reserve0",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "staked0",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "token1",
-                        "type": "address"
-                    },
-                    {
-                        "name": "reserve1",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "staked1",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "gauge",
-                        "type": "address"
-                    },
-                    {
-                        "name": "gauge_liquidity",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "gauge_alive",
-                        "type": "bool"
-                    },
-                    {
-                        "name": "fee",
-                        "type": "address"
-                    },
-                    {
-                        "name": "bribe",
-                        "type": "address"
-                    },
-                    {
-                        "name": "factory",
-                        "type": "address"
-                    },
-                    {
-                        "name": "emissions",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "emissions_token",
-                        "type": "address"
-                    },
-                    {
-                        "name": "pool_fee",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "unstaked_fee",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "token0_fees",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "token1_fees",
-                        "type": "uint256"
-                    },
-                    {
-                        "name": "nfpm",
-                        "type": "address"
-                    },
-                    {
-                        "name": "alm",
-                        "type": "address"
-                    },
-                    {
-                        "name": "root",
-                        "type": "address"
-                    }
-                ],
-                "name": "",
-                "type": "tuple"
             }
         ],
         "stateMutability": "view",
@@ -572,6 +346,14 @@
                     {
                         "name": "sqrt_ratio_upper",
                         "type": "uint160"
+                    },
+                    {
+                        "name": "locker",
+                        "type": "address"
+                    },
+                    {
+                        "name": "unlocks_at",
+                        "type": "uint32"
                     },
                     {
                         "name": "alm",
@@ -669,6 +451,14 @@
                         "type": "uint160"
                     },
                     {
+                        "name": "locker",
+                        "type": "address"
+                    },
+                    {
+                        "name": "unlocks_at",
+                        "type": "uint32"
+                    },
+                    {
                         "name": "alm",
                         "type": "address"
                     }
@@ -760,6 +550,14 @@
                         "type": "uint160"
                     },
                     {
+                        "name": "locker",
+                        "type": "address"
+                    },
+                    {
+                        "name": "unlocks_at",
+                        "type": "uint32"
+                    },
+                    {
                         "name": "alm",
                         "type": "address"
                     }
@@ -846,6 +644,66 @@
     },
     {
         "inputs": [],
+        "name": "MAX_FACTORIES",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "MAX_ITERATIONS",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "voter",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "registry",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "convertor",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
         "name": "cl_helper",
         "outputs": [
             {
@@ -859,6 +717,99 @@
     {
         "inputs": [],
         "name": "alm_factory",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "arg0",
+                "type": "uint256"
+            },
+            {
+                "name": "arg1",
+                "type": "address"
+            }
+        ],
+        "name": "alm_map",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "v2_launcher",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "cl_launcher",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "token_sugar",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "lp_helper",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "v2_locker_factory",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "cl_locker_factory",
         "outputs": [
             {
                 "name": "",
@@ -888,6 +839,22 @@
             },
             {
                 "name": "_alm_factory",
+                "type": "address"
+            },
+            {
+                "name": "_v2_launcher",
+                "type": "address"
+            },
+            {
+                "name": "_cl_launcher",
+                "type": "address"
+            },
+            {
+                "name": "_token_sugar",
+                "type": "address"
+            },
+            {
+                "name": "_lp_helper",
                 "type": "address"
             }
         ],

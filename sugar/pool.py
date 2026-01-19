@@ -121,8 +121,13 @@ class LiquidityPool:
     emissions: Amount
     emissions_token: Token
     weekly_emissions: Amount
-    nfpm: str
-    alm: str
+    emissions_cap: int = 0       # NEW FIELD
+    locked: int = 0               # NEW FIELD
+    emerging: int = 0             # NEW FIELD
+    created_at: int = 0           # NEW FIELD
+    nfpm: str = None              # Moved, now optional with default
+    alm: str = None               # Moved, now optional with default
+    root: str = None              # NEW FIELD
 
     @property
     def tvl(self) -> float: return self.reserve0.amount_in_stable + self.reserve1.amount_in_stable
@@ -170,40 +175,45 @@ class LiquidityPool:
         cls, t: Tuple, tokens: Dict[str, Token], prices: Dict[str, Price], chain_id: str, chain_name: str
     ) -> Optional["LiquidityPool"]:
         token0, token1, pool_type = normalize_address(t[7]), normalize_address(t[10]), t[4]
-        token0_fees, token1_fees = t[23], t[24]
+        token0_fees, token1_fees = t[24], t[25]  # ← UPDATED indices
         emissions_token = normalize_address(t[20])
         emissions = t[19]
 
         seconds_in_a_week = 7 * 24 * 60 * 60
 
-        # Sugar.all returns a tuple with the following structure:
-        # { "name": "lp", "type": "address" },          <== 0
-        # { "name": "symbol", "type": "string" },       <== 1
-        # { "name": "decimals", "type": "uint8" },      <== 2
-        # { "name": "liquidity", "type": "uint256" },   <== 3
-        # { "name": "type", "type": "int24" },          <== 4
-        # { "name": "tick", "type": "int24" },          <== 5
-        # { "name": "sqrt_ratio", "type": "uint160" },  <== 6
-        # { "name": "token0", "type": "address" },      <== 7
-        # { "name": "reserve0", "type": "uint256" },    <== 8
-        # { "name": "staked0", "type": "uint256" },     <== 9
-        # { "name": "token1", "type": "address" },      <== 10
-        # { "name": "reserve1", "type": "uint256" },    <== 11
-        # { "name": "staked1", "type": "uint256" },     <== 12
-        # { "name": "gauge", "type": "address" },        <== 13
-        # { "name": "gauge_liquidity", "type": "uint256" },  <== 14
-        # { "name": "gauge_alive", "type": "bool" },        <== 15
-        # { "name": "fee", "type": "address" },             <== 16
-        # { "name": "bribe", "type": "address" },           <== 17
-        # { "name": "factory", "type": "address" },         <== 18
-        # { "name": "emissions", "type": "uint256" },       <== 19
-        # { "name": "emissions_token", "type": "address" },  <== 20
-        # { "name": "pool_fee", "type": "uint256" },        <== 21
-        # { "name": "unstaked_fee", "type": "uint256" },    <== 22
-        # { "name": "token0_fees", "type": "uint256" },     <== 23
-        # { "name": "token1_fees", "type": "uint256" },    <== 24
-        # { "name": "nfpm", "type": "address" },           <== 25
-        # { "name": "alm", "type": "address" }             <== 26
+        # Sugar.all returns a tuple with the following structure (NEW ABI):
+        # { "name": "lp", "type": "address" },                  <== 0
+        # { "name": "symbol", "type": "string" },               <== 1
+        # { "name": "decimals", "type": "uint8" },              <== 2
+        # { "name": "liquidity", "type": "uint256" },           <== 3
+        # { "name": "type", "type": "int24" },                  <== 4
+        # { "name": "tick", "type": "int24" },                  <== 5
+        # { "name": "sqrt_ratio", "type": "uint160" },          <== 6
+        # { "name": "token0", "type": "address" },              <== 7
+        # { "name": "reserve0", "type": "uint256" },            <== 8
+        # { "name": "staked0", "type": "uint256" },             <== 9
+        # { "name": "token1", "type": "address" },              <== 10
+        # { "name": "reserve1", "type": "uint256" },            <== 11
+        # { "name": "staked1", "type": "uint256" },             <== 12
+        # { "name": "gauge", "type": "address" },               <== 13
+        # { "name": "gauge_liquidity", "type": "uint256" },     <== 14
+        # { "name": "gauge_alive", "type": "bool" },            <== 15
+        # { "name": "fee", "type": "address" },                 <== 16
+        # { "name": "bribe", "type": "address" },               <== 17
+        # { "name": "factory", "type": "address" },             <== 18
+        # { "name": "emissions", "type": "uint256" },           <== 19
+        # { "name": "emissions_token", "type": "address" },     <== 20
+        # { "name": "emissions_cap", "type": "uint256" },       <== 21 ← NEW!
+        # { "name": "pool_fee", "type": "uint256" },            <== 22 ← SHIFTED
+        # { "name": "unstaked_fee", "type": "uint256" },        <== 23 ← SHIFTED
+        # { "name": "token0_fees", "type": "uint256" },         <== 24 ← SHIFTED
+        # { "name": "token1_fees", "type": "uint256" },         <== 25 ← SHIFTED
+        # { "name": "locked", "type": "uint256" },              <== 26 ← NEW!
+        # { "name": "emerging", "type": "uint256" },            <== 27 ← NEW!
+        # { "name": "created_at", "type": "uint32" },           <== 28 ← NEW!
+        # { "name": "nfpm", "type": "address" },                <== 29 ← SHIFTED
+        # { "name": "alm", "type": "address" },                 <== 30 ← SHIFTED
+        # { "name": "root", "type": "address" }                 <== 31 ← NEW!
 
         token0, token1 = tokens.get(token0), tokens.get(token1)
         if not token0 or not token1: return None
@@ -226,13 +236,18 @@ class LiquidityPool:
             reserve1=Amount.build(token1.token_address, t[11], tokens, prices),
             token0_fees=Amount.build(token0.token_address, token0_fees, tokens, prices),
             token1_fees=Amount.build(token1.token_address, token1_fees, tokens, prices),
-            pool_fee=t[21],
+            pool_fee=t[22],                  # ← UPDATED from t[21]
             gauge_total_supply=t[14],
             emissions_token=tokens.get(emissions_token),
             emissions=Amount.build(emissions_token, emissions, tokens, prices),
             weekly_emissions=Amount.build(emissions_token, emissions * seconds_in_a_week, tokens, prices),
-            nfpm=normalize_address(t[25]),
-            alm=normalize_address(t[26]),
+            emissions_cap=t[21],             # ← NEW FIELD
+            locked=t[26],                    # ← NEW FIELD
+            emerging=t[27],                  # ← NEW FIELD
+            created_at=t[28],                # ← NEW FIELD
+            nfpm=normalize_address(t[29]),   # ← UPDATED from t[25]
+            alm=normalize_address(t[30]),    # ← UPDATED from t[26]
+            root=normalize_address(t[31]),   # ← NEW FIELD
         )
 
 # %% ../src/pool.ipynb 7
