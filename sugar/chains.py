@@ -177,7 +177,28 @@ class CommonChain:
         # filter out paths with excluded tokens
         return list(filter(lambda p: len(set(map(lambda t: t[0], p)) & exclude_tokens_set) == 0, paths))
 
-    def get_pool_paginator(self, batch_size: int = 5, pool_count: Optional[int] = None) -> List[List[Tuple]]:
+    def calculate_optimal_batch_size(self, pool_count: int) -> int:
+        """
+        Calculate optimal batch size based on pool count.
+
+        Aims for ~90 RPC calls while avoiding gas limits.
+
+        Args:
+            pool_count: Total number of pools on chain
+
+        Returns:
+            Optimal number of pools per batch (between min_size and max_size)
+        """
+        target_calls = self.settings.pool_pagination_target_calls
+        min_size = self.settings.pool_pagination_min_size
+        max_size = self.settings.pool_pagination_max_size
+
+        # Calculate: pool_count / target_calls, clamped to [min_size, max_size]
+        optimal = max(min_size, min(pool_count // target_calls, max_size))
+
+        return optimal
+
+    def get_pool_paginator(self, batch_size: int = 5, pool_count: Optional[int] = None, use_optimal_sizing: bool = True) -> List[List[Tuple]]:
         """
         Generate pagination batches for pool fetching.
 
@@ -185,18 +206,25 @@ class CommonChain:
             batch_size: Number of batches to group together for parallel execution
             pool_count: Total pool count from chain. If provided, uses this + 10 buffer.
                        If None, falls back to settings.pools_count_upper_bound
+            use_optimal_sizing: If True and pool_count provided, calculate optimal batch size.
+                               If False, use settings.pool_page_size (backwards compatible)
 
         Returns:
             List of batches, where each batch contains (offset, limit) tuples
         """
-        limit = self.settings.pool_page_size
-
         if pool_count is not None:
-            # Use dynamic count with safety buffer (like @app does)
+            # Use dynamic count with safety buffer
             upper_bound = pool_count + 10
+
+            # Phase 2: Calculate optimal batch size when pool_count is known
+            if use_optimal_sizing:
+                limit = self.calculate_optimal_batch_size(pool_count)
+            else:
+                limit = self.settings.pool_page_size
         else:
-            # Fall back to config value for backwards compatibility
+            # Fall back to config values for backwards compatibility
             upper_bound = self.settings.pools_count_upper_bound
+            limit = self.settings.pool_page_size
 
         return chunk(list(map(lambda x: (x, limit), list(range(0, upper_bound, limit)))), batch_size)
     
