@@ -177,8 +177,27 @@ class CommonChain:
         # filter out paths with excluded tokens
         return list(filter(lambda p: len(set(map(lambda t: t[0], p)) & exclude_tokens_set) == 0, paths))
 
-    def get_pool_paginator(self, batch_size = 5) -> List[List[Tuple]]:
-        limit, upper_bound = self.settings.pool_page_size, self.settings.pools_count_upper_bound
+    def get_pool_paginator(self, batch_size: int = 5, pool_count: Optional[int] = None) -> List[List[Tuple]]:
+        """
+        Generate pagination batches for pool fetching.
+
+        Args:
+            batch_size: Number of batches to group together for parallel execution
+            pool_count: Total pool count from chain. If provided, uses this + 10 buffer.
+                       If None, falls back to settings.pools_count_upper_bound
+
+        Returns:
+            List of batches, where each batch contains (offset, limit) tuples
+        """
+        limit = self.settings.pool_page_size
+
+        if pool_count is not None:
+            # Use dynamic count with safety buffer (like @app does)
+            upper_bound = pool_count + 10
+        else:
+            # Fall back to config value for backwards compatibility
+            upper_bound = self.settings.pools_count_upper_bound
+
         return chunk(list(map(lambda x: (x, limit), list(range(0, upper_bound, limit)))), batch_size)
     
     def prepare_price_batcher(self, tokens: List[Token], batch: RequestBatcher):
@@ -229,13 +248,18 @@ class AsyncChain(CommonChain):
         await self.web3.provider.disconnect()
         return None
 
-    async def apaginate(self, f: Callable):
+    async def apaginate(self, f: Callable, pool_count: Optional[int] = None):
         async def process_batch(batch: List[Tuple]):
             async with self.web3.batch_requests() as batcher:
                 for offset, limit in batch: batcher.add(f(limit, offset))
                 return sum(await batcher.async_execute(), [])
-        return sum(await asyncio.gather(*[process_batch(batch) for batch in self.get_pool_paginator()]), [])
-    
+        return sum(await asyncio.gather(*[process_batch(batch) for batch in self.get_pool_paginator(pool_count=pool_count)]), [])
+
+    @require_async_context
+    async def get_pool_count(self) -> int:
+        """Get total pool count from sugar contract"""
+        return await self.sugar.functions.count().call()
+
     @require_async_context
     async def get_bridge_fee(self, domain: int) -> int:
         contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=bridge_get_fee_abi)
@@ -334,12 +358,16 @@ class AsyncChain(CommonChain):
 
     @alru_cache(maxsize=None)
     async def get_raw_pools(self, for_swaps: bool):
-        if for_swaps:                                                                                                                                                                                                                                                                                                    
-          return await self.apaginate(self.sugar.functions.forSwaps)                                                                                                                                                                                                                                                   
-        else:                                                                                                                                                                                                                                                                                                            
-          return await self.apaginate(                                                                                                                                                                                                                                                                                 
-              lambda limit, offset: self.sugar.functions.all(limit, offset, 0)                                                                                                                                                                                                                                         
-          ) 
+        # Get dynamic pool count from contract
+        pool_count = await self.get_pool_count()
+
+        if for_swaps:
+            return await self.apaginate(self.sugar.functions.forSwaps, pool_count=pool_count)
+        else:
+            return await self.apaginate(
+                lambda limit, offset: self.sugar.functions.all(limit, offset, 0),
+                pool_count=pool_count
+            ) 
     
     @require_async_context
     async def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
@@ -540,15 +568,15 @@ class Chain(CommonChain):
         self._in_context = False
         return None
     
-    def paginate(self, f: Callable):
-        results, batches = [], self.get_pool_paginator()
+    def paginate(self, f: Callable, pool_count: Optional[int] = None):
+        results, batches = [], self.get_pool_paginator(pool_count=pool_count)
 
         def process_batch(batch: List[Tuple]):
             with self.web3.batch_requests() as batcher:
                 for offset, limit in batch: batcher.add(f(limit, offset))
                 return sum(batcher.execute(), [])
 
-        
+
         with ThreadPoolExecutor(max_workers=self.settings.threading_max_workers) as executor:
             future_to_batch = {
                 executor.submit(process_batch, batch): batch
@@ -561,6 +589,11 @@ class Chain(CommonChain):
                     continue
 
         return results
+
+    @require_context
+    def get_pool_count(self) -> int:
+        """Get total pool count from sugar contract"""
+        return self.sugar.functions.count().call()
 
     @require_context
     def get_bridge_fee(self, domain: int) -> int:
@@ -674,12 +707,16 @@ class Chain(CommonChain):
     
     @lru_cache(maxsize=None)
     def get_raw_pools(self, for_swaps: bool):
-        if for_swaps:                                                                                                                                                                                                                                                                                                    
-          return self.paginate(self.sugar.functions.forSwaps)                                                                                                                                                                                                                                                          
-        else:                                                                                                                                                                                                                                                                                                            
-          return self.paginate(                                                                                                                                                                                                                                                                                        
-              lambda limit, offset: self.sugar.functions.all(limit, offset, 0)                                                                                                                                                                                                                                         
-          )  
+        # Get dynamic pool count from contract
+        pool_count = self.get_pool_count()
+
+        if for_swaps:
+            return self.paginate(self.sugar.functions.forSwaps, pool_count=pool_count)
+        else:
+            return self.paginate(
+                lambda limit, offset: self.sugar.functions.all(limit, offset, 0),
+                pool_count=pool_count
+            )  
 
     @require_context
     def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
