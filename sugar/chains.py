@@ -280,7 +280,9 @@ class AsyncChain(CommonChain):
         async def process_batch(batch: List[Tuple]):
             async with self.web3.batch_requests() as batcher:
                 for offset, limit in batch: batcher.add(f(limit, offset))
-                return sum(await batcher.async_execute(), [])
+                results = await batcher.async_execute()
+                # Filter out errors before concatenating
+                return sum([r for r in results if not isinstance(r, Exception)], [])
         return sum(await asyncio.gather(*[process_batch(batch) for batch in self.get_pool_paginator(pool_count=pool_count)]), [])
 
     @require_async_context
@@ -355,8 +357,10 @@ class AsyncChain(CommonChain):
     @require_async_context
     @alru_cache(maxsize=None)
     async def get_all_tokens(self, listed_only: bool = False) -> List[Token]:
+        # Token pagination uses the same pool count as pools (tokens are indexed by pool)
+        pool_count = await self.get_pool_count()
         def get_tokens(limit, offset): return self.sugar.functions.tokens(limit, offset, ADDRESS_ZERO, [])
-        return self.prepare_tokens(await self.apaginate(get_tokens), listed_only)
+        return self.prepare_tokens(await self.apaginate(get_tokens, pool_count=pool_count), listed_only)
     
     @require_async_context
     async def get_token(self, address: str) -> Optional[Token]:
@@ -401,7 +405,7 @@ class AsyncChain(CommonChain):
     async def get_pools(self, for_swaps: bool = False) -> List[LiquidityPool]:
         pools = await self.get_raw_pools(for_swaps)
         if not for_swaps:
-            tokens = await self.get_all_tokens()
+            tokens = await self.get_all_tokens(listed_only=False)
             return self.prepare_pools(pools, tokens, await self.get_prices(tokens))
         else: return self.prepare_pools_for_swap(pools)
     
@@ -603,7 +607,9 @@ class Chain(CommonChain):
         def process_batch(batch: List[Tuple]):
             with self.web3.batch_requests() as batcher:
                 for offset, limit in batch: batcher.add(f(limit, offset))
-                return sum(batcher.execute(), [])
+                results = batcher.execute()
+                # Filter out errors before concatenating
+                return sum([r for r in results if not isinstance(r, Exception)], [])
 
 
         with ThreadPoolExecutor(max_workers=self.settings.threading_max_workers) as executor:
@@ -698,8 +704,10 @@ class Chain(CommonChain):
     @require_context
     @lru_cache(maxsize=None)
     def get_all_tokens(self, listed_only: bool = False) -> List[Token]:
+        # Token pagination uses the same pool count as pools (tokens are indexed by pool)
+        pool_count = self.get_pool_count()
         def get_tokens(limit, offset): return self.sugar.functions.tokens(limit, offset, ADDRESS_ZERO, [])
-        return self.prepare_tokens(self.paginate(get_tokens), listed_only)
+        return self.prepare_tokens(self.paginate(get_tokens, pool_count=pool_count), listed_only)
 
     @require_context
     def get_token(self, address: str) -> Optional[Token]:

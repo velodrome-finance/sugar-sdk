@@ -63,16 +63,17 @@ class TestAsyncLatestPoolEpochs:
         assert isinstance(epoch.fees, list), f"fees should be list, got {type(epoch.fees)}"
 
     async def test_get_latest_pool_epochs_contains_valid_pools(self, base_chain):
-        """Test that epochs with pools contain valid LiquidityPool objects"""
+        """Test that ALL epochs have valid LiquidityPool objects"""
+
         epochs = await base_chain.get_latest_pool_epochs()
 
         assert len(epochs) > 0, "Need at least one epoch to test"
 
-        # Count epochs with valid pools (some may be None for deprecated/old pools)
-        epochs_with_pools = [e for e in epochs if e.pool is not None]
-        assert len(epochs_with_pools) > 0, "Should have at least some epochs with valid pools"
+        # ALL epochs should have valid pools (not just some)
+        epochs_without_pools = [e for e in epochs if e.pool is None]
+        assert len(epochs_without_pools) == 0, f"All epochs should have valid pools, but {len(epochs_without_pools)} out of {len(epochs)} have None pools. LPs missing: {[e.lp for e in epochs_without_pools[:5]]}"
 
-        for epoch in epochs_with_pools:
+        for epoch in epochs:
             # Pool should be valid
             assert isinstance(epoch.pool, LiquidityPool), f"Pool should be LiquidityPool, got {type(epoch.pool)}"
 
