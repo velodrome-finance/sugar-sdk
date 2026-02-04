@@ -169,7 +169,7 @@ def make_base_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettin
         "sugar_rewards_contract_addr": "0xD4aD2EeeB3314d54212A92f4cBBE684195dEfe3E",
         "slipstream_contract_addr": "0x0AD09A66af0154a84e86F761313d02d0abB6edd5",
         "nfpm_contract_addr": "0x827922686190790b37229fd06084350E74485b72",
-        "price_oracle_contract_addr": "0x3B06c787711ecb5624cE65AC8F26cde10831eb0C",
+        "price_oracle_contract_addr": "0x8456038bdae8672f552182B0FC39b1917dE9a41A",
         "router_contract_addr": "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43",
         "quoter_contract_addr": "0x0A5aA5D3a4d28014f967Bf0f29EAA3FF9807D5c6",
         "swapper_contract_addr": "0x01D40099fCD87C018969B0e8D4aB1633Fb34763C",
