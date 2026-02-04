@@ -425,9 +425,10 @@ class AsyncChain(CommonChain):
     @require_async_context
     @alru_cache(maxsize=None)
     async def get_latest_pool_epochs(self) -> List[LiquidityPoolEpoch]:
+        pool_count = await self.get_pool_count()
         tokens, pools = await self.get_all_tokens(listed_only=False), await self.get_pools()
         prices = await self.get_prices(tokens)
-        return self.prepare_pool_epochs(await self.apaginate(self.sugar_rewards.functions.epochsLatest), pools, tokens, prices)
+        return self.prepare_pool_epochs(await self.apaginate(self.sugar_rewards.functions.epochsLatest, pool_count=pool_count), pools, tokens, prices)
     
     @require_async_context
     async def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return await self.get_pools(for_swaps=True)
@@ -777,9 +778,10 @@ class Chain(CommonChain):
     @require_context
     @lru_cache(maxsize=None)
     def get_latest_pool_epochs(self) -> List[LiquidityPoolEpoch]:
+        pool_count = self.get_pool_count()
         tokens, pools = self.get_all_tokens(listed_only=False), self.get_pools()
         prices = self.get_prices(tokens)
-        return self.prepare_pool_epochs(self.paginate(self.sugar_rewards.functions.epochsLatest), pools, tokens, prices)
+        return self.prepare_pool_epochs(self.paginate(self.sugar_rewards.functions.epochsLatest, pool_count=pool_count), pools, tokens, prices)
 
     @require_context
     def _get_quotes_for_paths(self, from_token: Token, to_token: Token, amount_in: int, pools: List[LiquidityPoolForSwap], paths: List[List[Tuple]]) -> List[Optional[Quote]]:

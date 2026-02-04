@@ -32,6 +32,9 @@ class TestAsyncLatestPoolEpochs:
 
         assert len(epochs) > 0, "Need at least one epoch to test"
 
+        # Base chain should have many pools with epochs (thousands, not just a few)
+        assert len(epochs) > 600, f"Expected many pool epochs (>600), got {len(epochs)}"
+
         epoch = epochs[0]  # Check first epoch
 
         # Required fields
@@ -60,14 +63,17 @@ class TestAsyncLatestPoolEpochs:
         assert isinstance(epoch.fees, list), f"fees should be list, got {type(epoch.fees)}"
 
     async def test_get_latest_pool_epochs_contains_valid_pools(self, base_chain):
-        """Test that each epoch contains a valid LiquidityPool object"""
+        """Test that epochs with pools contain valid LiquidityPool objects"""
         epochs = await base_chain.get_latest_pool_epochs()
 
         assert len(epochs) > 0, "Need at least one epoch to test"
 
-        for epoch in epochs:
-            # Pool should exist and be valid
-            assert epoch.pool is not None, f"Epoch for {epoch.lp} should have a pool"
+        # Count epochs with valid pools (some may be None for deprecated/old pools)
+        epochs_with_pools = [e for e in epochs if e.pool is not None]
+        assert len(epochs_with_pools) > 0, "Should have at least some epochs with valid pools"
+
+        for epoch in epochs_with_pools:
+            # Pool should be valid
             assert isinstance(epoch.pool, LiquidityPool), f"Pool should be LiquidityPool, got {type(epoch.pool)}"
 
             # Pool should have required attributes
@@ -90,6 +96,18 @@ class TestAsyncLatestPoolEpochs:
                 # Check that tokens have price information
                 assert epoch.pool.token0.symbol is not None, "token0 should have symbol"
                 assert epoch.pool.token1.symbol is not None, "token1 should have symbol"
+
+    async def test_get_latest_pool_epochs_total_value(self, base_chain):
+        """Test that total fees + incentives across all epochs exceeds 1M USD"""
+        epochs = await base_chain.get_latest_pool_epochs()
+
+        assert len(epochs) > 0, "Need at least one epoch to test"
+
+        # Calculate total fees and incentives across all epochs
+        total_value = sum(epoch.total_fees + epoch.total_incentives for epoch in epochs)
+
+        # With proper pagination fetching all pools, total value should exceed 1M USD
+        assert total_value > 1_000_000, f"Expected total fees + incentives > 1M USD, got ${total_value:,.2f}"
 
 
 class TestSyncLatestPoolEpochs:

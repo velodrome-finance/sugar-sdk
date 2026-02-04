@@ -275,11 +275,11 @@ class LiquidityPoolEpoch:
     @property
     def total_fees(self) -> float:
         """Returns the total fees in USD"""
-        return sum([fee.amount_in_stable for fee in self.fees]) if self.fees else 0
+        return sum([fee.amount_in_stable for fee in self.fees if fee is not None]) if self.fees else 0
     @property
     def total_incentives(self) -> float:
         """Returns the total incentives in USD"""
-        return sum([incentive.amount_in_stable for incentive in self.incentives]) if self.incentives else 0
+        return sum([incentive.amount_in_stable for incentive in self.incentives if incentive is not None]) if self.incentives else 0
 
     @property
     def epoch_date(self) -> datetime:
