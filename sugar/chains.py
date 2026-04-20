@@ -228,14 +228,54 @@ class CommonChain:
 
         return chunk(list(map(lambda x: (x, limit), list(range(0, upper_bound, limit)))), batch_size)
     
+    def get_price_connectors(self) -> List[str]:
+        return list(dict.fromkeys(self.settings.connector_tokens_addrs + [self.settings.stable_token_addr]))
+
+    def get_price_request_tokens(self, tokens: List[Token]) -> List[Token]:
+        return list({
+            t.token_address: t for t in tokens
+            if t.is_native or t.listed or t.emerging
+        }.values())
+
+    def get_latest_epoch_price_tokens(self, epochs: List[Tuple], raw_pools: List[Tuple], tokens: List[Token]) -> List[Token]:
+        tokens_by_address = {t.token_address: t for t in tokens}
+        needed_token_addresses = {self.settings.stable_token_addr}
+
+        native_token = next((t for t in tokens if t.is_native), None)
+        if native_token is not None:
+            needed_token_addresses.add(native_token.token_address)
+
+        for pool in raw_pools:
+            needed_token_addresses.update([
+                normalize_address(pool[7]),
+                normalize_address(pool[10]),
+                normalize_address(pool[20]),
+            ])
+
+        for epoch in epochs:
+            needed_token_addresses.update(normalize_address(token_address) for token_address, _ in epoch[4])
+            needed_token_addresses.update(normalize_address(token_address) for token_address, _ in epoch[5])
+
+        return [
+            token for address, token in tokens_by_address.items()
+            if address in needed_token_addresses and (token.is_native or token.listed or token.emerging)
+        ]
+
+    def get_price_chunk_size(self, tokens: List[Token]) -> int:
+        return max(3, min((len(tokens) + 59) // 60, 20))
+
+    def get_price_token_chunks(self, tokens: List[Token]) -> List[List[Token]]:
+        tokens = self.get_price_request_tokens(tokens)
+        return list(chunk(tokens, self.get_price_chunk_size(tokens)))
+
     def prepare_price_batcher(self, tokens: List[Token], batch: RequestBatcher):
-        batches = chunk(tokens, self.settings.price_batch_size)
+        batches = self.get_price_token_chunks(tokens)
         for b in batches:
             batch.add(self.prices.functions.getManyRatesToEthWithCustomConnectors(
                 list(map(lambda t: t.wrapped_token_address or t.token_address, b)),
                 False, # use wrappers
-                self.settings.connector_tokens_addrs,
-                10 # threshold_filter
+                self.get_price_connectors(),
+                self.settings.price_threshold_filter
             ))
         return batch
 
@@ -379,9 +419,32 @@ class AsyncChain(CommonChain):
     async def get_bridge_token(self) -> Token: return self._get_bridge_token(await self.get_all_tokens())
 
     async def _get_prices(self, tokens: Tuple[Token]):
-        async with self.web3.batch_requests() as batch:
-            batch = self.prepare_price_batcher(tokens=list(tokens), batch=batch)
-            return sum(await batch.async_execute(), [])
+        token_list = list(tokens)
+        token_chunks = self.get_price_token_chunks(token_list)
+        rates_by_address = {}
+        semaphore = asyncio.Semaphore(10)
+
+        async def fetch_price_chunk(token_chunk: List[Token]):
+            async with semaphore:
+                for retry in range(3):
+                    try:
+                        rates = await self.prices.functions.getManyRatesToEthWithCustomConnectors(
+                            list(map(lambda t: t.wrapped_token_address or t.token_address, token_chunk)),
+                            False,
+                            self.get_price_connectors(),
+                            self.settings.price_threshold_filter
+                        ).call()
+                        for token, rate in zip(token_chunk, rates):
+                            rates_by_address[token.token_address] = rate
+                        return
+                    except Exception:
+                        if retry < 2:
+                            await asyncio.sleep(retry + 1)
+                for token in token_chunk:
+                    rates_by_address[token.token_address] = 0
+
+        await asyncio.gather(*[fetch_price_chunk(token_chunk) for token_chunk in token_chunks])
+        return [rates_by_address.get(token.token_address, 0) for token in token_list]
 
     @require_async_context
     async def get_prices(self, tokens: List[Token]) -> List[Price]:
@@ -419,6 +482,21 @@ class AsyncChain(CommonChain):
         return self.prepare_pools([p], tokens, await self.get_prices(tokens))[0]
 
     @require_async_context
+    async def get_raw_pools_by_addresses(self, addresses: Tuple[str, ...]) -> List[Tuple]:
+        semaphore = asyncio.Semaphore(10)
+        raw_pools = []
+
+        async def fetch_pool(address: str):
+            async with semaphore:
+                try:
+                    return await self.sugar.functions.byAddress(normalize_address(address)).call()
+                except:
+                    return None
+
+        results = await asyncio.gather(*[fetch_pool(address) for address in addresses])
+        return [pool for pool in results if pool is not None]
+
+    @require_async_context
     @alru_cache(maxsize=None)
     async def get_pool_epochs(self, lp: str, offset: int = 0, limit: int = 10) -> List[LiquidityPoolEpoch]:
         tokens, pools = await self.get_all_tokens(listed_only=False), await self.get_pools()
@@ -430,9 +508,15 @@ class AsyncChain(CommonChain):
     @alru_cache(maxsize=None)
     async def get_latest_pool_epochs(self) -> List[LiquidityPoolEpoch]:
         pool_count = await self.get_pool_count()
-        tokens, pools = await self.get_all_tokens(listed_only=False), await self.get_pools()
-        prices = await self.get_prices(tokens)
-        return self.prepare_pool_epochs(await self.apaginate(self.sugar_rewards.functions.epochsLatest, pool_count=pool_count), pools, tokens, prices)
+        raw_epochs = await self.apaginate(self.sugar_rewards.functions.epochsLatest, pool_count=pool_count)
+        if len(raw_epochs) == 0: return []
+
+        tokens = await self.get_all_tokens(listed_only=False)
+        epoch_lp_addresses = {normalize_address(epoch[1]) for epoch in raw_epochs}
+        raw_pools = [pool for pool in await self.get_raw_pools(False) if normalize_address(pool[0]) in epoch_lp_addresses]
+        prices = await self.get_prices(self.get_latest_epoch_price_tokens(raw_epochs, raw_pools, tokens))
+        pools = self.prepare_pools(raw_pools, tokens, prices)
+        return self.prepare_pool_epochs(raw_epochs, pools, tokens, prices)
     
     @require_async_context
     async def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return await self.get_pools(for_swaps=True)
@@ -732,10 +816,33 @@ class Chain(CommonChain):
     def get_bridge_token(self) -> Token: return self._get_bridge_token(self.get_all_tokens())
 
     def _get_prices(self, tokens: Tuple[Token]) -> List[int]:
-        # token_address => normalized rate
-        with self.web3.batch_requests() as batch:
-            batch = self.prepare_price_batcher(tokens=list(tokens), batch=batch)
-            return sum(batch.execute(), [])
+        token_list = list(tokens)
+        token_chunks = self.get_price_token_chunks(token_list)
+        rates_by_address = {}
+
+        def fetch_price_chunk(token_chunk: List[Token]):
+            import time
+            for retry in range(3):
+                try:
+                    rates = self.prices.functions.getManyRatesToEthWithCustomConnectors(
+                        list(map(lambda t: t.wrapped_token_address or t.token_address, token_chunk)),
+                        False,
+                        self.get_price_connectors(),
+                        self.settings.price_threshold_filter
+                    ).call()
+                    for token, rate in zip(token_chunk, rates):
+                        rates_by_address[token.token_address] = rate
+                    return
+                except Exception:
+                    if retry < 2:
+                        time.sleep(retry + 1)
+            for token in token_chunk:
+                rates_by_address[token.token_address] = 0
+
+        with ThreadPoolExecutor(max_workers=min(10, self.settings.threading_max_workers)) as executor:
+            list(executor.map(fetch_price_chunk, token_chunks))
+
+        return [rates_by_address.get(token.token_address, 0) for token in token_list]
 
     @require_context
     def get_prices(self, tokens: List[Token]) -> List[Price]:
@@ -771,6 +878,17 @@ class Chain(CommonChain):
         except: return None
         tokens = self.get_all_tokens(listed_only=False)
         return self.prepare_pools([p], tokens, self.get_prices(tokens))[0]
+
+    @require_context
+    def get_raw_pools_by_addresses(self, addresses: Tuple[str, ...]) -> List[Tuple]:
+        def fetch_pool(address: str):
+            try:
+                return self.sugar.functions.byAddress(normalize_address(address)).call()
+            except:
+                return None
+
+        with ThreadPoolExecutor(max_workers=min(10, self.settings.threading_max_workers)) as executor:
+            return [pool for pool in executor.map(fetch_pool, addresses) if pool is not None]
     
     @require_context
     def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return self.get_pools(for_swaps=True)
@@ -787,9 +905,15 @@ class Chain(CommonChain):
     @lru_cache(maxsize=None)
     def get_latest_pool_epochs(self) -> List[LiquidityPoolEpoch]:
         pool_count = self.get_pool_count()
-        tokens, pools = self.get_all_tokens(listed_only=False), self.get_pools()
-        prices = self.get_prices(tokens)
-        return self.prepare_pool_epochs(self.paginate(self.sugar_rewards.functions.epochsLatest, pool_count=pool_count), pools, tokens, prices)
+        raw_epochs = self.paginate(self.sugar_rewards.functions.epochsLatest, pool_count=pool_count)
+        if len(raw_epochs) == 0: return []
+
+        tokens = self.get_all_tokens(listed_only=False)
+        epoch_lp_addresses = {normalize_address(epoch[1]) for epoch in raw_epochs}
+        raw_pools = [pool for pool in self.get_raw_pools(False) if normalize_address(pool[0]) in epoch_lp_addresses]
+        prices = self.get_prices(self.get_latest_epoch_price_tokens(raw_epochs, raw_pools, tokens))
+        pools = self.prepare_pools(raw_pools, tokens, prices)
+        return self.prepare_pool_epochs(raw_epochs, pools, tokens, prices)
 
     @require_context
     def _get_quotes_for_paths(self, from_token: Token, to_token: Token, amount_in: int, pools: List[LiquidityPoolForSwap], paths: List[List[Tuple]]) -> List[Optional[Quote]]:
