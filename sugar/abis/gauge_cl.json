@@ -1,0 +1,23 @@
+[
+    {
+        "name": "deposit",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [{"name": "_tokenId", "type": "uint256"}],
+        "outputs": []
+    },
+    {
+        "name": "withdraw",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [{"name": "_tokenId", "type": "uint256"}],
+        "outputs": []
+    },
+    {
+        "name": "getReward",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [{"name": "_tokenId", "type": "uint256"}],
+        "outputs": []
+    }
+]
