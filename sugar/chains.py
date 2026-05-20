@@ -9,7 +9,7 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
            'get_simnet_chain', 'get_async_simnet_chain', 'get_chain_from_token', 'get_async_chain_from_token',
            'get_simnet_chain_from_token', 'get_async_simnet_chain_from_token']
 
-# %% ../src/chains.ipynb #63223b50
+# %% ../src/chains.ipynb #70b3662d
 import os, asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps, lru_cache
@@ -23,16 +23,18 @@ from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings, make_lisk_chain_settings
 from .config import XCHAIN_GAS_LIMIT_UPPERBOUND
 from .helpers import normalize_address, MAX_UINT256, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
-from .helpers import find_all_paths, time_it, atime_it, to_bytes32, price_to_tick, nearest_tick, sqrt_ratio_x96_from_price
+from .helpers import find_all_paths, time_it, atime_it, to_bytes32, price_to_tick, nearest_tick, sqrt_ratio_x96_from_price, MAX_UINT128
 from .abi import get_abi, bridge_transfer_remote_abi, bridge_get_fee_abi, erc20_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
+from .position import Position
+from .withdraw import Withdrawal
 from .price import Price
 from .deposit import DepositQuote
 from .quote import QuoteInput, Quote
 from .swap import setup_planner
 
-# %% ../src/chains.ipynb #fd915c1e
+# %% ../src/chains.ipynb #1e068df4
 # monkey patching how web3 handles errors in batched requests
 # re: https://github.com/ethereum/web3.py/issues/3657
 original_format_batched_response = RequestManager._format_batched_response
@@ -41,7 +43,7 @@ def safe_format_batched_response(*args):
     except Exception as e: return e
 RequestManager._format_batched_response = safe_format_batched_response
 
-# %% ../src/chains.ipynb #7173c76d
+# %% ../src/chains.ipynb #9290c118
 T = TypeVar('T')
 
 def require_context(f: Callable[..., T]) -> Callable[..., T]:
@@ -140,6 +142,10 @@ class CommonChain:
     def prepare_pool_epochs(self, epochs: List[Tuple], pools: List[LiquidityPool], tokens: List[Token], prices: List[Price]) -> List[LiquidityPoolEpoch]:
         tokens, prices, pools = {t.token_address: t for t in tokens}, {price.token.token_address: price for price in prices}, {p.lp: p for p in pools}
         return list(map(lambda p: LiquidityPoolEpoch.from_tuple(p, pools, tokens, prices), epochs))
+
+    def prepare_positions(self, raw: List[Tuple], pools: List[LiquidityPool]) -> List[Position]:
+        pools_d = {p.lp: p for p in pools}
+        return list(filter(None, [Position.from_tuple(p, pools_d, self.chain_id, self.name) for p in raw]))
     
     def filter_pools_for_swap(self, pools: List[LiquidityPoolForSwap], from_token: Token, to_token: Token) -> List[LiquidityPoolForSwap]:
         match_tokens = set(self.settings.connector_tokens_addrs + [from_token.token_address, to_token.token_address])
@@ -192,7 +198,7 @@ class CommonChain:
             ))
         return batch
 
-# %% ../src/chains.ipynb #4fb0d9e1
+# %% ../src/chains.ipynb #08f3bfb4
 class AsyncChain(CommonChain):
     web3: AsyncWeb3
     sugar: AsyncContract
@@ -566,8 +572,73 @@ class AsyncChain(CommonChain):
             refund_calldata = nfpm.encode_abi("refundETH", args=[])
             return await self.sign_and_send_tx(nfpm.functions.multicall([mint_calldata, refund_calldata]), value=a0 if is_native0 else a1)
         return await self.sign_and_send_tx(nfpm.functions.mint(*params))
+    @require_async_context
+    async def get_positions(self, owner: Optional[str] = None) -> List[Position]:
+        """List positions owned by `owner` (defaults to self.account.address). Uses Sugar's
+        paginated `positions(limit, offset, account)` reader."""
+        owner = owner or self.account.address
+        def get_p(limit, offset): return self.sugar.functions.positions(limit, offset, owner)
+        return self.prepare_positions(await self.apaginate(get_p), await self.get_pools())
 
-# %% ../src/chains.ipynb #bb860c88
+    @require_async_context
+    async def withdraw(self, withdrawal: Withdrawal, delay_in_minutes: float = 30, slippage: float = 0.01, collect: bool = True, unwrap_native: bool = False):
+        """Execute a withdrawal. Dispatches on `withdrawal.pool.is_cl`."""
+        if withdrawal.pool.is_cl: return await self._withdraw_concentrated(withdrawal, delay_in_minutes, slippage, collect, unwrap_native)
+        return await self._withdraw_basic(withdrawal, delay_in_minutes, slippage)
+
+    @require_async_context
+    async def _withdraw_basic(self, w: Withdrawal, delay_in_minutes: float, slippage: float):
+        pool = w.pool
+        router_addr = self.settings.router_contract_addr
+        a0_min, a1_min = apply_slippage(w.amount_token0, slippage), apply_slippage(w.amount_token1, slippage)
+        deadline = get_future_timestamp(delay_in_minutes)
+        print(f"gonna withdraw {w.liquidity} LP from {pool.symbol} -> >= {a0_min} {pool.token0.symbol} + {a1_min} {pool.token1.symbol}")
+
+        # LP token is an ERC20 at pool.lp; no Token wrapper available, so approve inline
+        print(f"setting up LP allowance to router")
+        lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=erc20_abi)
+        await self.sign_and_send_tx(lp.functions.approve(router_addr, w.liquidity))
+
+        # native handling mirrors _deposit_basic
+        if pool.token0.token_address == self.settings.wrapped_native_token_addr:
+            params = [pool.token1.token_address, pool.is_stable, w.liquidity, a1_min, a0_min, self.account.address, deadline]
+            return await self.sign_and_send_tx(self.router.functions.removeLiquidityETH(*params))
+        if pool.token1.token_address == self.settings.wrapped_native_token_addr:
+            params = [pool.token0.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.account.address, deadline]
+            return await self.sign_and_send_tx(self.router.functions.removeLiquidityETH(*params))
+        params = [pool.token0.token_address, pool.token1.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.account.address, deadline]
+        return await self.sign_and_send_tx(self.router.functions.removeLiquidity(*params))
+
+    @require_async_context
+    async def _withdraw_concentrated(self, w: Withdrawal, delay_in_minutes: float, slippage: float, collect: bool, unwrap_native: bool):
+        # NFPM authenticates via NFT ownership — no ERC20 allowance needed
+        pool = w.pool
+        if not pool.nfpm or pool.nfpm == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no NFPM address")
+        nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
+        a0_min, a1_min = apply_slippage(w.amount_token0, slippage), apply_slippage(w.amount_token1, slippage)
+        deadline = get_future_timestamp(delay_in_minutes)
+        print(f"gonna decrease {w.liquidity} L from CL position #{w.token_id} in {pool.symbol} -> >= {a0_min} + {a1_min}")
+
+        # bundle decreaseLiquidity + collect via multicall so principal + any accrued fees come out atomically
+        if w.burn and not collect: raise ValueError("burn requires collect=True")
+        if unwrap_native and not collect: raise ValueError("unwrap_native requires collect=True")
+        native = self.settings.wrapped_native_token_addr
+        if unwrap_native and pool.token0.token_address != native and pool.token1.token_address != native:
+            raise ValueError("unwrap_native: pool has no native leg")
+        if collect:
+            decrease_calldata = nfpm.encode_abi("decreaseLiquidity", args=[(w.token_id, w.liquidity, a0_min, a1_min, deadline)])
+            collect_recipient = ADDRESS_ZERO if unwrap_native else self.account.address
+            collect_calldata = nfpm.encode_abi("collect", args=[(w.token_id, collect_recipient, MAX_UINT128, MAX_UINT128)])
+            calls = [decrease_calldata, collect_calldata]
+            if unwrap_native:
+                other_token = pool.token1.token_address if pool.token0.token_address == native else pool.token0.token_address
+                calls.append(nfpm.encode_abi("unwrapWETH9", args=[0, self.account.address]))
+                calls.append(nfpm.encode_abi("sweepToken", args=[other_token, 0, self.account.address]))
+            if w.burn: calls.append(nfpm.encode_abi("burn", args=[w.token_id]))
+            return await self.sign_and_send_tx(nfpm.functions.multicall(calls))
+        return await self.sign_and_send_tx(nfpm.functions.decreaseLiquidity((w.token_id, w.liquidity, a0_min, a1_min, deadline)))
+
+# %% ../src/chains.ipynb #6005ad12
 class Chain(CommonChain):
     web3: Web3
     sugar: Contract
@@ -961,8 +1032,69 @@ class Chain(CommonChain):
             refund_calldata = nfpm.encode_abi("refundETH", args=[])
             return self.sign_and_send_tx(nfpm.functions.multicall([mint_calldata, refund_calldata]), value=a0 if is_native0 else a1)
         return self.sign_and_send_tx(nfpm.functions.mint(*params))
+    @require_context
+    def get_positions(self, owner: Optional[str] = None) -> List[Position]:
+        """List positions owned by `owner` (defaults to self.account.address). Uses Sugar's
+        paginated `positions(limit, offset, account)` reader."""
+        owner = owner or self.account.address
+        def get_p(limit, offset): return self.sugar.functions.positions(limit, offset, owner)
+        return self.prepare_positions(self.paginate(get_p), self.get_pools())
 
-# %% ../src/chains.ipynb #62925e09
+    @require_context
+    def withdraw(self, withdrawal: Withdrawal, delay_in_minutes: float = 30, slippage: float = 0.01, collect: bool = True, unwrap_native: bool = False):
+        """Execute a withdrawal. Dispatches on `withdrawal.pool.is_cl`."""
+        if withdrawal.pool.is_cl: return self._withdraw_concentrated(withdrawal, delay_in_minutes, slippage, collect, unwrap_native)
+        return self._withdraw_basic(withdrawal, delay_in_minutes, slippage)
+
+    @require_context
+    def _withdraw_basic(self, w: Withdrawal, delay_in_minutes: float, slippage: float):
+        pool = w.pool
+        router_addr = self.settings.router_contract_addr
+        a0_min, a1_min = apply_slippage(w.amount_token0, slippage), apply_slippage(w.amount_token1, slippage)
+        deadline = get_future_timestamp(delay_in_minutes)
+        print(f"gonna withdraw {w.liquidity} LP from {pool.symbol} -> >= {a0_min} {pool.token0.symbol} + {a1_min} {pool.token1.symbol}")
+
+        print(f"setting up LP allowance to router")
+        lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=erc20_abi)
+        self.sign_and_send_tx(lp.functions.approve(router_addr, w.liquidity))
+
+        if pool.token0.token_address == self.settings.wrapped_native_token_addr:
+            params = [pool.token1.token_address, pool.is_stable, w.liquidity, a1_min, a0_min, self.account.address, deadline]
+            return self.sign_and_send_tx(self.router.functions.removeLiquidityETH(*params))
+        if pool.token1.token_address == self.settings.wrapped_native_token_addr:
+            params = [pool.token0.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.account.address, deadline]
+            return self.sign_and_send_tx(self.router.functions.removeLiquidityETH(*params))
+        params = [pool.token0.token_address, pool.token1.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.account.address, deadline]
+        return self.sign_and_send_tx(self.router.functions.removeLiquidity(*params))
+
+    @require_context
+    def _withdraw_concentrated(self, w: Withdrawal, delay_in_minutes: float, slippage: float, collect: bool, unwrap_native: bool):
+        pool = w.pool
+        if not pool.nfpm or pool.nfpm == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no NFPM address")
+        nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
+        a0_min, a1_min = apply_slippage(w.amount_token0, slippage), apply_slippage(w.amount_token1, slippage)
+        deadline = get_future_timestamp(delay_in_minutes)
+        print(f"gonna decrease {w.liquidity} L from CL position #{w.token_id} in {pool.symbol} -> >= {a0_min} + {a1_min}")
+
+        if w.burn and not collect: raise ValueError("burn requires collect=True")
+        if unwrap_native and not collect: raise ValueError("unwrap_native requires collect=True")
+        native = self.settings.wrapped_native_token_addr
+        if unwrap_native and pool.token0.token_address != native and pool.token1.token_address != native:
+            raise ValueError("unwrap_native: pool has no native leg")
+        if collect:
+            decrease_calldata = nfpm.encode_abi("decreaseLiquidity", args=[(w.token_id, w.liquidity, a0_min, a1_min, deadline)])
+            collect_recipient = ADDRESS_ZERO if unwrap_native else self.account.address
+            collect_calldata = nfpm.encode_abi("collect", args=[(w.token_id, collect_recipient, MAX_UINT128, MAX_UINT128)])
+            calls = [decrease_calldata, collect_calldata]
+            if unwrap_native:
+                other_token = pool.token1.token_address if pool.token0.token_address == native else pool.token0.token_address
+                calls.append(nfpm.encode_abi("unwrapWETH9", args=[0, self.account.address]))
+                calls.append(nfpm.encode_abi("sweepToken", args=[other_token, 0, self.account.address]))
+            if w.burn: calls.append(nfpm.encode_abi("burn", args=[w.token_id]))
+            return self.sign_and_send_tx(nfpm.functions.multicall(calls))
+        return self.sign_and_send_tx(nfpm.functions.decreaseLiquidity((w.token_id, w.liquidity, a0_min, a1_min, deadline)))
+
+# %% ../src/chains.ipynb #0428d614
 _op_settings = make_op_chain_settings()
 
 class OPChainCommon():
@@ -984,7 +1116,7 @@ class OPChain(Chain, OPChainCommon):
     def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs), **kwargs)
 
 
-# %% ../src/chains.ipynb #d6de0832
+# %% ../src/chains.ipynb #b9eb241f
 _base_settings = make_base_chain_settings()
 
 class BaseChainCommon():
@@ -1001,7 +1133,7 @@ class AsyncBaseChain(AsyncChain, BaseChainCommon):
 class BaseChain(Chain, BaseChainCommon):
     def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs), **kwargs)
 
-# %% ../src/chains.ipynb #265837ea
+# %% ../src/chains.ipynb #5a7cc0fd
 class LiskChainCommon():
     o_usdt: Token = Token(chain_id='1135', chain_name='Lisk', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
     lsk: Token = Token(chain_id='1135', chain_name='Lisk', token_address='0xac485391EB2d7D88253a7F1eF18C37f4242D1A24', symbol='LSK', decimals=18, listed=True, wrapped_token_address=None)
@@ -1014,7 +1146,7 @@ class AsyncLiskChain(AsyncChain, LiskChainCommon):
 class LiskChain(Chain, LiskChainCommon):
     def __init__(self, **kwargs): super().__init__(make_lisk_chain_settings(**kwargs), **kwargs)
 
-# %% ../src/chains.ipynb #323d38b5
+# %% ../src/chains.ipynb #4853ad98
 class UniChainCommon():
     o_usdt: Token = Token(chain_id='130', chain_name='Uni', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
     usdc: Token = Token(chain_id='130', chain_name='Uni', token_address='0x078D782b760474a361dDA0AF3839290b0EF57AD6', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
@@ -1025,7 +1157,7 @@ class AsyncUniChain(AsyncChain, UniChainCommon):
 class UniChain(Chain, UniChainCommon):
     def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
 
-# %% ../src/chains.ipynb #3031963e
+# %% ../src/chains.ipynb #53ca54c9
 class AsyncOPChainSimnet(AsyncOPChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
 
@@ -1044,7 +1176,7 @@ class AsyncBaseChainSimnet(AsyncBaseChain):
 class BaseChainSimnet(BaseChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", **kwargs)
 
-# %% ../src/chains.ipynb #20267737
+# %% ../src/chains.ipynb #d683b994
 def get_chain(chain_id: str, **kwargs) -> Chain:
     if chain_id == '10': return OPChain(**kwargs)
     elif chain_id == '8453': return BaseChain(**kwargs)
