@@ -15,6 +15,8 @@ Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
 - [Fees and Incentives](#fees-and-incentives)
 - [Swaps](#swaps)
 - [Liquidity Deposits](#liquidity-deposits)
+- [Positions](#positions)
+- [Liquidity Withdrawals](#liquidity-withdrawals)
 - [Configuration](#configuration)
 - [Contributing to Sugar](#contributing-to-sugar)
 - [Useful Links](#useful-links)
@@ -249,6 +251,67 @@ await op.deposit(quote)
 `amount{0,1}Min` on the on-chain call — your protection against price
 movement between quote and execution. Tight CL ranges may need a smaller
 slippage; volatile basic pools may need a larger one.
+
+## Positions
+
+List positions owned by an address. The Sugar contract returns one paginated
+view across basic + CL pools, including current-price amounts, accrued fees,
+and (for CL) tick bounds:
+
+``` python
+from sugar.chains import AsyncOPChain
+
+async with AsyncOPChain() as op:
+    for p in await op.get_positions():
+        print(f"{p.pool.symbol} #{p.id}: liq={p.liquidity} staked={p.staked} -> {p.amount_token0} {p.pool.token0.symbol} + {p.amount_token1} {p.pool.token1.symbol}")
+```
+
+Amount fields on `Position` are raw token balances (wei-level uints). For USD
+display, combine with `chain.get_prices(...)` and the pool's `token0/1`.
+`chain.get_positions(owner=None)` defaults to the wallet's own address; fetch
+positions just-in-time before withdrawing (the on-chain price may move between
+calls — slippage protects, but a stale snapshot wastes the budget).
+
+## Liquidity Withdrawals
+
+Withdraw from any position via the same dispatcher; basic pools go through
+the router, CL positions through NFPM `decreaseLiquidity` + `collect`
+bundled in a multicall:
+
+``` python
+from sugar.chains import AsyncOPChain
+from sugar.withdraw import Withdrawal
+
+async with AsyncOPChain() as op:
+    positions = await op.get_positions()
+
+    # full withdrawal of the first position
+    w = Withdrawal.from_position(positions[0])
+    await op.withdraw(w)
+
+    # partial: withdraw half of another position
+    w = Withdrawal.from_position(positions[1], fraction=0.5)
+    await op.withdraw(w)
+
+    # full close + clean up the NFT in one tx (CL only)
+    w = Withdrawal.from_position(positions[2], burn=True)
+    await op.withdraw(w)
+```
+
+`Withdrawal.from_position(p, *, fraction=1.0, burn=False)` carries the
+withdrawal spec. `burn=True` (CL only) appends `nfpm.burn(token_id)` to the
+multicall to clean up the empty NFT; `from_position` rejects `burn=True` with
+`fraction != 1.0` (partial closes leave the NFT non-empty). `fraction=1.0`
+short-circuits the float scaling, so very large V3 liquidity values stay
+exact.
+
+`chain.withdraw` takes the same `slippage` and `delay_in_minutes` kwargs as
+`chain.deposit`, plus:
+
+- `collect: bool = True` *(CL)* — when `False`, the multicall skips `collect`; tokens stay in `tokensOwed` on the NFT for a later sweep.
+- `unwrap_native: bool = False` *(CL)* — when `True`, the multicall routes `collect` into NFPM and appends `unwrapWETH9` + `sweepToken` so the native leg arrives as ETH (not WETH); requires `collect=True` and a pool with a native leg. Basic pools already unwrap via `removeLiquidityETH`.
+
+Tokens always land in the calling wallet (`self.account.address`).
 
 ## Configuration
 
