@@ -14,6 +14,7 @@ Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
 - [Pools](#pools)
 - [Fees and Incentives](#fees-and-incentives)
 - [Swaps](#swaps)
+- [Liquidity Deposits](#liquidity-deposits)
 - [Configuration](#configuration)
 - [Contributing to Sugar](#contributing-to-sugar)
 - [Useful Links](#useful-links)
@@ -166,6 +167,77 @@ await superswap.swap_from_quote(quote)
 # feeling lucky Superswap
 await AsyncSuperswap().swap(from_token=OPChain.velo, to_token=LiskChain.lsk, amount=OPChain.velo.parse_units(100))
 ```
+
+## Liquidity Deposits
+
+Add liquidity to a basic (stable/volatile) pool. Quote, then deposit — the
+router computes the optimal pairing from whichever side you supply. Sync and
+async variants are symmetric:
+
+``` python
+from sugar.chains import AsyncOPChain, OPChain
+
+# async version
+async with AsyncOPChain() as op:
+    pools = await op.get_pools()
+    usdc_velo = next(p for p in pools if p.token0.token_address == AsyncOPChain.usdc.token_address and p.token1.token_address == AsyncOPChain.velo.token_address)
+    quote = await op.quote_basic_deposit(usdc_velo, amount_token0=usdc_velo.token0.parse_units(1))
+    await op.deposit(quote)
+
+# sync version
+with OPChain() as op:
+    pools = op.get_pools()
+    usdc_velo = next(p for p in pools if p.token0.token_address == OPChain.usdc.token_address and p.token1.token_address == OPChain.velo.token_address)
+    quote = op.quote_basic_deposit(usdc_velo, amount_token0=usdc_velo.token0.parse_units(1))
+    op.deposit(quote)
+```
+
+Add liquidity to a concentrated (CL) pool. Pass the price range as floats
+(token1 per token0) and supply exactly one amount — the other is derived
+on-chain from the pool's current sqrt price and the chosen tick range:
+
+``` python
+from sugar.chains import AsyncOPChain
+
+async with AsyncOPChain() as op:
+    pools = await op.get_pools()
+    cl_usdc_velo = next(p for p in pools if p.is_cl
+                        and p.token0.token_address == AsyncOPChain.usdc.token_address
+                        and p.token1.token_address == AsyncOPChain.velo.token_address)
+
+    quote = await op.quote_concentrated_deposit(
+        cl_usdc_velo, price_lower=8.0, price_upper=12.0,
+        amount_token0=cl_usdc_velo.token0.parse_units(10),
+    )
+    print(f"ticks [{quote.tick_lower}, {quote.tick_upper}] -> {quote.amount_token0} + {quote.amount_token1}")
+
+    await op.deposit(quote)
+```
+
+Depositing into an uninitialized CL pool — either a not-yet-deployed pool
+(build the spec via `LiquidityPool.for_creation`) or one deployed without
+liquidity. Pass `initial_price` (a float, token1 per token0); NFPM's `mint`
+deploys and/or initializes the pool in the same tx as the position mint:
+
+``` python
+from sugar.pool import LiquidityPool
+
+new_pool = LiquidityPool.for_creation(
+    op.settings, token0=AsyncOPChain.usdc, token1=AsyncOPChain.velo, tick_spacing=100,
+)
+quote = await op.quote_concentrated_deposit(
+    new_pool, price_lower=8.0, price_upper=12.0,
+    amount_token0=new_pool.token0.parse_units(10),
+    initial_price=10.0,
+)
+await op.deposit(quote)
+```
+
+`chain.deposit(...)` accepts `slippage` (default `0.01`) and
+`delay_in_minutes` (deadline; default `30`). Slippage applies to
+`amount{0,1}Min` on the on-chain call — your protection against price
+movement between quote and execution. Tight CL ranges may need a smaller
+slippage; volatile basic pools may need a larger one.
 
 ## Configuration
 
