@@ -9,7 +9,7 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
            'get_simnet_chain', 'get_async_simnet_chain', 'get_chain_from_token', 'get_async_chain_from_token',
            'get_simnet_chain_from_token', 'get_async_simnet_chain_from_token']
 
-# %% ../src/chains.ipynb #b3868b66
+# %% ../src/chains.ipynb #63223b50
 import os, asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps, lru_cache
@@ -32,7 +32,7 @@ from .deposit import DepositQuote
 from .quote import QuoteInput, Quote
 from .swap import setup_planner
 
-# %% ../src/chains.ipynb #c2cdede7
+# %% ../src/chains.ipynb #fd915c1e
 # monkey patching how web3 handles errors in batched requests
 # re: https://github.com/ethereum/web3.py/issues/3657
 original_format_batched_response = RequestManager._format_batched_response
@@ -41,7 +41,7 @@ def safe_format_batched_response(*args):
     except Exception as e: return e
 RequestManager._format_batched_response = safe_format_batched_response
 
-# %% ../src/chains.ipynb #89adba62
+# %% ../src/chains.ipynb #7173c76d
 T = TypeVar('T')
 
 def require_context(f: Callable[..., T]) -> Callable[..., T]:
@@ -192,7 +192,7 @@ class CommonChain:
             ))
         return batch
 
-# %% ../src/chains.ipynb #725eeb2b
+# %% ../src/chains.ipynb #4fb0d9e1
 class AsyncChain(CommonChain):
     web3: AsyncWeb3
     sugar: AsyncContract
@@ -427,12 +427,31 @@ class AsyncChain(CommonChain):
         return await self.web3.eth.wait_for_transaction_receipt(tx_hash) if wait else tx_hash
 
     @require_async_context
+    async def pool_spec(self, token0: Token, token1: Token, *,
+                        tick_spacing: Optional[int] = None,
+                        stable: Optional[bool] = None) -> LiquidityPool:
+        """Build a not-yet-deployed pool spec for `chain.deposit`. CL: pass `tick_spacing`.
+        Basic: pass `stable=True/False`. For basic pools the basic factory address is fetched
+        from `router.defaultFactory()`."""
+        basic_factory = await self.router.functions.defaultFactory().call() if stable is not None else None
+        return LiquidityPool.for_creation(self.settings, token0, token1,
+                                          tick_spacing=tick_spacing, stable=stable,
+                                          basic_factory_addr=basic_factory)
+
+    @require_async_context
     async def quote_basic_deposit(self, pool: LiquidityPool, *,
                                   amount_token0: Optional[int] = None,
                                   amount_token1: Optional[int] = None) -> DepositQuote:
-        """Quote a basic-pool deposit. Supply exactly one of `amount_token0` / `amount_token1`;
-        the router computes the optimal pairing."""
+        """Quote a basic-pool deposit.
+
+        Existing pool: supply exactly one of `amount_token0` / `amount_token1`; the router
+        computes the optimal pairing. New pool (built via `chain.pool_spec`): supply both
+        amounts — there are no reserves to rebalance against, so we skip the on-chain quote."""
         if pool.is_cl: raise ValueError("quote_basic_deposit requires a basic pool")
+        if pool.lp == ADDRESS_ZERO:
+            if amount_token0 is None or amount_token1 is None:
+                raise ValueError("new basic pool requires both amount_token0 and amount_token1")
+            return DepositQuote(pool=pool, amount_token0=amount_token0, amount_token1=amount_token1)
         if (amount_token0 is None) == (amount_token1 is None): raise ValueError("supply exactly one of amount_token0 / amount_token1")
         a_desired = amount_token0 if amount_token0 is not None else MAX_UINT256
         b_desired = amount_token1 if amount_token1 is not None else MAX_UINT256
@@ -452,13 +471,12 @@ class AsyncChain(CommonChain):
         is derived on-chain via slipstream.estimateAmount0/1.
 
         For an uninitialized pool (`pool.sqrt_ratio == 0` — either newly deployed or built via
-        `LiquidityPool.for_creation`), supply `initial_price`; NFPM's `mint` will deploy and/or
-        initialize the pool with that price as a side effect, in the same tx as the mint."""
+        `chain.pool_spec(..., tick_spacing=N)`), supply `initial_price`; NFPM's `mint` will
+        deploy and/or initialize the pool with that price as a side effect, in the same tx."""
         if not pool.is_cl: raise ValueError("quote_concentrated_deposit requires a CL pool")
         if (amount_token0 is None) == (amount_token1 is None): raise ValueError("supply exactly one of amount_token0 / amount_token1")
 
         if pool.sqrt_ratio == 0:
-            # uninitialized — caller supplies the starting price; we carry it through to mint
             if initial_price is None: raise ValueError("uninitialized pool requires initial_price")
             sqrt_ratio = sqrt_ratio_x96_from_price(initial_price, pool.token0.decimals, pool.token1.decimals)
             sqrt_price_x96 = sqrt_ratio
@@ -549,7 +567,7 @@ class AsyncChain(CommonChain):
             return await self.sign_and_send_tx(nfpm.functions.multicall([mint_calldata, refund_calldata]), value=a0 if is_native0 else a1)
         return await self.sign_and_send_tx(nfpm.functions.mint(*params))
 
-# %% ../src/chains.ipynb #c3a8bd3d
+# %% ../src/chains.ipynb #bb860c88
 class Chain(CommonChain):
     web3: Web3
     sugar: Contract
@@ -810,12 +828,31 @@ class Chain(CommonChain):
         value = quote.input.amount_in if from_token.wrapped_token_address else 0
         return self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
     @require_context
+    def pool_spec(self, token0: Token, token1: Token, *,
+                  tick_spacing: Optional[int] = None,
+                  stable: Optional[bool] = None) -> LiquidityPool:
+        """Build a not-yet-deployed pool spec for `chain.deposit`. CL: pass `tick_spacing`.
+        Basic: pass `stable=True/False`. For basic pools the basic factory address is fetched
+        from `router.defaultFactory()`."""
+        basic_factory = self.router.functions.defaultFactory().call() if stable is not None else None
+        return LiquidityPool.for_creation(self.settings, token0, token1,
+                                          tick_spacing=tick_spacing, stable=stable,
+                                          basic_factory_addr=basic_factory)
+
+    @require_context
     def quote_basic_deposit(self, pool: LiquidityPool, *,
                             amount_token0: Optional[int] = None,
                             amount_token1: Optional[int] = None) -> DepositQuote:
-        """Quote a basic-pool deposit. Supply exactly one of `amount_token0` / `amount_token1`;
-        the router computes the optimal pairing."""
+        """Quote a basic-pool deposit.
+
+        Existing pool: supply exactly one of `amount_token0` / `amount_token1`; the router
+        computes the optimal pairing. New pool (built via `chain.pool_spec`): supply both
+        amounts — there are no reserves to rebalance against, so we skip the on-chain quote."""
         if pool.is_cl: raise ValueError("quote_basic_deposit requires a basic pool")
+        if pool.lp == ADDRESS_ZERO:
+            if amount_token0 is None or amount_token1 is None:
+                raise ValueError("new basic pool requires both amount_token0 and amount_token1")
+            return DepositQuote(pool=pool, amount_token0=amount_token0, amount_token1=amount_token1)
         if (amount_token0 is None) == (amount_token1 is None): raise ValueError("supply exactly one of amount_token0 / amount_token1")
         a_desired = amount_token0 if amount_token0 is not None else MAX_UINT256
         b_desired = amount_token1 if amount_token1 is not None else MAX_UINT256
@@ -835,8 +872,8 @@ class Chain(CommonChain):
         is derived on-chain via slipstream.estimateAmount0/1.
 
         For an uninitialized pool (`pool.sqrt_ratio == 0` — either newly deployed or built via
-        `LiquidityPool.for_creation`), supply `initial_price`; NFPM's `mint` will deploy and/or
-        initialize the pool with that price as a side effect, in the same tx as the mint."""
+        `chain.pool_spec(..., tick_spacing=N)`), supply `initial_price`; NFPM's `mint` will
+        deploy and/or initialize the pool with that price as a side effect, in the same tx."""
         if not pool.is_cl: raise ValueError("quote_concentrated_deposit requires a CL pool")
         if (amount_token0 is None) == (amount_token1 is None): raise ValueError("supply exactly one of amount_token0 / amount_token1")
 
@@ -925,7 +962,7 @@ class Chain(CommonChain):
             return self.sign_and_send_tx(nfpm.functions.multicall([mint_calldata, refund_calldata]), value=a0 if is_native0 else a1)
         return self.sign_and_send_tx(nfpm.functions.mint(*params))
 
-# %% ../src/chains.ipynb #e8df2173
+# %% ../src/chains.ipynb #62925e09
 _op_settings = make_op_chain_settings()
 
 class OPChainCommon():
@@ -947,7 +984,7 @@ class OPChain(Chain, OPChainCommon):
     def __init__(self, **kwargs): super().__init__(make_op_chain_settings(**kwargs), **kwargs)
 
 
-# %% ../src/chains.ipynb #83e2925e
+# %% ../src/chains.ipynb #d6de0832
 _base_settings = make_base_chain_settings()
 
 class BaseChainCommon():
@@ -964,7 +1001,7 @@ class AsyncBaseChain(AsyncChain, BaseChainCommon):
 class BaseChain(Chain, BaseChainCommon):
     def __init__(self, **kwargs): super().__init__(make_base_chain_settings(**kwargs), **kwargs)
 
-# %% ../src/chains.ipynb #02f669c3
+# %% ../src/chains.ipynb #265837ea
 class LiskChainCommon():
     o_usdt: Token = Token(chain_id='1135', chain_name='Lisk', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
     lsk: Token = Token(chain_id='1135', chain_name='Lisk', token_address='0xac485391EB2d7D88253a7F1eF18C37f4242D1A24', symbol='LSK', decimals=18, listed=True, wrapped_token_address=None)
@@ -977,7 +1014,7 @@ class AsyncLiskChain(AsyncChain, LiskChainCommon):
 class LiskChain(Chain, LiskChainCommon):
     def __init__(self, **kwargs): super().__init__(make_lisk_chain_settings(**kwargs), **kwargs)
 
-# %% ../src/chains.ipynb #f46ac7e0
+# %% ../src/chains.ipynb #323d38b5
 class UniChainCommon():
     o_usdt: Token = Token(chain_id='130', chain_name='Uni', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
     usdc: Token = Token(chain_id='130', chain_name='Uni', token_address='0x078D782b760474a361dDA0AF3839290b0EF57AD6', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
@@ -988,7 +1025,7 @@ class AsyncUniChain(AsyncChain, UniChainCommon):
 class UniChain(Chain, UniChainCommon):
     def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
 
-# %% ../src/chains.ipynb #ae172bea
+# %% ../src/chains.ipynb #3031963e
 class AsyncOPChainSimnet(AsyncOPChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
 
@@ -1007,7 +1044,7 @@ class AsyncBaseChainSimnet(AsyncBaseChain):
 class BaseChainSimnet(BaseChain):
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", **kwargs)
 
-# %% ../src/chains.ipynb #ca39b1ce
+# %% ../src/chains.ipynb #20267737
 def get_chain(chain_id: str, **kwargs) -> Chain:
     if chain_id == '10': return OPChain(**kwargs)
     elif chain_id == '8453': return BaseChain(**kwargs)
