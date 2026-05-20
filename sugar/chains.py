@@ -637,6 +637,91 @@ class AsyncChain(CommonChain):
             if w.burn: calls.append(nfpm.encode_abi("burn", args=[w.token_id]))
             return await self.sign_and_send_tx(nfpm.functions.multicall(calls))
         return await self.sign_and_send_tx(nfpm.functions.decreaseLiquidity((w.token_id, w.liquidity, a0_min, a1_min, deadline)))
+    @require_async_context
+    async def stake(self, position: Position):
+        """Stake `position`'s unstaked liquidity into the pool's gauge.
+
+        CL: approves the NFT to the gauge and calls `gauge.deposit(tokenId)`.
+        Basic: approves the LP token to the gauge and calls `gauge.deposit(position.liquidity)`."""
+        if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
+        pool = position.pool
+        if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
+        if not pool.gauge_alive: raise ValueError(f"gauge for {pool.symbol} is not active")
+        gauge_addr = normalize_address(pool.gauge)
+        gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_basic" if not pool.is_cl else "gauge_cl"))
+        if pool.is_cl:
+            if position.staked > 0: raise ValueError(f"CL position #{position.id} is already staked")
+            if position.liquidity == 0: raise ValueError(f"CL position #{position.id} has no liquidity to stake")
+            nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
+            await self.sign_and_send_tx(nfpm.functions.approve(gauge_addr, position.id))
+            return await self.sign_and_send_tx(gauge.functions.deposit(position.id))
+        if position.liquidity == 0: raise ValueError(f"no LP to stake for {pool.symbol}")
+        lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("erc20"))
+        await self.sign_and_send_tx(lp.functions.approve(gauge_addr, position.liquidity))
+        return await self.sign_and_send_tx(gauge.functions.deposit(position.liquidity))
+
+    @require_async_context
+    async def unstake(self, position: Position, *, amount: Optional[int] = None):
+        """Withdraw from the pool's gauge.
+
+        CL: `gauge.withdraw(tokenId)` returns the NFT to the wallet; `amount` is ignored.
+        Basic: `gauge.withdraw(amount)` defaults to `position.staked` (full unstake)."""
+        if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
+        pool = position.pool
+        if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
+        gauge = self.web3.eth.contract(address=normalize_address(pool.gauge), abi=get_abi("gauge_basic" if not pool.is_cl else "gauge_cl"))
+        if pool.is_cl:
+            if position.staked == 0: raise ValueError(f"CL position #{position.id} is not staked")
+            return await self.sign_and_send_tx(gauge.functions.withdraw(position.id))
+        amount = position.staked if amount is None else amount
+        if amount <= 0: raise ValueError("no staked LP to withdraw")
+        if amount > position.staked: raise ValueError(f"unstake amount {amount} > staked {position.staked}")
+        return await self.sign_and_send_tx(gauge.functions.withdraw(amount))
+
+    @require_async_context
+    async def claim_emissions(self, position: Position):
+        """Claim gauge emissions for the position.
+
+        CL: `gauge.getReward(tokenId)`. Basic: `gauge.getReward(wallet)`."""
+        if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
+        pool = position.pool
+        if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
+        gauge_addr = normalize_address(pool.gauge)
+        if pool.is_cl:
+            gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_cl"))
+            return await self.sign_and_send_tx(gauge.functions.getReward(position.id))
+        gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_basic"))
+        return await self.sign_and_send_tx(gauge.functions.getReward(self.account.address))
+
+    @require_async_context
+    async def claim_fees(self, position: Position, *, burn: bool = False, unwrap_native: bool = False):
+        """Claim accrued LP fees.
+
+        CL: `nfpm.multicall([collect(tokenId, wallet, MAX, MAX), optional burn(tokenId)])`.
+        Pass `burn=True` to clean up the NFT — only valid when both `liquidity == 0` and `staked == 0`.
+
+        Basic: `pool.claimFees()` on the pool contract. `burn` is ignored for basic pools."""
+        if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
+        if position.staked > 0: raise ValueError("position is staked; unstake first to claim fees")
+        pool = position.pool
+        if pool.is_cl:
+            if burn and (position.liquidity > 0 or position.staked > 0):
+                raise ValueError("burn requires a fully drained position (liquidity == 0 and staked == 0)")
+            nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
+            native = self.settings.wrapped_native_token_addr
+            if unwrap_native and pool.token0.token_address != native and pool.token1.token_address != native:
+                raise ValueError("unwrap_native: pool has no native leg")
+            collect_recipient = ADDRESS_ZERO if unwrap_native else self.account.address
+            collect_calldata = nfpm.encode_abi("collect", args=[(position.id, collect_recipient, MAX_UINT128, MAX_UINT128)])
+            calls = [collect_calldata]
+            if unwrap_native:
+                other_token = pool.token1.token_address if pool.token0.token_address == native else pool.token0.token_address
+                calls.append(nfpm.encode_abi("unwrapWETH9", args=[0, self.account.address]))
+                calls.append(nfpm.encode_abi("sweepToken", args=[other_token, 0, self.account.address]))
+            if burn: calls.append(nfpm.encode_abi("burn", args=[position.id]))
+            return await self.sign_and_send_tx(nfpm.functions.multicall(calls))
+        pool_contract = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("pool_basic"))
+        return await self.sign_and_send_tx(pool_contract.functions.claimFees())
 
 # %% ../src/chains.ipynb #6005ad12
 class Chain(CommonChain):
@@ -1093,6 +1178,91 @@ class Chain(CommonChain):
             if w.burn: calls.append(nfpm.encode_abi("burn", args=[w.token_id]))
             return self.sign_and_send_tx(nfpm.functions.multicall(calls))
         return self.sign_and_send_tx(nfpm.functions.decreaseLiquidity((w.token_id, w.liquidity, a0_min, a1_min, deadline)))
+    @require_context
+    def stake(self, position: Position):
+        """Stake `position`'s unstaked liquidity into the pool's gauge.
+
+        CL: approves the NFT to the gauge and calls `gauge.deposit(tokenId)`.
+        Basic: approves the LP token to the gauge and calls `gauge.deposit(position.liquidity)`."""
+        if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
+        pool = position.pool
+        if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
+        if not pool.gauge_alive: raise ValueError(f"gauge for {pool.symbol} is not active")
+        gauge_addr = normalize_address(pool.gauge)
+        gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_basic" if not pool.is_cl else "gauge_cl"))
+        if pool.is_cl:
+            if position.staked > 0: raise ValueError(f"CL position #{position.id} is already staked")
+            if position.liquidity == 0: raise ValueError(f"CL position #{position.id} has no liquidity to stake")
+            nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
+            self.sign_and_send_tx(nfpm.functions.approve(gauge_addr, position.id))
+            return self.sign_and_send_tx(gauge.functions.deposit(position.id))
+        if position.liquidity == 0: raise ValueError(f"no LP to stake for {pool.symbol}")
+        lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("erc20"))
+        self.sign_and_send_tx(lp.functions.approve(gauge_addr, position.liquidity))
+        return self.sign_and_send_tx(gauge.functions.deposit(position.liquidity))
+
+    @require_context
+    def unstake(self, position: Position, *, amount: Optional[int] = None):
+        """Withdraw from the pool's gauge.
+
+        CL: `gauge.withdraw(tokenId)` returns the NFT to the wallet; `amount` is ignored.
+        Basic: `gauge.withdraw(amount)` defaults to `position.staked` (full unstake)."""
+        if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
+        pool = position.pool
+        if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
+        gauge = self.web3.eth.contract(address=normalize_address(pool.gauge), abi=get_abi("gauge_basic" if not pool.is_cl else "gauge_cl"))
+        if pool.is_cl:
+            if position.staked == 0: raise ValueError(f"CL position #{position.id} is not staked")
+            return self.sign_and_send_tx(gauge.functions.withdraw(position.id))
+        amount = position.staked if amount is None else amount
+        if amount <= 0: raise ValueError("no staked LP to withdraw")
+        if amount > position.staked: raise ValueError(f"unstake amount {amount} > staked {position.staked}")
+        return self.sign_and_send_tx(gauge.functions.withdraw(amount))
+
+    @require_context
+    def claim_emissions(self, position: Position):
+        """Claim gauge emissions for the position.
+
+        CL: `gauge.getReward(tokenId)`. Basic: `gauge.getReward(wallet)`."""
+        if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
+        pool = position.pool
+        if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
+        gauge_addr = normalize_address(pool.gauge)
+        if pool.is_cl:
+            gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_cl"))
+            return self.sign_and_send_tx(gauge.functions.getReward(position.id))
+        gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_basic"))
+        return self.sign_and_send_tx(gauge.functions.getReward(self.account.address))
+
+    @require_context
+    def claim_fees(self, position: Position, *, burn: bool = False, unwrap_native: bool = False):
+        """Claim accrued LP fees.
+
+        CL: `nfpm.multicall([collect(tokenId, wallet, MAX, MAX), optional burn(tokenId)])`.
+        Pass `burn=True` to clean up the NFT — only valid when both `liquidity == 0` and `staked == 0`.
+
+        Basic: `pool.claimFees()` on the pool contract. `burn` is ignored for basic pools."""
+        if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
+        if position.staked > 0: raise ValueError("position is staked; unstake first to claim fees")
+        pool = position.pool
+        if pool.is_cl:
+            if burn and (position.liquidity > 0 or position.staked > 0):
+                raise ValueError("burn requires a fully drained position (liquidity == 0 and staked == 0)")
+            nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
+            native = self.settings.wrapped_native_token_addr
+            if unwrap_native and pool.token0.token_address != native and pool.token1.token_address != native:
+                raise ValueError("unwrap_native: pool has no native leg")
+            collect_recipient = ADDRESS_ZERO if unwrap_native else self.account.address
+            collect_calldata = nfpm.encode_abi("collect", args=[(position.id, collect_recipient, MAX_UINT128, MAX_UINT128)])
+            calls = [collect_calldata]
+            if unwrap_native:
+                other_token = pool.token1.token_address if pool.token0.token_address == native else pool.token0.token_address
+                calls.append(nfpm.encode_abi("unwrapWETH9", args=[0, self.account.address]))
+                calls.append(nfpm.encode_abi("sweepToken", args=[other_token, 0, self.account.address]))
+            if burn: calls.append(nfpm.encode_abi("burn", args=[position.id]))
+            return self.sign_and_send_tx(nfpm.functions.multicall(calls))
+        pool_contract = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("pool_basic"))
+        return self.sign_and_send_tx(pool_contract.functions.claimFees())
 
 # %% ../src/chains.ipynb #0428d614
 _op_settings = make_op_chain_settings()

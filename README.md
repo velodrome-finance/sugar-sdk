@@ -17,6 +17,7 @@ Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
 - [Liquidity Deposits](#liquidity-deposits)
 - [Positions](#positions)
 - [Liquidity Withdrawals](#liquidity-withdrawals)
+- [Staking and Rewards](#staking-and-rewards)
 - [Configuration](#configuration)
 - [Contributing to Sugar](#contributing-to-sugar)
 - [Useful Links](#useful-links)
@@ -312,6 +313,46 @@ exact.
 - `unwrap_native: bool = False` *(CL)* — when `True`, the multicall routes `collect` into NFPM and appends `unwrapWETH9` + `sweepToken` so the native leg arrives as ETH (not WETH); requires `collect=True` and a pool with a native leg. Basic pools already unwrap via `removeLiquidityETH`.
 
 Tokens always land in the calling wallet (`self.account.address`).
+
+## Staking and Rewards
+
+Each `Position` carries everything needed to stake, unstake, and claim — the
+gauge address lives on `position.pool.gauge`, and emissions / fees state is on
+the position itself.
+
+``` python
+from sugar.chains import AsyncOPChain
+
+async with AsyncOPChain() as op:
+    positions = await op.get_positions()
+    p = positions[0]
+
+    # Stake the unstaked portion into the gauge.
+    # CL: approves the NFT to the gauge, then gauge.deposit(tokenId).
+    # Basic: approves the LP token, then gauge.deposit(position.liquidity).
+    await op.stake(p)
+
+    # Withdraw from the gauge.
+    # CL: full unstake (the NFT returns to the wallet).
+    # Basic: defaults to position.staked; pass `amount=N` to unstake a partial amount.
+    await op.unstake(p)
+
+    # Claim accrued gauge emissions for this position.
+    await op.claim_emissions(p)
+
+    # Claim accrued LP trading fees.
+    # CL: nfpm.multicall([collect, optional unwrap+sweep, optional burn]).
+    # Basic: pool.claimFees(). burn / unwrap_native are CL-only and ignored on basic.
+    await op.claim_fees(p)
+    await op.claim_fees(p, burn=True)               # CL only, requires fully drained position
+    await op.claim_fees(p, unwrap_native=True)      # CL only, native leg arrives as ETH
+```
+
+Validations are fail-fast: `stake` rejects pools without a gauge or with a
+killed gauge, CL positions that are already staked, and positions with zero
+unstaked liquidity. `unstake` rejects positions with zero staked liquidity.
+`claim_fees(..., burn=True)` rejects positions that still hold liquidity or
+are staked (NFPM's `burn` requires `liquidity == 0` and `tokensOwed == 0`).
 
 ## Configuration
 
