@@ -46,6 +46,8 @@ jobs:
           sleep 15
       - name: Test fork
         run: cast call 0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2 "MAX_TOKENS()(uint256)" --rpc-url http://localhost:4444
-      - uses: fastai/workflows/nbdev-ci@master
-        with:
-          version: ${{ matrix.python-version }}
+      - name: Test with nbdev
+        run: |
+          pip install -e ".[dev]"
+          nbdev_export
+          nbdev_test
