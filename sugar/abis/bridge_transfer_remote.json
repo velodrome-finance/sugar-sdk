@@ -1,0 +1,15 @@
+[
+    {
+        "name": "transferRemote",
+        "type": "function",
+        "stateMutability": "payable",
+        "inputs": [
+            {"name": "_destination", "type": "uint32"},
+            {"name": "_recipient", "type": "bytes32"},
+            {"name": "_amountOrId", "type": "uint256"}
+        ],
+        "outputs": [
+            {"name": "messageId", "type": "bytes32"}
+        ]
+    }
+]

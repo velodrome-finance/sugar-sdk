@@ -1,0 +1,13 @@
+[
+    {
+        "name": "quoteGasPayment",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [
+            {"name": "chainId", "type": "uint32"}
+        ],
+        "outputs": [
+            {"name": "", "type": "uint256"}
+        ]
+    }
+]
