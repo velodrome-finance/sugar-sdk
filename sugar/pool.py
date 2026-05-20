@@ -3,7 +3,7 @@
 # %% auto #0
 __all__ = ['Price', 'Amount', 'symbol', 'LiquidityPoolForSwap', 'LiquidityPool', 'LiquidityPoolEpoch']
 
-# %% ../src/pool.ipynb #752c99a3
+# %% ../src/pool.ipynb #f08e72cc
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Tuple, Dict, Optional, List
@@ -11,7 +11,7 @@ from .token import Token
 from .helpers import normalize_address, ADDRESS_ZERO
 from .config import ChainSettings
 
-# %% ../src/pool.ipynb #a72ef59d
+# %% ../src/pool.ipynb #fd8ee292
 @dataclass(frozen=True)
 class Price:
     """Data class for Token Price
@@ -26,7 +26,7 @@ class Price:
     @property
     def pretty_price(self) -> float: return round(self.price, 5)
 
-# %% ../src/pool.ipynb #c1c0f32c
+# %% ../src/pool.ipynb #72b80a88
 @dataclass(frozen=True)
 class Amount:
     token: Token
@@ -49,7 +49,7 @@ class Amount:
     def amount_in_stable(self) -> float: return self.as_float * self.price.price
 
 
-# %% ../src/pool.ipynb #30d4ccaa
+# %% ../src/pool.ipynb #5131519c
 def symbol(token0: Token, token1: Token, pool_type: int) -> str:
     return f"CL{pool_type}-{token0.symbol}/{token1.symbol}" if pool_type > 0  else f"{'s' if pool_type == 0 else 'v'}AMM-{token0.symbol}/{token1.symbol}"
 
@@ -243,31 +243,54 @@ class LiquidityPool:
         )
 
     @classmethod
-    def for_creation(cls, settings: ChainSettings, token0: Token, token1: Token, tick_spacing: int) -> "LiquidityPool":
-        """Build a spec for a CL pool that does not yet exist on-chain. Pass to
-        `DepositQuote.from_prices` + `chain.deposit` to deploy + initialize + mint in one tx.
+    def for_creation(cls, settings: ChainSettings, token0: Token, token1: Token, *,
+                     tick_spacing: Optional[int] = None, stable: Optional[bool] = None,
+                     basic_factory_addr: Optional[str] = None) -> "LiquidityPool":
+        """Build a spec for a pool that does not yet exist on-chain.
 
-        `tick_spacing` is the same value Sugar reports as `pool.type` for existing CL pools.
-        Tokens must already be in canonical order (token0.address < token1.address)."""
-        if tick_spacing <= 0: raise ValueError("tick_spacing must be positive (CL only)")
+        Pass `tick_spacing` for a CL pool, or `stable=True/False` for a basic
+        (stable/volatile) pool. For basic pools, `basic_factory_addr` is required;
+        most consumers should use `chain.pool_spec(...)` instead, which fetches
+        the factory address from `router.defaultFactory()` automatically.
+
+        Tokens must be in canonical order (token0.address < token1.address)."""
+        if (tick_spacing is None) == (stable is None):
+            raise ValueError("supply exactly one of tick_spacing / stable")
         if token0.token_address.lower() >= token1.token_address.lower():
             raise ValueError("tokens must be canonically ordered: token0.address < token1.address")
+
+        if tick_spacing is not None:
+            if tick_spacing <= 0: raise ValueError("tick_spacing must be positive (CL only)")
+            return LiquidityPool(
+                chain_id=settings.chain_id, chain_name=settings.chain_name,
+                lp=ADDRESS_ZERO, factory=ADDRESS_ZERO,
+                symbol=symbol(token0, token1, tick_spacing),
+                type=tick_spacing, is_stable=False, is_cl=True,
+                tick=0, sqrt_ratio=0, total_supply=0, decimals=0,
+                token0=token0, reserve0=None, token1=token1, reserve1=None,
+                token0_fees=None, token1_fees=None,
+                pool_fee=0, gauge_total_supply=0,
+                emissions=None, emissions_token=None, weekly_emissions=None,
+                nfpm=normalize_address(settings.nfpm_contract_addr), alm=ADDRESS_ZERO,
+            )
+
+        if basic_factory_addr is None:
+            raise ValueError("basic pool requires basic_factory_addr (use chain.pool_spec to fetch it)")
+        pool_type = 0 if stable else -1
         return LiquidityPool(
             chain_id=settings.chain_id, chain_name=settings.chain_name,
-            lp=ADDRESS_ZERO, factory=ADDRESS_ZERO,
-            symbol=symbol(token0, token1, tick_spacing),
-            type=tick_spacing, is_stable=False, is_cl=True,
-            tick=0, sqrt_ratio=0,
-            total_supply=0, decimals=0,
-            token0=token0, reserve0=None,
-            token1=token1, reserve1=None,
+            lp=ADDRESS_ZERO, factory=normalize_address(basic_factory_addr),
+            symbol=symbol(token0, token1, pool_type),
+            type=pool_type, is_stable=stable, is_cl=False,
+            tick=0, sqrt_ratio=0, total_supply=0, decimals=0,
+            token0=token0, reserve0=None, token1=token1, reserve1=None,
             token0_fees=None, token1_fees=None,
             pool_fee=0, gauge_total_supply=0,
             emissions=None, emissions_token=None, weekly_emissions=None,
-            nfpm=normalize_address(settings.nfpm_contract_addr), alm=ADDRESS_ZERO,
+            nfpm=ADDRESS_ZERO, alm=ADDRESS_ZERO,
         )
 
-# %% ../src/pool.ipynb #bdbbddc5
+# %% ../src/pool.ipynb #88de3f53
 @dataclass(frozen=True)
 class LiquidityPoolEpoch:
     ts: int

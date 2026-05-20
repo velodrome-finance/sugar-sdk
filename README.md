@@ -215,20 +215,31 @@ async with AsyncOPChain() as op:
 ```
 
 Depositing into an uninitialized CL pool — either a not-yet-deployed pool
-(build the spec via `LiquidityPool.for_creation`) or one deployed without
-liquidity. Pass `initial_price` (a float, token1 per token0); NFPM's `mint`
-deploys and/or initializes the pool in the same tx as the position mint:
+(build the spec via `chain.pool_spec(..., tick_spacing=N)`) or one deployed
+without liquidity. Pass `initial_price` (a float, token1 per token0); NFPM's
+`mint` deploys and/or initializes the pool in the same tx as the position mint:
 
 ``` python
-from sugar.pool import LiquidityPool
-
-new_pool = LiquidityPool.for_creation(
-    op.settings, token0=AsyncOPChain.usdc, token1=AsyncOPChain.velo, tick_spacing=100,
-)
+new_pool = await op.pool_spec(token0=AsyncOPChain.usdc, token1=AsyncOPChain.velo, tick_spacing=100)
 quote = await op.quote_concentrated_deposit(
     new_pool, price_lower=8.0, price_upper=12.0,
     amount_token0=new_pool.token0.parse_units(10),
     initial_price=10.0,
+)
+await op.deposit(quote)
+```
+
+Deploying a brand-new basic (stable/volatile) pool — `chain.pool_spec`
+fetches the basic factory address from `router.defaultFactory()` for you.
+Since a new pool has no reserves, the router can't rebalance — supply both
+amounts upfront:
+
+``` python
+new_pool = await op.pool_spec(token0=AsyncOPChain.usdc, token1=AsyncOPChain.velo, stable=False)
+quote = await op.quote_basic_deposit(
+    new_pool,
+    amount_token0=new_pool.token0.parse_units(10),
+    amount_token1=new_pool.token1.parse_units(100),
 )
 await op.deposit(quote)
 ```
