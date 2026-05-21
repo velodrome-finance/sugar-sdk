@@ -44,7 +44,7 @@ class Token:
 
     @classmethod
     def from_tuple(cls, t: Tuple, chain_id: str, chain_name: str) -> "Token":
-        (token_address, symbol, decimals, _, listed) = t
+        (token_address, symbol, decimals, _, listed, _emerging) = t
         return Token(
             chain_id=chain_id,
             chain_name=chain_name,
