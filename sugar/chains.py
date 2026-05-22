@@ -1135,32 +1135,38 @@ class Chain(CommonChain):
         return self.prepare_positions(self.paginate(get_p), self.get_pools())
 
     @require_context
-    def withdraw(self, withdrawal: Withdrawal, delay_in_minutes: float = 30, slippage: float = 0.01, collect: bool = True, unwrap_native: bool = False):
+    def withdraw(self, withdrawal: Withdrawal, delay_in_minutes: float = 30, slippage: float = 0.01,
+                 collect: bool = True, unwrap_native: bool = False, dry_run: bool = False):
         """Execute a withdrawal. Dispatches on `withdrawal.pool.is_cl`."""
-        if withdrawal.pool.is_cl: return self._withdraw_concentrated(withdrawal, delay_in_minutes, slippage, collect, unwrap_native)
-        return self._withdraw_basic(withdrawal, delay_in_minutes, slippage)
+        if withdrawal.pool.is_cl:
+            return self._withdraw_concentrated(withdrawal, delay_in_minutes, slippage, collect, unwrap_native, dry_run=dry_run)
+        return self._withdraw_basic(withdrawal, delay_in_minutes, slippage, dry_run=dry_run)
 
     @require_context
-    def _withdraw_basic(self, w: Withdrawal, delay_in_minutes: float, slippage: float):
+    def _withdraw_basic(self, w: Withdrawal, delay_in_minutes: float, slippage: float, dry_run: bool = False):
         pool = w.pool
         router_addr = self.settings.router_contract_addr
         a0_min, a1_min = apply_slippage(w.amount_token0, slippage), apply_slippage(w.amount_token1, slippage)
         deadline = get_future_timestamp(delay_in_minutes)
+        native = self.settings.wrapped_native_token_addr
 
         lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("erc20"))
-        self.sign_and_send_tx(lp.functions.approve(router_addr, w.liquidity))
+        approval_tx = self.sign_and_send_tx(lp.functions.approve(router_addr, w.liquidity), dry_run=dry_run)
 
-        if pool.token0.token_address == self.settings.wrapped_native_token_addr:
-            params = [pool.token1.token_address, pool.is_stable, w.liquidity, a1_min, a0_min, self.account.address, deadline]
-            return self.sign_and_send_tx(self.router.functions.removeLiquidityETH(*params))
-        if pool.token1.token_address == self.settings.wrapped_native_token_addr:
-            params = [pool.token0.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.account.address, deadline]
-            return self.sign_and_send_tx(self.router.functions.removeLiquidityETH(*params))
-        params = [pool.token0.token_address, pool.token1.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.account.address, deadline]
-        return self.sign_and_send_tx(self.router.functions.removeLiquidity(*params))
+        if pool.token0.token_address == native or pool.token1.token_address == native:
+            is_native0 = pool.token0.token_address == native
+            other_addr = pool.token1.token_address if is_native0 else pool.token0.token_address
+            other_min, native_min = (a1_min, a0_min) if is_native0 else (a0_min, a1_min)
+            params = [other_addr, pool.is_stable, w.liquidity, other_min, native_min, self.account.address, deadline]
+            main = self.sign_and_send_tx(self.router.functions.removeLiquidityETH(*params), dry_run=dry_run)
+        else:
+            params = [pool.token0.token_address, pool.token1.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.account.address, deadline]
+            main = self.sign_and_send_tx(self.router.functions.removeLiquidity(*params), dry_run=dry_run)
+        return [approval_tx, main] if dry_run else main
 
     @require_context
-    def _withdraw_concentrated(self, w: Withdrawal, delay_in_minutes: float, slippage: float, collect: bool, unwrap_native: bool):
+    def _withdraw_concentrated(self, w: Withdrawal, delay_in_minutes: float, slippage: float,
+                               collect: bool, unwrap_native: bool, dry_run: bool = False):
         pool = w.pool
         nfpm = self._nfpm(pool)
         a0_min, a1_min = apply_slippage(w.amount_token0, slippage), apply_slippage(w.amount_token1, slippage)
@@ -1170,10 +1176,12 @@ class Chain(CommonChain):
             raise ValueError("burn / unwrap_native require collect=True")
         decrease_args = (w.token_id, w.liquidity, a0_min, a1_min, deadline)
         if not collect:
-            return self.sign_and_send_tx(nfpm.functions.decreaseLiquidity(decrease_args))
-        calls = [nfpm.encode_abi("decreaseLiquidity", args=[decrease_args])] + \
-                self._build_nfpm_cleanup_calls(nfpm, pool, w.token_id, unwrap_native=unwrap_native, burn=w.burn)
-        return self.sign_and_send_tx(nfpm.functions.multicall(calls))
+            main = self.sign_and_send_tx(nfpm.functions.decreaseLiquidity(decrease_args), dry_run=dry_run)
+        else:
+            calls = [nfpm.encode_abi("decreaseLiquidity", args=[decrease_args])] + \
+                    self._build_nfpm_cleanup_calls(nfpm, pool, w.token_id, unwrap_native=unwrap_native, burn=w.burn)
+            main = self.sign_and_send_tx(nfpm.functions.multicall(calls), dry_run=dry_run)
+        return [main] if dry_run else main
     @require_context
     def stake(self, position: Position):
         """Stake `position`'s unstaked liquidity into the pool's gauge.
