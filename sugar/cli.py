@@ -5,8 +5,10 @@ __all__ = ['CLI', 'main']
 
 # %% ../src/cli.ipynb 2
 import fire
+from dataclasses import asdict
 from .chains import get_chain
 from .deposit import DepositQuote
+from .withdraw import Withdrawal
 from .helpers import ADDRESS_ZERO, normalize_address
 
 # %% ../src/cli.ipynb 3
@@ -64,6 +66,24 @@ def _build_quote(c, p, *, amount0, amount1, price_lower, price_upper, tick_lower
         if a0 is None or a1 is None: raise SystemExit('new basic pool requires both --amount0 and --amount1')
         return DepositQuote(pool=p, amount_token0=a0, amount_token1=a1)
     return c.quote_basic_deposit(p, **_one_side(a0, a1, 'existing basic pool deposit'))
+def _position_dict(p):
+    """Compact dict for CLI output: asdict + overrides for the pool and amount fields."""
+    t0, t1 = p.pool.token0, p.pool.token1
+    return {**asdict(p),
+            'pool': {'symbol': p.pool.symbol, 'lp': p.pool.lp, 'is_cl': p.pool.is_cl},
+            'amount_token0': t0.to_float(p.amount_token0), 'amount_token1': t1.to_float(p.amount_token1),
+            'staked_token0': t0.to_float(p.staked_token0), 'staked_token1': t1.to_float(p.staked_token1),
+            'unstaked_earned0': t0.to_float(p.unstaked_earned0), 'unstaked_earned1': t1.to_float(p.unstaked_earned1)}
+
+def _find_position(c, *, pool=None, token_id=None):
+    """Find a wallet position. Identify by --token-id (CL) or --pool (basic; uses id=0)."""
+    pool = _addr(pool)
+    if pool is None and token_id is None:
+        raise SystemExit('withdraw requires --pool (basic) or --token-id (CL)')
+    tid = int(token_id) if token_id is not None else 0
+    match = next((p for p in c.get_positions() if p.id == tid and (pool is None or p.pool.lp.lower() == pool.lower())), None)
+    if match is None: raise SystemExit('position not found')
+    return match
 
 # %% ../src/cli.ipynb 4
 class CLI:
@@ -77,13 +97,11 @@ class CLI:
         # preview a basic deposit
         python -m sugar deposit --chain=10 --pool=0xd25711... --amount0=0.0001 --amount1=1
 
-        # broadcast a CL deposit, range by prices
-        python -m sugar deposit --chain=10 --pool=0x478946... --amount1=0.01 \
-            --price-lower=2900 --price-upper=3200 --broadcast
+        # list wallet positions
+        python -m sugar positions --chain=10
 
-        # create a new stable basic pool
-        python -m sugar deposit --chain=8453 --token0=0xT0 --token1=0xT1 --pool-type=stable \
-            --amount0=100 --amount1=100 --broadcast"""
+        # withdraw 50% of a basic position
+        python -m sugar withdraw --chain=10 --pool=0xd25711... --fraction=0.5 --broadcast"""
 
     def deposit(self, *, chain: int, pool: str = None,
                 token0: str = None, token1: str = None, pool_type: str = None, tick_spacing=None,
@@ -100,6 +118,24 @@ class CLI:
                              tick_lower=tick_lower, tick_upper=tick_upper,
                              initial_price=initial_price)
             r = c.deposit(q, delay_in_minutes=deadline_minutes, slippage=slippage, dry_run=not broadcast)
+            if not broadcast: return r
+            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+
+    def positions(self, *, chain: int, owner: str = None):
+        """List positions for `--owner` (defaults to the SUGAR_PK wallet)."""
+        with get_chain(str(chain), threading_max_workers=1) as c:
+            return [_position_dict(p) for p in c.get_positions(_addr(owner))]
+
+    def withdraw(self, *, chain: int, pool: str = None, token_id: int = None,
+                 fraction: float = 1.0, burn: bool = False, collect: bool = True,
+                 unwrap_native: bool = False, slippage: float = 0.01,
+                 deadline_minutes: float = 30, broadcast: bool = False):
+        """Withdraw a position. Identify by --pool (basic) or --token-id (CL). Default --fraction=1.0."""
+        with get_chain(str(chain), threading_max_workers=1) as c:
+            p = _find_position(c, pool=pool, token_id=token_id)
+            w = Withdrawal.from_position(p, fraction=float(fraction), burn=burn)
+            r = c.withdraw(w, delay_in_minutes=deadline_minutes, slippage=slippage,
+                           collect=collect, unwrap_native=unwrap_native, dry_run=not broadcast)
             if not broadcast: return r
             return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
 

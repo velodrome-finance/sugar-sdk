@@ -87,6 +87,15 @@ python -m sugar deposit --chain=10 --pool=0xd25711... --amount0=0.0001 --amount1
 
 # same call with --broadcast — returns the receipt
 python -m sugar deposit --chain=10 --pool=0xd25711... --amount0=0.0001 --amount1=1 --broadcast
+
+# list wallet positions
+python -m sugar positions --chain=10
+
+# withdraw 50% of a basic position
+python -m sugar withdraw --chain=10 --pool=0xd25711... --fraction=0.5 --broadcast
+
+# withdraw + burn a CL position (token id)
+python -m sugar withdraw --chain=10 --token-id=12345 --burn --broadcast
 ```
 
 Wallet signer is read from `SUGAR_PK`; RPC from `SUGAR_RPC_URI_<chain_id>` (same env contract as the Python SDK). `--chain` takes a numeric chain id.
