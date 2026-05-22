@@ -94,13 +94,29 @@ python -m sugar positions --chain=10
 # withdraw 50% of a basic position
 python -m sugar withdraw --chain=10 --pool=0xd25711... --fraction=0.5 --broadcast
 
-# withdraw + burn a CL position (token id)
-python -m sugar withdraw --chain=10 --token-id=12345 --burn --broadcast
+# withdraw + burn a CL position (by id)
+python -m sugar withdraw --chain=10 --position=12345 --burn --broadcast
+
+# stake an unstaked basic position into its gauge
+python -m sugar stake --chain=10 --pool=0xd25711... --broadcast
+
+# unstake a CL position (full)
+python -m sugar unstake --chain=10 --position=12345 --broadcast
+
+# claim gauge emissions
+python -m sugar claim_emissions --chain=10 --position=12345 --broadcast
+
+# claim LP fees, unwrap WETH leg to native ETH
+python -m sugar claim_fees --chain=10 --position=12345 --unwrap-native --broadcast
 ```
+
+**Position identification.** `--pool=ADDR` for basic positions (one per wallet per pool, `id=0`); `--position=NFT_ID` for CL positions (each CL position is an NFPM-minted NFT with a unique id). The two can be combined to narrow a CL lookup within a specific pool.
+
+**Output shapes.** Dry-run returns a list of unsigned tx dicts (`{from, to, data, value}` per tx — approvals first, then the main call). Broadcast returns a focused receipt dict (`{tx, status, gas, block}`).
 
 Wallet signer is read from `SUGAR_PK`; RPC from `SUGAR_RPC_URI_<chain_id>` (same env contract as the Python SDK). `--chain` takes a numeric chain id.
 
-Adding new subcommands is just adding methods to the `CLI` class in `sugar/cli.py` — Fire derives the flag layout from the function signature. The `_resolve_pool` and `_build_quote` helpers in the same file are reusable across actions.
+Adding new subcommands is just adding methods to the `CLI` class in `sugar/cli.py` — Fire derives the flag layout from the function signature. The `_resolve_pool`, `_find_position`, `_build_quote`, `_chain`, and `_result` helpers in the same file are reusable across actions.
 
 ## Pools
 
