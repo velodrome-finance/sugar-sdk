@@ -139,6 +139,40 @@ class CLI:
             if not broadcast: return r
             return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
 
+    def stake(self, *, chain: int, pool: str = None, token_id: int = None, broadcast: bool = False):
+        """Stake an unstaked position into the pool's gauge."""
+        with get_chain(str(chain), threading_max_workers=1) as c:
+            p = _find_position(c, pool=pool, token_id=token_id)
+            r = c.stake(p, dry_run=not broadcast)
+            if not broadcast: return r
+            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+
+    def unstake(self, *, chain: int, pool: str = None, token_id: int = None,
+                amount: int = None, broadcast: bool = False):
+        """Unstake from the pool's gauge. CL: full only. Basic: pass --amount for partial."""
+        with get_chain(str(chain), threading_max_workers=1) as c:
+            p = _find_position(c, pool=pool, token_id=token_id)
+            r = c.unstake(p, amount=amount, dry_run=not broadcast)
+            if not broadcast: return r
+            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+
+    def claim_emissions(self, *, chain: int, pool: str = None, token_id: int = None, broadcast: bool = False):
+        """Claim gauge emissions for a staked position."""
+        with get_chain(str(chain), threading_max_workers=1) as c:
+            p = _find_position(c, pool=pool, token_id=token_id)
+            r = c.claim_emissions(p, dry_run=not broadcast)
+            if not broadcast: return r
+            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+
+    def claim_fees(self, *, chain: int, pool: str = None, token_id: int = None,
+                   burn: bool = False, unwrap_native: bool = False, broadcast: bool = False):
+        """Claim LP fees. CL: NFPM multicall (collect + optional unwrap/burn). Basic: pool.claimFees()."""
+        with get_chain(str(chain), threading_max_workers=1) as c:
+            p = _find_position(c, pool=pool, token_id=token_id)
+            r = c.claim_fees(p, burn=burn, unwrap_native=unwrap_native, dry_run=not broadcast)
+            if not broadcast: return r
+            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+
 # %% ../src/cli.ipynb 5
 def main():
     from dotenv import load_dotenv
