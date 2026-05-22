@@ -18,7 +18,8 @@ def _addr(v):
 
 def _new_pool_spec(c, token0, token1, pool_type, tick_spacing):
     t0, t1 = c.get_token(token0), c.get_token(token1)
-    if t0 is None or t1 is None: raise SystemExit('token0 or token1 not known to Sugar')
+    if t0 is None: raise SystemExit(f'token0 not found: {token0}')
+    if t1 is None: raise SystemExit(f'token1 not found: {token1}')
     pool_type = str(pool_type).lower()
     if pool_type == 'cl':
         if tick_spacing is None: raise SystemExit('--pool-type cl requires --tick-spacing N')
@@ -29,8 +30,8 @@ def _new_pool_spec(c, token0, token1, pool_type, tick_spacing):
     raise SystemExit(f'invalid --pool-type: {pool_type} (expected cl/stable/volatile)')
 
 def _resolve_pool(c, *, pool=None, token0=None, token1=None, pool_type=None, tick_spacing=None):
-    """--pool ADDR (existing) XOR (--token0 --token1 --pool-type [--tick-spacing]) (new)."""
-    pool, token0, token1 = _addr(pool), _addr(token0), _addr(token1)
+    """--pool ADDR (existing) XOR (--token0 --token1 --pool-type [--tick-spacing]) (new). token0/token1 accept address or symbol."""
+    pool = _addr(pool)
     if pool is not None:
         if any(x is not None for x in (token0, token1, pool_type, tick_spacing)):
             raise SystemExit('--pool cannot be combined with --token0/--token1/--pool-type/--tick-spacing')
@@ -165,6 +166,21 @@ class CLI:
         with get_chain(str(chain), signer_address=_addr(wallet)) as c:
             return c.claim_fees(_find_position(c, pool=pool, position=position),
                                 burn=burn, unwrap_native=unwrap_native)
+
+    def swap(self, *, chain: int, wallet: str, from_token: str, to_token: str, amount,
+             slippage: float = None, use_decimals: bool = False):
+        """Swap `from_token` → `to_token` for `amount`. Returns `[approve_tx, swap_tx]` (approval omitted for native or sufficient allowance).
+
+        --from-token / --to-token accept either a 0x address or a symbol (e.g. ETH, LSK).
+        --amount defaults to raw wei; pass --use-decimals to interpret as token units."""
+        with get_chain(str(chain), signer_address=_addr(wallet)) as c:
+            ft, tt = c.get_token(from_token), c.get_token(to_token)
+            if ft is None: raise SystemExit(f'from-token not found: {from_token}')
+            if tt is None: raise SystemExit(f'to-token not found: {to_token}')
+            amt = ft.parse_units(float(amount)) if use_decimals else int(amount)
+            q = c.get_quote(from_token=ft, to_token=tt, amount=amt)
+            if q is None: raise SystemExit(f'no quote found for {ft.symbol} -> {tt.symbol}')
+            return c.swap_from_quote(q, slippage=slippage)
 
 def main():
     load_dotenv()
