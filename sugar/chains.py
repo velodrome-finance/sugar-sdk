@@ -6,7 +6,7 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
            'get_simnet_chain', 'get_async_simnet_chain', 'get_chain_from_token', 'get_async_chain_from_token',
            'get_simnet_chain_from_token', 'get_async_simnet_chain_from_token']
 
-import os, asyncio
+import asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps, lru_cache
 from async_lru import alru_cache
@@ -18,8 +18,8 @@ from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings, make_lisk_chain_settings
 from .config import XCHAIN_GAS_LIMIT_UPPERBOUND
-from .helpers import normalize_address, MAX_UINT256, MAX_UINT128, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
-from .helpers import find_all_paths, time_it, atime_it, to_bytes32, price_to_tick, nearest_tick, sqrt_ratio_x96_from_price
+from .helpers import normalize_address, MAX_UINT128, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
+from .helpers import find_all_paths, to_bytes32, price_to_tick, nearest_tick, sqrt_ratio_x96_from_price
 from .abi import get_abi
 from .token import Token
 from .pool import LiquidityPool, LiquidityPoolForSwap, LiquidityPoolEpoch
@@ -381,8 +381,6 @@ class AsyncChain(CommonChain):
             tokens = await self.get_all_tokens()
             return self.prepare_pools(pools, tokens, await self.get_prices(tokens))
         else: return self.prepare_pools_for_swap(pools)
-    
-        return self.prepare_pools([p], tokens, await self.get_prices(tokens))[0]
 
     @require_async_context
     @alru_cache(maxsize=None)

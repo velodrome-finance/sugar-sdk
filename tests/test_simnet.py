@@ -98,8 +98,8 @@ def test_superswap_sync():
                 continue
             assert relayer.get_call_count() == 1
             last_call = relayer.get_last_call()
-            assert type(last_call["salt"]) == str
-            assert type(last_call["origin_domain"]) == int
+            assert isinstance(last_call["salt"], str)
+            assert isinstance(last_call["origin_domain"], int)
 
 
 async def _async_superswap_runner():
@@ -115,8 +115,8 @@ async def _async_superswap_runner():
                 continue
             assert relayer.get_call_count() == 1
             last_call = relayer.get_last_call()
-            assert type(last_call["salt"]) == str
-            assert type(last_call["origin_domain"]) == int
+            assert isinstance(last_call["salt"], str)
+            assert isinstance(last_call["origin_domain"], int)
 
 
 def test_superswap_async():
