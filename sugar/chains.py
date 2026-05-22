@@ -1183,7 +1183,7 @@ class Chain(CommonChain):
             main = self.sign_and_send_tx(nfpm.functions.multicall(calls), dry_run=dry_run)
         return [main] if dry_run else main
     @require_context
-    def stake(self, position: Position):
+    def stake(self, position: Position, dry_run: bool = False):
         """Stake `position`'s unstaked liquidity into the pool's gauge.
 
         CL: approves the NFT to the gauge and calls `gauge.deposit(tokenId)`.
@@ -1197,16 +1197,18 @@ class Chain(CommonChain):
         if pool.is_cl:
             if position.staked > 0: raise ValueError(f"CL position #{position.id} is already staked")
             if position.liquidity == 0: raise ValueError(f"CL position #{position.id} has no liquidity to stake")
-            nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
-            self.sign_and_send_tx(nfpm.functions.approve(gauge_addr, position.id))
-            return self.sign_and_send_tx(gauge.functions.deposit(position.id))
-        if position.liquidity == 0: raise ValueError(f"no LP to stake for {pool.symbol}")
-        lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("erc20"))
-        self.sign_and_send_tx(lp.functions.approve(gauge_addr, position.liquidity))
-        return self.sign_and_send_tx(gauge.functions.deposit(position.liquidity))
+            nfpm = self._nfpm(pool)
+            approval_tx = self.sign_and_send_tx(nfpm.functions.approve(gauge_addr, position.id), dry_run=dry_run)
+            main = self.sign_and_send_tx(gauge.functions.deposit(position.id), dry_run=dry_run)
+        else:
+            if position.liquidity == 0: raise ValueError(f"no LP to stake for {pool.symbol}")
+            lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("erc20"))
+            approval_tx = self.sign_and_send_tx(lp.functions.approve(gauge_addr, position.liquidity), dry_run=dry_run)
+            main = self.sign_and_send_tx(gauge.functions.deposit(position.liquidity), dry_run=dry_run)
+        return [approval_tx, main] if dry_run else main
 
     @require_context
-    def unstake(self, position: Position, *, amount: Optional[int] = None):
+    def unstake(self, position: Position, *, amount: Optional[int] = None, dry_run: bool = False):
         """Withdraw from the pool's gauge.
 
         CL: `gauge.withdraw(tokenId)` returns the NFT to the wallet; `amount` is ignored.
@@ -1217,14 +1219,17 @@ class Chain(CommonChain):
         gauge = self.web3.eth.contract(address=normalize_address(pool.gauge), abi=get_abi("gauge_basic" if not pool.is_cl else "gauge_cl"))
         if pool.is_cl:
             if position.staked == 0: raise ValueError(f"CL position #{position.id} is not staked")
-            return self.sign_and_send_tx(gauge.functions.withdraw(position.id))
-        amount = position.staked if amount is None else amount
-        if amount <= 0: raise ValueError("no staked LP to withdraw")
-        if amount > position.staked: raise ValueError(f"unstake amount {amount} > staked {position.staked}")
-        return self.sign_and_send_tx(gauge.functions.withdraw(amount))
+            tx = gauge.functions.withdraw(position.id)
+        else:
+            amount = position.staked if amount is None else amount
+            if amount <= 0: raise ValueError("no staked LP to withdraw")
+            if amount > position.staked: raise ValueError(f"unstake amount {amount} > staked {position.staked}")
+            tx = gauge.functions.withdraw(amount)
+        r = self.sign_and_send_tx(tx, dry_run=dry_run)
+        return [r] if dry_run else r
 
     @require_context
-    def claim_emissions(self, position: Position):
+    def claim_emissions(self, position: Position, dry_run: bool = False):
         """Claim gauge emissions for the position.
 
         CL: `gauge.getReward(tokenId)`. Basic: `gauge.getReward(wallet)`."""
@@ -1232,14 +1237,13 @@ class Chain(CommonChain):
         pool = position.pool
         if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
         gauge_addr = normalize_address(pool.gauge)
-        if pool.is_cl:
-            gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_cl"))
-            return self.sign_and_send_tx(gauge.functions.getReward(position.id))
-        gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_basic"))
-        return self.sign_and_send_tx(gauge.functions.getReward(self.account.address))
+        gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_cl" if pool.is_cl else "gauge_basic"))
+        tx = gauge.functions.getReward(position.id if pool.is_cl else self.account.address)
+        r = self.sign_and_send_tx(tx, dry_run=dry_run)
+        return [r] if dry_run else r
 
     @require_context
-    def claim_fees(self, position: Position, *, burn: bool = False, unwrap_native: bool = False):
+    def claim_fees(self, position: Position, *, burn: bool = False, unwrap_native: bool = False, dry_run: bool = False):
         """Claim accrued LP fees.
 
         CL: NFPM multicall (collect → optional unwrap_native → optional burn).
@@ -1252,9 +1256,12 @@ class Chain(CommonChain):
                 raise ValueError("burn requires liquidity == 0; drain via withdraw first")
             nfpm = self._nfpm(pool)
             calls = self._build_nfpm_cleanup_calls(nfpm, pool, position.id, unwrap_native=unwrap_native, burn=burn)
-            return self.sign_and_send_tx(nfpm.functions.multicall(calls))
-        pool_contract = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("pool_basic"))
-        return self.sign_and_send_tx(pool_contract.functions.claimFees())
+            tx = nfpm.functions.multicall(calls)
+        else:
+            pool_contract = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("pool_basic"))
+            tx = pool_contract.functions.claimFees()
+        r = self.sign_and_send_tx(tx, dry_run=dry_run)
+        return [r] if dry_run else r
 
 # %% ../src/chains.ipynb 12
 _op_settings = make_op_chain_settings()
