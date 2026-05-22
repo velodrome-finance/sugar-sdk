@@ -72,6 +72,8 @@ with OPChain() as chain:
 
 The SDK ships a `sugar` CLI (backed by [python-fire](https://github.com/google/python-fire)) for shell-side use. After install the `sugar` binary is on `PATH`; `python -m sugar` works equivalently.
 
+**The CLI never signs.** Every subcommand returns unsigned transactions as JSON on stdout. You sign and broadcast them externally — via your wallet, `cast send`, KMS, or whatever fits your setup. `--wallet=0xADDRESS` supplies the `from` field; private keys are refused.
+
 Discover via `--help`:
 
 ``` bash
@@ -79,44 +81,70 @@ python -m sugar --help              # list subcommands
 python -m sugar deposit --help      # see flags for one
 ```
 
-**Dry-run is the default.** Every action returns the unsigned transaction(s) without broadcasting. Pass `--broadcast` to sign and send.
-
 ``` bash
-# preview (dry-run) — returns the unsigned tx(s)
-python -m sugar deposit --chain=10 --pool=0xd25711... --amount0=0.0001 --amount1=1
+# preview a basic deposit — amounts in raw wei (default); returns unsigned tx(s) as JSON
+python -m sugar deposit --chain=1135 --wallet=0xYou --pool=0xd25711... --amount0=100000000000000 --amount1=1000000000000000000
 
-# same call with --broadcast — returns the receipt
-python -m sugar deposit --chain=10 --pool=0xd25711... --amount0=0.0001 --amount1=1 --broadcast
+# same deposit using token decimals — opt in with --use-decimals
+python -m sugar deposit --chain=1135 --wallet=0xYou --pool=0xd25711... --amount0=0.0001 --amount1=1 --use-decimals
 
 # list wallet positions
-python -m sugar positions --chain=10
+python -m sugar positions --chain=1135 --wallet=0xYou
 
 # withdraw 50% of a basic position
-python -m sugar withdraw --chain=10 --pool=0xd25711... --fraction=0.5 --broadcast
+python -m sugar withdraw --chain=1135 --wallet=0xYou --pool=0xd25711... --fraction=0.5
 
 # withdraw + burn a CL position (by id)
-python -m sugar withdraw --chain=10 --position=12345 --burn --broadcast
+python -m sugar withdraw --chain=1135 --wallet=0xYou --position=12345 --burn
 
 # stake an unstaked basic position into its gauge
-python -m sugar stake --chain=10 --pool=0xd25711... --broadcast
+python -m sugar stake --chain=1135 --wallet=0xYou --pool=0xd25711...
 
 # unstake a CL position (full)
-python -m sugar unstake --chain=10 --position=12345 --broadcast
+python -m sugar unstake --chain=1135 --wallet=0xYou --position=12345
 
 # claim gauge emissions
-python -m sugar claim_emissions --chain=10 --position=12345 --broadcast
+python -m sugar claim_emissions --chain=1135 --wallet=0xYou --position=12345
 
 # claim LP fees, unwrap WETH leg to native ETH
-python -m sugar claim_fees --chain=10 --position=12345 --unwrap-native --broadcast
+python -m sugar claim_fees --chain=1135 --wallet=0xYou --position=12345 --unwrap-native
 ```
 
-**Position identification.** `--pool=ADDR` for basic positions (one per wallet per pool, `id=0`); `--position=NFT_ID` for CL positions (each CL position is an NFPM-minted NFT with a unique id). The two can be combined to narrow a CL lookup within a specific pool.
+**Position identification.** `--pool=ADDR` for basic positions (one per wallet per pool, `id=0`); `--position=NFT_ID` for CL positions (each CL position is an NFPM-minted NFT). The two can be combined to narrow a CL lookup within a specific pool.
 
-**Output shapes.** Dry-run returns a list of unsigned tx dicts (`{from, to, data, value}` per tx — approvals first, then the main call). Broadcast returns a focused receipt dict (`{tx, status, gas, block}`).
+**Amounts.** All amount inputs (`--amount0`, `--amount1`) default to raw wei — the same shape as CLI output, so chaining `sugar X | jq | sugar Y` works without scaling pitfalls. Pass `--use-decimals` to interpret amounts as token units (`--amount0=0.5 --use-decimals` ≈ `0.5 * 10^token.decimals` wei).
 
-Wallet signer is read from `SUGAR_PK`; RPC from `SUGAR_RPC_URI_<chain_id>` (same env contract as the Python SDK). `--chain` takes a numeric chain id.
+**Output shape.** Always a JSON array of unsigned tx dicts (`{from, to, data, value}` per tx — approvals first, then the main call). Pipe to `jq` for filtering/projection or to your signer for broadcasting. Raw wei everywhere; `pool.token0/1` carries `{symbol, decimals}` for human formatting at the consumer side.
 
-Adding new subcommands is just adding methods to the `CLI` class in `sugar/cli.py` — Fire derives the flag layout from the function signature. The `_resolve_pool`, `_find_position`, `_build_quote`, `_chain`, and `_result` helpers in the same file are reusable across actions.
+**Chaining.** Pipe sugar output into sugar input, or into your signer:
+
+``` bash
+# pipe through a signer for atomic preview→sign→broadcast
+python -m sugar deposit --chain=1135 --wallet=0xYou --pool=0x... --amount1=1000000000000000 \
+  | my_signer
+
+# extract a value from one sugar call, feed into another (wei flows through unchanged)
+sugar positions --chain=1135 --wallet=0xYou \
+  | jq -r '.[] | select(.id == 6759) | .liquidity'
+```
+
+**Broadcasting.** Sugar never broadcasts. Use whatever signer + RPC you already have. Examples:
+
+``` bash
+# Foundry: sign with a local key and broadcast in one step
+cast send --rpc-url $SUGAR_RPC_URI_1135 --private-key $YOUR_KEY \
+  --from $(jq -r '.[0].from')  $(jq -r '.[0].to') \
+  $(jq -r '.[0].data') --value $(jq -r '.[0].value')
+
+# Or sign-only then publish the raw tx
+cast publish --rpc-url $SUGAR_RPC_URI_1135 0xSIGNED_RAW_TX
+```
+
+For frontend integrations, hand the unsigned dicts to your wallet provider (MetaMask `eth_sendTransaction`, viem `writeContract`, ethers `sendTransaction`).
+
+RPC config from `SUGAR_RPC_URI_<chain_id>` (same env contract as the Python SDK). `--chain` takes a numeric chain id.
+
+Adding new subcommands is just adding methods to the `CLI` class in `sugar/cli.py` — Fire derives the flag layout from the function signature. The `_resolve_pool`, `_find_position`, `_build_quote`, `_chain`, `_wallet` helpers in the same file are reusable across actions.
 
 ## Pools
 
