@@ -16,7 +16,7 @@ from functools import wraps, lru_cache
 from async_lru import alru_cache
 from cachetools import cached, TTLCache
 from typing import List, TypeVar, Callable, Optional, Tuple, Dict
-from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider, Account
+from web3 import Web3, HTTPProvider, AsyncWeb3, AsyncHTTPProvider
 from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
@@ -63,9 +63,6 @@ def require_async_context(f: Callable[..., T]) -> Callable[..., T]:
 
 class CommonChain:
     @property
-    def account(self) -> Account: return self.web3.eth.account.from_key(os.getenv("SUGAR_PK"))
-
-    @property
     def chain_id(self) -> str: return self.settings.chain_id
 
     @property
@@ -76,12 +73,40 @@ class CommonChain:
 
     def __init__(self, settings: ChainSettings, **kwargs):
         self.settings, self._in_context = settings, False
+        sa = kwargs.get("signer_address")
+        self.signer_address: str = normalize_address(sa) if sa else ""
 
         if "pools" in kwargs: self.pools = kwargs["pools"]
         if "pools_for_swap" in kwargs: self.pools_for_swap = kwargs["pools_for_swap"] 
     
     def prepare_set_token_allowance_contract(self, token: Token, contract_wrapper):
         return contract_wrapper(address=token.wrapped_token_address or token.token_address, abi=get_abi("erc20"))
+
+    @require_context
+    def build_tx(self, tx, value: int = 0):
+        """Return an unsigned tx dict (`{from, to, data, value}`). SDK never signs or broadcasts."""
+        if not self.signer_address: raise ValueError("build_tx requires signer_address (pass to Chain constructor)")
+        return {"from": self.signer_address, "to": tx.address, "data": tx._encode_transaction_data(), "value": value}
+
+    @require_context
+    def _nfpm(self, pool):
+        """Return the NFPM contract for `pool`, raising if the pool has no NFPM address."""
+        if not pool.nfpm or pool.nfpm == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no NFPM address")
+        return self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
+
+    def _build_nfpm_cleanup_calls(self, nfpm, pool, position_id, *, unwrap_native: bool, burn: bool):
+        """NFPM multicall payload: collect → optional (unwrapWETH9 + sweepToken) → optional burn."""
+        native = self.settings.wrapped_native_token_addr
+        if unwrap_native and pool.token0.token_address != native and pool.token1.token_address != native:
+            raise ValueError("unwrap_native: pool has no native leg")
+        recipient = ADDRESS_ZERO if unwrap_native else self.signer_address
+        calls = [nfpm.encode_abi("collect", args=[(position_id, recipient, MAX_UINT128, MAX_UINT128)])]
+        if unwrap_native:
+            other = pool.token1.token_address if pool.token0.token_address == native else pool.token0.token_address
+            calls.append(nfpm.encode_abi("unwrapWETH9", args=[0, self.signer_address]))
+            calls.append(nfpm.encode_abi("sweepToken", args=[other, 0, self.signer_address]))
+        if burn: calls.append(nfpm.encode_abi("burn", args=[position_id]))
+        return calls
     
     def prepare_tokens(self, tokens: List[Tuple], listed_only: bool) -> List[Token]:
         native = Token.make_native_token(self.settings.native_token_symbol,
@@ -246,7 +271,7 @@ class AsyncChain(CommonChain):
         # TODO: remove destination_domain when get domain API stabilizes and use destination_token instead
         c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=get_abi("bridge_transfer_remote"))
         await self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount)
-        return await self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount), value=await self.get_bridge_fee(domain))
+        return await self.build_tx(c.functions.transferRemote(domain, to_bytes32(self.signer_address), amount), value=await self.get_bridge_fee(domain))
     
     @require_async_context
     async def get_xchain_fee(self, destination_domain: int) -> int:
@@ -283,7 +308,7 @@ class AsyncChain(CommonChain):
         return await contract.functions.getRemoteInterchainAccount(
             destination_domain,
             self.settings.swapper_contract_addr,
-            to_bytes32(self.account.address),
+            to_bytes32(self.signer_address),
         ).call()
 
     @require_async_context
@@ -318,7 +343,7 @@ class AsyncChain(CommonChain):
     @require_async_context
     async def get_token_balance(self, token: Token, owner_address: Optional[str] = None) -> int:
         # TODO: consider moving to native token wording just like velo app does
-        owner_address = owner_address or self.account.address
+        owner_address = owner_address or self.signer_address
         if not owner_address: raise ValueError("Owner address is required to get token balance")
         if token.wrapped_token_address: return await self.web3.eth.get_balance(owner_address)
         return await self.balance_of(token_address=token.token_address, owner_address=owner_address)
@@ -394,28 +419,40 @@ class AsyncChain(CommonChain):
     @require_async_context
     async def swap_from_quote(self, quote: Quote, slippage: Optional[float] = None):
         swapper_contract_addr, from_token = self.settings.swapper_contract_addr, quote.from_token
-        planner = setup_planner(quote=quote, slippage=slippage if slippage is not None else self.settings.swap_slippage, account=self.account.address, router_address=swapper_contract_addr)
+        planner = setup_planner(quote=quote, slippage=slippage if slippage is not None else self.settings.swap_slippage, account=self.signer_address, router_address=swapper_contract_addr)
         await self.set_token_allowance(from_token, swapper_contract_addr, quote.input.amount_in)
         value = quote.input.amount_in if from_token.wrapped_token_address else 0
-        return await self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
+        return await self.build_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
+
+    @require_async_context
+    async def _approve_if_needed(self, erc20, spender: str, amount: int):
+        """Approve `spender` for `amount` on `erc20` if current allowance < amount. Returns None when already sufficient."""
+        if (await erc20.functions.allowance(self.signer_address, spender).call()) >= amount: return None
+        return self.build_tx(erc20.functions.approve(spender, amount))
+
+    @require_async_context
+    async def _collect_approvals(self, pool, target_addr, a0, a1):
+        """Set ERC20 allowances for non-native legs of `pool` to `target_addr`. Returns (txs, is_native0, is_native1)."""
+        native = self.settings.wrapped_native_token_addr
+        is_native0 = pool.token0.token_address == native
+        is_native1 = pool.token1.token_address == native
+        txs = []
+        if not is_native0:
+            tx = await self.set_token_allowance(pool.token0, target_addr, a0)
+            if tx is not None: txs.append(tx)
+        if not is_native1:
+            tx = await self.set_token_allowance(pool.token1, target_addr, a1)
+            if tx is not None: txs.append(tx)
+        return txs, is_native0, is_native1
 
     @require_async_context
     async def set_token_allowance(self, token: Token, addr: str, amount: int):
-        token_contract = self.prepare_set_token_allowance_contract(token, self.web3.eth.contract)
-        return await self.sign_and_send_tx(token_contract.functions.approve(addr, amount))
+        return await self._approve_if_needed(self.prepare_set_token_allowance_contract(token, self.web3.eth.contract), addr, amount)
 
     @require_async_context
     async def check_token_allowance(self, token: Token, addr: str) -> int:
         token_contract = self.web3.eth.contract(address=token.wrapped_token_address or token.token_address, abi=get_abi("erc20"))
-        return await token_contract.functions.allowance(self.account.address, addr).call()
-
-    @require_async_context
-    async def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True):
-        spender = self.account.address
-        tx = await tx.build_transaction({ 'from': spender, 'value': value, 'nonce': await self.web3.eth.get_transaction_count(spender, "pending") })
-        signed_tx = self.account.sign_transaction(tx)
-        tx_hash = await self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
-        return await self.web3.eth.wait_for_transaction_receipt(tx_hash) if wait else tx_hash
+        return await token_contract.functions.allowance(self.signer_address, addr).call()
 
     @require_async_context
     async def pool_spec(self, token0: Token, token1: Token, *,
@@ -514,56 +551,46 @@ class AsyncChain(CommonChain):
         # if token 0 is native, use addLiquidityETH instead of standard addLiquidity
         if pool.token0.token_address == self.settings.wrapped_native_token_addr:
             params = [pool.token1.token_address, pool.is_stable, a1, apply_slippage(a1, slippage),
-                      apply_slippage(a0, slippage), self.account.address, get_future_timestamp(delay_in_minutes)]
-            return await self.sign_and_send_tx(self.router.functions.addLiquidityETH(*params), value=a0)
+                      apply_slippage(a0, slippage), self.signer_address, get_future_timestamp(delay_in_minutes)]
+            return await self.build_tx(self.router.functions.addLiquidityETH(*params), value=a0)
 
         # token 1 is native, use addLiquidityETH instead of standard addLiquidity
         if pool.token1.token_address == self.settings.wrapped_native_token_addr:
             params = [pool.token0.token_address, pool.is_stable, a0, apply_slippage(a0, slippage),
-                      apply_slippage(a1, slippage), self.account.address, get_future_timestamp(delay_in_minutes)]
-            return await self.sign_and_send_tx(self.router.functions.addLiquidityETH(*params), value=a1)
+                      apply_slippage(a1, slippage), self.signer_address, get_future_timestamp(delay_in_minutes)]
+            return await self.build_tx(self.router.functions.addLiquidityETH(*params), value=a1)
 
         params = [pool.token0.token_address, pool.token1.token_address, pool.is_stable, a0, a1,
                   apply_slippage(a0, slippage), apply_slippage(a1, slippage),
-                  self.account.address, get_future_timestamp(delay_in_minutes)]
-        return await self.sign_and_send_tx(self.router.functions.addLiquidity(*params))
+                  self.signer_address, get_future_timestamp(delay_in_minutes)]
+        return await self.build_tx(self.router.functions.addLiquidity(*params))
 
     @require_async_context
     async def _deposit_concentrated(self, quote: DepositQuote, delay_in_minutes: float, slippage: float):
         pool = quote.pool
-        if not pool.nfpm or pool.nfpm == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no NFPM address")
-        # NFPM mint expects canonical token ordering; Sugar already returns them sorted but defend anyway.
-        assert pool.token0.token_address.lower() < pool.token1.token_address.lower(), "tokens must be sorted token0 < token1"
-        nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
+        nfpm = self._nfpm(pool)
         a0, a1 = quote.amount_token0, quote.amount_token1
-        native = self.settings.wrapped_native_token_addr
-        is_native0, is_native1 = pool.token0.token_address == native, pool.token1.token_address == native
+        txs, is_native0, is_native1 = await self._collect_approvals(pool, nfpm.address, a0, a1)
 
-        # approve non-native legs only — NFPM wraps native via msg.value
-        if not is_native0:
-            await self.set_token_allowance(pool.token0, nfpm.address, a0)
-        if not is_native1:
-            await self.set_token_allowance(pool.token1, nfpm.address, a1)
-
-        # `sqrt_price_x96` is used by NFPM only when the pool is uninitialized (or not yet deployed).
         params = [(
-            pool.token0.token_address, pool.token1.token_address, pool.type,  # tickSpacing
+            pool.token0.token_address, pool.token1.token_address, pool.type,
             quote.tick_lower, quote.tick_upper, a0, a1,
             apply_slippage(a0, slippage), apply_slippage(a1, slippage),
-            self.account.address, get_future_timestamp(delay_in_minutes), quote.sqrt_price_x96,
+            self.signer_address, get_future_timestamp(delay_in_minutes), quote.sqrt_price_x96,
         )]
 
         if is_native0 or is_native1:
-            # bundle mint + refundETH in a single multicall so leftover native is refunded to sender
             mint_calldata = nfpm.encode_abi("mint", args=params)
             refund_calldata = nfpm.encode_abi("refundETH", args=[])
-            return await self.sign_and_send_tx(nfpm.functions.multicall([mint_calldata, refund_calldata]), value=a0 if is_native0 else a1)
-        return await self.sign_and_send_tx(nfpm.functions.mint(*params))
+            main = self.build_tx(nfpm.functions.multicall([mint_calldata, refund_calldata]), value=a0 if is_native0 else a1)
+        else:
+            main = self.build_tx(nfpm.functions.mint(*params))
+        return [*txs, main]
     @require_async_context
     async def get_positions(self, owner: Optional[str] = None) -> List[Position]:
-        """List positions owned by `owner` (defaults to self.account.address). Uses Sugar's
+        """List positions owned by `owner` (defaults to self.signer_address). Uses Sugar's
         paginated `positions(limit, offset, account)` reader."""
-        owner = owner or self.account.address
+        owner = owner or self.signer_address
         def get_p(limit, offset): return self.sugar.functions.positions(limit, offset, owner)
         return self.prepare_positions(await self.apaginate(get_p), await self.get_pools())
 
@@ -579,54 +606,40 @@ class AsyncChain(CommonChain):
         router_addr = self.settings.router_contract_addr
         a0_min, a1_min = apply_slippage(w.amount_token0, slippage), apply_slippage(w.amount_token1, slippage)
         deadline = get_future_timestamp(delay_in_minutes)
+        native = self.settings.wrapped_native_token_addr
 
-        # LP token is an ERC20 at pool.lp; no Token wrapper available, so approve inline
         lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("erc20"))
-        await self.sign_and_send_tx(lp.functions.approve(router_addr, w.liquidity))
+        approval_tx = await self._approve_if_needed(lp, router_addr, w.liquidity)
 
-        # native handling mirrors _deposit_basic
-        if pool.token0.token_address == self.settings.wrapped_native_token_addr:
-            params = [pool.token1.token_address, pool.is_stable, w.liquidity, a1_min, a0_min, self.account.address, deadline]
-            return await self.sign_and_send_tx(self.router.functions.removeLiquidityETH(*params))
-        if pool.token1.token_address == self.settings.wrapped_native_token_addr:
-            params = [pool.token0.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.account.address, deadline]
-            return await self.sign_and_send_tx(self.router.functions.removeLiquidityETH(*params))
-        params = [pool.token0.token_address, pool.token1.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.account.address, deadline]
-        return await self.sign_and_send_tx(self.router.functions.removeLiquidity(*params))
+        if pool.token0.token_address == native or pool.token1.token_address == native:
+            is_native0 = pool.token0.token_address == native
+            other_addr = pool.token1.token_address if is_native0 else pool.token0.token_address
+            other_min, native_min = (a1_min, a0_min) if is_native0 else (a0_min, a1_min)
+            params = [other_addr, pool.is_stable, w.liquidity, other_min, native_min, self.signer_address, deadline]
+            main = self.build_tx(self.router.functions.removeLiquidityETH(*params))
+        else:
+            params = [pool.token0.token_address, pool.token1.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.signer_address, deadline]
+            main = self.build_tx(self.router.functions.removeLiquidity(*params))
+        return [t for t in (approval_tx, main) if t is not None]
 
     @require_async_context
     async def _withdraw_concentrated(self, w: Withdrawal, delay_in_minutes: float, slippage: float, collect: bool, unwrap_native: bool):
-        # NFPM authenticates via NFT ownership — no ERC20 allowance needed
         pool = w.pool
-        if not pool.nfpm or pool.nfpm == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no NFPM address")
-        nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
+        nfpm = self._nfpm(pool)
         a0_min, a1_min = apply_slippage(w.amount_token0, slippage), apply_slippage(w.amount_token1, slippage)
         deadline = get_future_timestamp(delay_in_minutes)
 
-        # bundle decreaseLiquidity + collect via multicall so principal + any accrued fees come out atomically
-        if w.burn and not collect: raise ValueError("burn requires collect=True")
-        if unwrap_native and not collect: raise ValueError("unwrap_native requires collect=True")
-        native = self.settings.wrapped_native_token_addr
-        if unwrap_native and pool.token0.token_address != native and pool.token1.token_address != native:
-            raise ValueError("unwrap_native: pool has no native leg")
-        if collect:
-            decrease_calldata = nfpm.encode_abi("decreaseLiquidity", args=[(w.position_id, w.liquidity, a0_min, a1_min, deadline)])
-            collect_recipient = ADDRESS_ZERO if unwrap_native else self.account.address
-            collect_calldata = nfpm.encode_abi("collect", args=[(w.position_id, collect_recipient, MAX_UINT128, MAX_UINT128)])
-            calls = [decrease_calldata, collect_calldata]
-            if unwrap_native:
-                other_token = pool.token1.token_address if pool.token0.token_address == native else pool.token0.token_address
-                calls.append(nfpm.encode_abi("unwrapWETH9", args=[0, self.account.address]))
-                calls.append(nfpm.encode_abi("sweepToken", args=[other_token, 0, self.account.address]))
-            if w.burn: calls.append(nfpm.encode_abi("burn", args=[w.position_id]))
-            return await self.sign_and_send_tx(nfpm.functions.multicall(calls))
-        return await self.sign_and_send_tx(nfpm.functions.decreaseLiquidity((w.position_id, w.liquidity, a0_min, a1_min, deadline)))
+        if (w.burn or unwrap_native) and not collect:
+            raise ValueError("burn / unwrap_native require collect=True")
+        decrease_args = (w.position_id, w.liquidity, a0_min, a1_min, deadline)
+        if not collect:
+            return [self.build_tx(nfpm.functions.decreaseLiquidity(decrease_args))]
+        calls = [nfpm.encode_abi("decreaseLiquidity", args=[decrease_args])] + \
+                self._build_nfpm_cleanup_calls(nfpm, pool, w.position_id, unwrap_native=unwrap_native, burn=w.burn)
+        return [self.build_tx(nfpm.functions.multicall(calls))]
     @require_async_context
     async def stake(self, position: Position):
-        """Stake `position`'s unstaked liquidity into the pool's gauge.
-
-        CL: approves the NFT to the gauge and calls `gauge.deposit(tokenId)`.
-        Basic: approves the LP token to the gauge and calls `gauge.deposit(position.liquidity)`."""
+        """Stake `position`'s unstaked liquidity into the pool's gauge."""
         if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
         pool = position.pool
         if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
@@ -636,74 +649,58 @@ class AsyncChain(CommonChain):
         if pool.is_cl:
             if position.staked > 0: raise ValueError(f"CL position #{position.id} is already staked")
             if position.liquidity == 0: raise ValueError(f"CL position #{position.id} has no liquidity to stake")
-            nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
-            await self.sign_and_send_tx(nfpm.functions.approve(gauge_addr, position.id))
-            return await self.sign_and_send_tx(gauge.functions.deposit(position.id))
-        if position.liquidity == 0: raise ValueError(f"no LP to stake for {pool.symbol}")
-        lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("erc20"))
-        await self.sign_and_send_tx(lp.functions.approve(gauge_addr, position.liquidity))
-        return await self.sign_and_send_tx(gauge.functions.deposit(position.liquidity))
+            nfpm = self._nfpm(pool)
+            approval_tx = self.build_tx(nfpm.functions.approve(gauge_addr, position.id))
+            main = self.build_tx(gauge.functions.deposit(position.id))
+        else:
+            if position.liquidity == 0: raise ValueError(f"no LP to stake for {pool.symbol}")
+            lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("erc20"))
+            approval_tx = await self._approve_if_needed(lp, gauge_addr, position.liquidity)
+            main = self.build_tx(gauge.functions.deposit(position.liquidity))
+        return [t for t in (approval_tx, main) if t is not None]
 
     @require_async_context
     async def unstake(self, position: Position, *, amount: Optional[int] = None):
-        """Withdraw from the pool's gauge.
-
-        CL: `gauge.withdraw(tokenId)` returns the NFT to the wallet; `amount` is ignored.
-        Basic: `gauge.withdraw(amount)` defaults to `position.staked` (full unstake)."""
+        """Withdraw from the pool's gauge. CL: full only; basic: pass `amount` for partial."""
         if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
         pool = position.pool
         if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
         gauge = self.web3.eth.contract(address=normalize_address(pool.gauge), abi=get_abi("gauge_basic" if not pool.is_cl else "gauge_cl"))
         if pool.is_cl:
             if position.staked == 0: raise ValueError(f"CL position #{position.id} is not staked")
-            return await self.sign_and_send_tx(gauge.functions.withdraw(position.id))
-        amount = position.staked if amount is None else amount
-        if amount <= 0: raise ValueError("no staked LP to withdraw")
-        if amount > position.staked: raise ValueError(f"unstake amount {amount} > staked {position.staked}")
-        return await self.sign_and_send_tx(gauge.functions.withdraw(amount))
+            tx = gauge.functions.withdraw(position.id)
+        else:
+            amount = position.staked if amount is None else amount
+            if amount <= 0: raise ValueError("no staked LP to withdraw")
+            if amount > position.staked: raise ValueError(f"unstake amount {amount} > staked {position.staked}")
+            tx = gauge.functions.withdraw(amount)
+        return [self.build_tx(tx)]
 
     @require_async_context
     async def claim_emissions(self, position: Position):
-        """Claim gauge emissions for the position.
-
-        CL: `gauge.getReward(tokenId)`. Basic: `gauge.getReward(wallet)`."""
+        """Claim gauge emissions for the position."""
         if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
         pool = position.pool
         if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
         gauge_addr = normalize_address(pool.gauge)
-        if pool.is_cl:
-            gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_cl"))
-            return await self.sign_and_send_tx(gauge.functions.getReward(position.id))
-        gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_basic"))
-        return await self.sign_and_send_tx(gauge.functions.getReward(self.account.address))
+        gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_cl" if pool.is_cl else "gauge_basic"))
+        tx = gauge.functions.getReward(position.id if pool.is_cl else self.signer_address)
+        return [self.build_tx(tx)]
 
     @require_async_context
     async def claim_fees(self, position: Position, *, burn: bool = False, unwrap_native: bool = False):
-        """Claim accrued LP fees.
-
-        CL: NFPM multicall (collect → optional unwrap_native → optional burn).
-        Basic: `pool.claimFees()` on the pool contract. `burn` is ignored for basic pools."""
+        """Claim accrued LP fees. CL: NFPM multicall (collect → optional unwrap/burn). Basic: `pool.claimFees()`."""
         if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
         if position.staked > 0: raise ValueError("position is staked; unstake first to claim fees")
         pool = position.pool
         if pool.is_cl:
             if burn and position.liquidity > 0:
                 raise ValueError("burn requires liquidity == 0; drain via withdraw first")
-            nfpm = self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
-            native = self.settings.wrapped_native_token_addr
-            if unwrap_native and pool.token0.token_address != native and pool.token1.token_address != native:
-                raise ValueError("unwrap_native: pool has no native leg")
-            collect_recipient = ADDRESS_ZERO if unwrap_native else self.account.address
-            collect_calldata = nfpm.encode_abi("collect", args=[(position.id, collect_recipient, MAX_UINT128, MAX_UINT128)])
-            calls = [collect_calldata]
-            if unwrap_native:
-                other_token = pool.token1.token_address if pool.token0.token_address == native else pool.token0.token_address
-                calls.append(nfpm.encode_abi("unwrapWETH9", args=[0, self.account.address]))
-                calls.append(nfpm.encode_abi("sweepToken", args=[other_token, 0, self.account.address]))
-            if burn: calls.append(nfpm.encode_abi("burn", args=[position.id]))
-            return await self.sign_and_send_tx(nfpm.functions.multicall(calls))
+            nfpm = self._nfpm(pool)
+            calls = self._build_nfpm_cleanup_calls(nfpm, pool, position.id, unwrap_native=unwrap_native, burn=burn)
+            return [self.build_tx(nfpm.functions.multicall(calls))]
         pool_contract = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("pool_basic"))
-        return await self.sign_and_send_tx(pool_contract.functions.claimFees())
+        return [self.build_tx(pool_contract.functions.claimFees())]
 
 # %% ../src/chains.ipynb 10
 class Chain(CommonChain):
@@ -774,7 +771,7 @@ class Chain(CommonChain):
         # TODO: remove destination_domain when get domain API stabilizes and use destination_token instead
         c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=get_abi("bridge_transfer_remote"))
         self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount)
-        return self.sign_and_send_tx(c.functions.transferRemote(domain, to_bytes32(self.account.address), amount), value=self.get_bridge_fee(domain))
+        return self.build_tx(c.functions.transferRemote(domain, to_bytes32(self.signer_address), amount), value=self.get_bridge_fee(domain))
 
     @require_context
     def get_xchain_fee(self, destination_domain: int) -> int:
@@ -811,7 +808,7 @@ class Chain(CommonChain):
         return contract.functions.getRemoteInterchainAccount(
             destination_domain,
             self.settings.swapper_contract_addr,
-            to_bytes32(self.account.address),
+            to_bytes32(self.signer_address),
         ).call()
 
     @require_context
@@ -822,25 +819,14 @@ class Chain(CommonChain):
         return self.balance_of(token_address=self.settings.bridge_token_addr, owner_address=user_ica)
 
     @require_context
-    def sign_and_send_tx(self, tx, value: int = 0, wait: bool = True, dry_run: bool = False):
-        spender = self.account.address
-        # Dry: skip build_transaction (its estimate_gas trips on chained state, e.g. unapplied approvals).
-        if dry_run:
-            return {"from": spender, "to": tx.address, "data": tx._encode_transaction_data(), "value": value}
-        tx = tx.build_transaction({ 'from': spender, 'value': value, 'nonce': self.web3.eth.get_transaction_count(spender, "pending") })
-        signed_tx = self.account.sign_transaction(tx)
-        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
-        return self.web3.eth.wait_for_transaction_receipt(tx_hash) if wait else tx_hash
-    
-    @require_context
-    def _approve_if_needed(self, erc20, spender: str, amount: int, *, dry_run: bool = False):
+    def _approve_if_needed(self, erc20, spender: str, amount: int):
         """Approve `spender` for `amount` on `erc20` if current allowance is below `amount`. Returns None when already sufficient."""
-        if erc20.functions.allowance(self.account.address, spender).call() >= amount: return None
-        return self.sign_and_send_tx(erc20.functions.approve(spender, amount), dry_run=dry_run)
+        if erc20.functions.allowance(self.signer_address, spender).call() >= amount: return None
+        return self.build_tx(erc20.functions.approve(spender, amount))
 
     @require_context
-    def set_token_allowance(self, token: Token, addr: str, amount: int, dry_run: bool = False):
-        return self._approve_if_needed(self.prepare_set_token_allowance_contract(token, self.web3.eth.contract), addr, amount, dry_run=dry_run)
+    def set_token_allowance(self, token: Token, addr: str, amount: int):
+        return self._approve_if_needed(self.prepare_set_token_allowance_contract(token, self.web3.eth.contract), addr, amount)
 
     @require_context
     @lru_cache(maxsize=None)
@@ -867,7 +853,7 @@ class Chain(CommonChain):
     @require_context
     def get_token_balance(self, token: Token, owner_address: Optional[str] = None) -> int:
         # TODO: consider moving to native token wording just like velo app does
-        owner_address = owner_address or self.account.address
+        owner_address = owner_address or self.signer_address
         if not owner_address: raise ValueError("Owner address is required to get token balance")
         if token.wrapped_token_address: return self.web3.eth.get_balance(owner_address)
         return self.balance_of(token_address=token.token_address, owner_address=owner_address)
@@ -898,9 +884,7 @@ class Chain(CommonChain):
             tokens = self.get_all_tokens(listed_only=False)
             return self.prepare_pools(pools, tokens, self.get_prices(tokens))
         else: return self.prepare_pools_for_swap(pools)
-    
-        return self.prepare_pools([p], tokens, self.get_prices(tokens))[0]
-    
+
     @require_context
     def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return self.get_pools(for_swaps=True)
 
@@ -968,10 +952,10 @@ class Chain(CommonChain):
     @require_context
     def swap_from_quote(self, quote: Quote, slippage: Optional[float] = None):
         swapper_contract_addr, from_token = self.settings.swapper_contract_addr, quote.from_token
-        planner = setup_planner(quote=quote, slippage=slippage if slippage is not None else self.settings.swap_slippage, account=self.account.address, router_address=swapper_contract_addr)
+        planner = setup_planner(quote=quote, slippage=slippage if slippage is not None else self.settings.swap_slippage, account=self.signer_address, router_address=swapper_contract_addr)
         self.set_token_allowance(from_token, swapper_contract_addr, quote.input.amount_in)
         value = quote.input.amount_in if from_token.wrapped_token_address else 0
-        return self.sign_and_send_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
+        return self.build_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
     @require_context
     def pool_spec(self, token0: Token, token1: Token, *,
                   tick_spacing: Optional[int] = None,
@@ -1048,28 +1032,8 @@ class Chain(CommonChain):
                             tick_lower=tl, tick_upper=tu, sqrt_price_x96=sqrt_price_x96)
 
     @require_context
-    def _nfpm(self, pool):
-        """Return the NFPM contract for `pool`, raising if the pool has no NFPM address."""
-        if not pool.nfpm or pool.nfpm == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no NFPM address")
-        return self.web3.eth.contract(address=normalize_address(pool.nfpm), abi=get_abi("nfpm"))
-
     @require_context
-    def _build_nfpm_cleanup_calls(self, nfpm, pool, position_id, *, unwrap_native: bool, burn: bool):
-        """NFPM multicall payload: collect → optional (unwrapWETH9 + sweepToken) → optional burn."""
-        native = self.settings.wrapped_native_token_addr
-        if unwrap_native and pool.token0.token_address != native and pool.token1.token_address != native:
-            raise ValueError("unwrap_native: pool has no native leg")
-        recipient = ADDRESS_ZERO if unwrap_native else self.account.address
-        calls = [nfpm.encode_abi("collect", args=[(position_id, recipient, MAX_UINT128, MAX_UINT128)])]
-        if unwrap_native:
-            other = pool.token1.token_address if pool.token0.token_address == native else pool.token0.token_address
-            calls.append(nfpm.encode_abi("unwrapWETH9", args=[0, self.account.address]))
-            calls.append(nfpm.encode_abi("sweepToken", args=[other, 0, self.account.address]))
-        if burn: calls.append(nfpm.encode_abi("burn", args=[position_id]))
-        return calls
-
-    @require_context
-    def _collect_approvals(self, pool, target_addr, a0, a1, *, dry_run):
+    def _collect_approvals(self, pool, target_addr, a0, a1):
         """Set ERC20 allowances for non-native legs of `pool` to `target_addr`.
 
         Returns (approval_txs, is_native0, is_native1). `approval_txs` is empty in live mode."""
@@ -1078,77 +1042,77 @@ class Chain(CommonChain):
         is_native1 = pool.token1.token_address == native
         txs = []
         if not is_native0:
-            tx = self.set_token_allowance(pool.token0, target_addr, a0, dry_run=dry_run)
-            if dry_run and tx is not None: txs.append(tx)
+            tx = self.set_token_allowance(pool.token0, target_addr, a0)
+            if tx is not None: txs.append(tx)
         if not is_native1:
-            tx = self.set_token_allowance(pool.token1, target_addr, a1, dry_run=dry_run)
-            if dry_run and tx is not None: txs.append(tx)
+            tx = self.set_token_allowance(pool.token1, target_addr, a1)
+            if tx is not None: txs.append(tx)
         return txs, is_native0, is_native1
 
     @require_context
-    def deposit(self, quote: DepositQuote, delay_in_minutes: float = 30, slippage: float = 0.01, dry_run: bool = False):
+    def deposit(self, quote: DepositQuote, delay_in_minutes: float = 30, slippage: float = 0.01):
         """Execute a deposit. Dispatches on `quote.pool.is_cl` — basic uses the router, CL uses NFPM mint."""
-        if quote.pool.is_cl: return self._deposit_concentrated(quote, delay_in_minutes, slippage, dry_run=dry_run)
-        return self._deposit_basic(quote, delay_in_minutes, slippage, dry_run=dry_run)
+        if quote.pool.is_cl: return self._deposit_concentrated(quote, delay_in_minutes, slippage)
+        return self._deposit_basic(quote, delay_in_minutes, slippage)
 
     @require_context
-    def _deposit_basic(self, quote: DepositQuote, delay_in_minutes: float, slippage: float, dry_run: bool = False):
+    def _deposit_basic(self, quote: DepositQuote, delay_in_minutes: float, slippage: float):
         pool, router_addr = quote.pool, self.settings.router_contract_addr
         a0, a1 = quote.amount_token0, quote.amount_token1
         deadline = get_future_timestamp(delay_in_minutes)
-        txs, is_native0, is_native1 = self._collect_approvals(pool, router_addr, a0, a1, dry_run=dry_run)
+        txs, is_native0, is_native1 = self._collect_approvals(pool, router_addr, a0, a1)
 
         if is_native0 or is_native1:
             other_addr = pool.token1.token_address if is_native0 else pool.token0.token_address
             other_amt, native_amt = (a1, a0) if is_native0 else (a0, a1)
             params = [other_addr, pool.is_stable, other_amt, apply_slippage(other_amt, slippage),
-                      apply_slippage(native_amt, slippage), self.account.address, deadline]
-            main = self.sign_and_send_tx(self.router.functions.addLiquidityETH(*params), value=native_amt, dry_run=dry_run)
+                      apply_slippage(native_amt, slippage), self.signer_address, deadline]
+            main = self.build_tx(self.router.functions.addLiquidityETH(*params), value=native_amt)
         else:
             params = [pool.token0.token_address, pool.token1.token_address, pool.is_stable, a0, a1,
-                      apply_slippage(a0, slippage), apply_slippage(a1, slippage), self.account.address, deadline]
-            main = self.sign_and_send_tx(self.router.functions.addLiquidity(*params), dry_run=dry_run)
-        return [*txs, main] if dry_run else main
+                      apply_slippage(a0, slippage), apply_slippage(a1, slippage), self.signer_address, deadline]
+            main = self.build_tx(self.router.functions.addLiquidity(*params))
+        return [*txs, main]
 
     @require_context
-    def _deposit_concentrated(self, quote: DepositQuote, delay_in_minutes: float, slippage: float, dry_run: bool = False):
+    def _deposit_concentrated(self, quote: DepositQuote, delay_in_minutes: float, slippage: float):
         pool = quote.pool
         nfpm = self._nfpm(pool)
         a0, a1 = quote.amount_token0, quote.amount_token1
-        txs, is_native0, is_native1 = self._collect_approvals(pool, nfpm.address, a0, a1, dry_run=dry_run)
+        txs, is_native0, is_native1 = self._collect_approvals(pool, nfpm.address, a0, a1)
 
         params = [(
             pool.token0.token_address, pool.token1.token_address, pool.type,
             quote.tick_lower, quote.tick_upper, a0, a1,
             apply_slippage(a0, slippage), apply_slippage(a1, slippage),
-            self.account.address, get_future_timestamp(delay_in_minutes), quote.sqrt_price_x96,
+            self.signer_address, get_future_timestamp(delay_in_minutes), quote.sqrt_price_x96,
         )]
 
         if is_native0 or is_native1:
             mint_calldata = nfpm.encode_abi("mint", args=params)
             refund_calldata = nfpm.encode_abi("refundETH", args=[])
-            main = self.sign_and_send_tx(nfpm.functions.multicall([mint_calldata, refund_calldata]), value=a0 if is_native0 else a1, dry_run=dry_run)
+            main = self.build_tx(nfpm.functions.multicall([mint_calldata, refund_calldata]), value=a0 if is_native0 else a1)
         else:
-            main = self.sign_and_send_tx(nfpm.functions.mint(*params), dry_run=dry_run)
-        return [*txs, main] if dry_run else main
+            main = self.build_tx(nfpm.functions.mint(*params))
+        return [*txs, main]
     @require_context
     def get_positions(self, owner: Optional[str] = None) -> List[Position]:
-        """List positions owned by `owner` (defaults to self.account.address). Uses Sugar's
+        """List positions owned by `owner` (defaults to self.signer_address). Uses Sugar's
         paginated `positions(limit, offset, account)` reader."""
-        owner = owner or self.account.address
+        owner = owner or self.signer_address
         def get_p(limit, offset): return self.sugar.functions.positions(limit, offset, owner)
         return self.prepare_positions(self.paginate(get_p), self.get_pools())
 
     @require_context
     def withdraw(self, withdrawal: Withdrawal, delay_in_minutes: float = 30, slippage: float = 0.01,
-                 collect: bool = True, unwrap_native: bool = False, dry_run: bool = False):
+                 collect: bool = True, unwrap_native: bool = False):
         """Execute a withdrawal. Dispatches on `withdrawal.pool.is_cl`."""
         if withdrawal.pool.is_cl:
-            return self._withdraw_concentrated(withdrawal, delay_in_minutes, slippage, collect, unwrap_native, dry_run=dry_run)
-        return self._withdraw_basic(withdrawal, delay_in_minutes, slippage, dry_run=dry_run)
+            return self._withdraw_concentrated(withdrawal, delay_in_minutes, slippage, collect, unwrap_native)
+        return self._withdraw_basic(withdrawal, delay_in_minutes, slippage)
 
     @require_context
-    def _withdraw_basic(self, w: Withdrawal, delay_in_minutes: float, slippage: float, dry_run: bool = False):
+    def _withdraw_basic(self, w: Withdrawal, delay_in_minutes: float, slippage: float):
         pool = w.pool
         router_addr = self.settings.router_contract_addr
         a0_min, a1_min = apply_slippage(w.amount_token0, slippage), apply_slippage(w.amount_token1, slippage)
@@ -1156,22 +1120,22 @@ class Chain(CommonChain):
         native = self.settings.wrapped_native_token_addr
 
         lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("erc20"))
-        approval_tx = self._approve_if_needed(lp, router_addr, w.liquidity, dry_run=dry_run)
+        approval_tx = self._approve_if_needed(lp, router_addr, w.liquidity)
 
         if pool.token0.token_address == native or pool.token1.token_address == native:
             is_native0 = pool.token0.token_address == native
             other_addr = pool.token1.token_address if is_native0 else pool.token0.token_address
             other_min, native_min = (a1_min, a0_min) if is_native0 else (a0_min, a1_min)
-            params = [other_addr, pool.is_stable, w.liquidity, other_min, native_min, self.account.address, deadline]
-            main = self.sign_and_send_tx(self.router.functions.removeLiquidityETH(*params), dry_run=dry_run)
+            params = [other_addr, pool.is_stable, w.liquidity, other_min, native_min, self.signer_address, deadline]
+            main = self.build_tx(self.router.functions.removeLiquidityETH(*params))
         else:
-            params = [pool.token0.token_address, pool.token1.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.account.address, deadline]
-            main = self.sign_and_send_tx(self.router.functions.removeLiquidity(*params), dry_run=dry_run)
-        return ([approval_tx, main] if approval_tx is not None else [main]) if dry_run else main
+            params = [pool.token0.token_address, pool.token1.token_address, pool.is_stable, w.liquidity, a0_min, a1_min, self.signer_address, deadline]
+            main = self.build_tx(self.router.functions.removeLiquidity(*params))
+        return [t for t in (approval_tx, main) if t is not None]
 
     @require_context
     def _withdraw_concentrated(self, w: Withdrawal, delay_in_minutes: float, slippage: float,
-                               collect: bool, unwrap_native: bool, dry_run: bool = False):
+                               collect: bool, unwrap_native: bool):
         pool = w.pool
         nfpm = self._nfpm(pool)
         a0_min, a1_min = apply_slippage(w.amount_token0, slippage), apply_slippage(w.amount_token1, slippage)
@@ -1181,18 +1145,15 @@ class Chain(CommonChain):
             raise ValueError("burn / unwrap_native require collect=True")
         decrease_args = (w.position_id, w.liquidity, a0_min, a1_min, deadline)
         if not collect:
-            main = self.sign_and_send_tx(nfpm.functions.decreaseLiquidity(decrease_args), dry_run=dry_run)
+            main = self.build_tx(nfpm.functions.decreaseLiquidity(decrease_args))
         else:
             calls = [nfpm.encode_abi("decreaseLiquidity", args=[decrease_args])] + \
                     self._build_nfpm_cleanup_calls(nfpm, pool, w.position_id, unwrap_native=unwrap_native, burn=w.burn)
-            main = self.sign_and_send_tx(nfpm.functions.multicall(calls), dry_run=dry_run)
-        return [main] if dry_run else main
+            main = self.build_tx(nfpm.functions.multicall(calls))
+        return [main]
     @require_context
-    def stake(self, position: Position, dry_run: bool = False):
-        """Stake `position`'s unstaked liquidity into the pool's gauge.
-
-        CL: approves the NFT to the gauge and calls `gauge.deposit(tokenId)`.
-        Basic: approves the LP token to the gauge and calls `gauge.deposit(position.liquidity)`."""
+    def stake(self, position: Position):
+        """Stake `position`'s unstaked liquidity into the pool's gauge."""
         if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
         pool = position.pool
         if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
@@ -1203,21 +1164,18 @@ class Chain(CommonChain):
             if position.staked > 0: raise ValueError(f"CL position #{position.id} is already staked")
             if position.liquidity == 0: raise ValueError(f"CL position #{position.id} has no liquidity to stake")
             nfpm = self._nfpm(pool)
-            approval_tx = self.sign_and_send_tx(nfpm.functions.approve(gauge_addr, position.id), dry_run=dry_run)
-            main = self.sign_and_send_tx(gauge.functions.deposit(position.id), dry_run=dry_run)
+            approval_tx = self.build_tx(nfpm.functions.approve(gauge_addr, position.id))
+            main = self.build_tx(gauge.functions.deposit(position.id))
         else:
             if position.liquidity == 0: raise ValueError(f"no LP to stake for {pool.symbol}")
             lp = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("erc20"))
-            approval_tx = self._approve_if_needed(lp, gauge_addr, position.liquidity, dry_run=dry_run)
-            main = self.sign_and_send_tx(gauge.functions.deposit(position.liquidity), dry_run=dry_run)
-        return ([approval_tx, main] if approval_tx is not None else [main]) if dry_run else main
+            approval_tx = self._approve_if_needed(lp, gauge_addr, position.liquidity)
+            main = self.build_tx(gauge.functions.deposit(position.liquidity))
+        return [t for t in (approval_tx, main) if t is not None]
 
     @require_context
-    def unstake(self, position: Position, *, amount: Optional[int] = None, dry_run: bool = False):
-        """Withdraw from the pool's gauge.
-
-        CL: `gauge.withdraw(tokenId)` returns the NFT to the wallet; `amount` is ignored.
-        Basic: `gauge.withdraw(amount)` defaults to `position.staked` (full unstake)."""
+    def unstake(self, position: Position, *, amount: Optional[int] = None):
+        """Withdraw from the pool's gauge. CL: full only; basic: pass `amount` for partial."""
         if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
         pool = position.pool
         if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
@@ -1230,29 +1188,21 @@ class Chain(CommonChain):
             if amount <= 0: raise ValueError("no staked LP to withdraw")
             if amount > position.staked: raise ValueError(f"unstake amount {amount} > staked {position.staked}")
             tx = gauge.functions.withdraw(amount)
-        r = self.sign_and_send_tx(tx, dry_run=dry_run)
-        return [r] if dry_run else r
+        return [self.build_tx(tx)]
 
     @require_context
-    def claim_emissions(self, position: Position, dry_run: bool = False):
-        """Claim gauge emissions for the position.
-
-        CL: `gauge.getReward(tokenId)`. Basic: `gauge.getReward(wallet)`."""
+    def claim_emissions(self, position: Position):
+        """Claim gauge emissions for the position."""
         if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
         pool = position.pool
         if not pool.gauge or pool.gauge == ADDRESS_ZERO: raise ValueError(f"pool {pool.symbol} has no gauge")
         gauge_addr = normalize_address(pool.gauge)
         gauge = self.web3.eth.contract(address=gauge_addr, abi=get_abi("gauge_cl" if pool.is_cl else "gauge_basic"))
-        tx = gauge.functions.getReward(position.id if pool.is_cl else self.account.address)
-        r = self.sign_and_send_tx(tx, dry_run=dry_run)
-        return [r] if dry_run else r
+        return [self.build_tx(gauge.functions.getReward(position.id if pool.is_cl else self.signer_address))]
 
     @require_context
-    def claim_fees(self, position: Position, *, burn: bool = False, unwrap_native: bool = False, dry_run: bool = False):
-        """Claim accrued LP fees.
-
-        CL: NFPM multicall (collect → optional unwrap_native → optional burn).
-        Basic: `pool.claimFees()` on the pool contract. `burn` is ignored for basic pools."""
+    def claim_fees(self, position: Position, *, burn: bool = False, unwrap_native: bool = False):
+        """Claim accrued LP fees. CL: NFPM multicall (collect → optional unwrap/burn). Basic: `pool.claimFees()`."""
         if position.is_alm: raise ValueError("ALM-managed position; not supported (use the ALM contract)")
         if position.staked > 0: raise ValueError("position is staked; unstake first to claim fees")
         pool = position.pool
@@ -1265,8 +1215,7 @@ class Chain(CommonChain):
         else:
             pool_contract = self.web3.eth.contract(address=normalize_address(pool.lp), abi=get_abi("pool_basic"))
             tx = pool_contract.functions.claimFees()
-        r = self.sign_and_send_tx(tx, dry_run=dry_run)
-        return [r] if dry_run else r
+        return [self.build_tx(tx)]
 
 # %% ../src/chains.ipynb 12
 _op_settings = make_op_chain_settings()

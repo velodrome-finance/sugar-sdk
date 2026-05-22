@@ -4,7 +4,7 @@
 __all__ = ['CLI', 'main']
 
 # %% ../src/cli.ipynb 2
-import fire
+import fire, json
 from dataclasses import asdict
 from .chains import get_chain
 from .deposit import DepositQuote
@@ -12,8 +12,17 @@ from .withdraw import Withdrawal
 from .helpers import ADDRESS_ZERO, normalize_address
 
 # %% ../src/cli.ipynb 3
-# Fire's literal_eval parses `0x...` as a hex int — unmangle before checksum/normalize.
-def _addr(v): return v if v is None else normalize_address('0x' + format(v, '040x') if isinstance(v, int) else v)
+def _addr(v):
+    """Normalize an address (handles Fire's hex-int parsing of `0x...`). Refuses anything > 160 bits."""
+    if v is None: return None
+    if isinstance(v, int):
+        if v.bit_length() > 160: raise SystemExit('address too large (looks like a private key); the SDK never accepts private keys')
+        v = '0x' + format(v, '040x')
+    return normalize_address(v)
+
+def _chain(chain, signer_address):
+    """Open a Chain context. `signer_address` should already be normalized (call `_addr` first)."""
+    return get_chain(str(chain), threading_max_workers=1, signer_address=signer_address)
 
 def _new_pool_spec(c, token0, token1, pool_type, tick_spacing):
     t0, t1 = c.get_token(token0), c.get_token(token1)
@@ -45,11 +54,14 @@ def _one_side(a0, a1, ctx):
     if (a0 is None) == (a1 is None): raise SystemExit(f'{ctx} requires exactly one of --amount0 / --amount1')
     return {'amount_token0': a0} if a0 is not None else {'amount_token1': a1}
 
-def _build_quote(c, p, *, amount0, amount1, price_lower, price_upper, tick_lower, tick_upper, initial_price):
-    """Resolve a DepositQuote for either basic or CL, new or existing pool."""
+def _build_quote(c, p, *, amount0, amount1, price_lower, price_upper, tick_lower, tick_upper, initial_price, use_decimals=False):
+    """Resolve a DepositQuote for either basic or CL, new or existing pool.
+
+    Amounts default to raw wei (chainable with CLI output). Pass `use_decimals=True` to interpret
+    `amount0`/`amount1` as decimal token units (e.g. `0.5` → `0.5 * 10^token.decimals`)."""
     is_new = p.lp == ADDRESS_ZERO
-    a0 = p.token0.parse_units(float(amount0)) if amount0 is not None else None
-    a1 = p.token1.parse_units(float(amount1)) if amount1 is not None else None
+    def _amt(v, tok): return None if v is None else (tok.parse_units(float(v)) if use_decimals else int(v))
+    a0, a1 = _amt(amount0, p.token0), _amt(amount1, p.token1)
     if p.is_cl:
         kwargs = _one_side(a0, a1, 'CL deposit')
         if is_new and initial_price is None: raise SystemExit('new CL pool requires --initial-price')
@@ -66,21 +78,22 @@ def _build_quote(c, p, *, amount0, amount1, price_lower, price_upper, tick_lower
         if a0 is None or a1 is None: raise SystemExit('new basic pool requires both --amount0 and --amount1')
         return DepositQuote(pool=p, amount_token0=a0, amount_token1=a1)
     return c.quote_basic_deposit(p, **_one_side(a0, a1, 'existing basic pool deposit'))
+
 def _position_dict(p):
-    """Compact dict for CLI output: asdict + overrides for the pool and amount fields."""
-    t0, t1 = p.pool.token0, p.pool.token1
+    """Compact dict for CLI output: asdict + the pool flattened to identity + token metadata."""
     return {**asdict(p),
-            'pool': {'symbol': p.pool.symbol, 'lp': p.pool.lp, 'is_cl': p.pool.is_cl},
-            'amount_token0': t0.to_float(p.amount_token0), 'amount_token1': t1.to_float(p.amount_token1),
-            'staked_token0': t0.to_float(p.staked_token0), 'staked_token1': t1.to_float(p.staked_token1),
-            'unstaked_earned0': t0.to_float(p.unstaked_earned0), 'unstaked_earned1': t1.to_float(p.unstaked_earned1)}
+            'pool': {'symbol': p.pool.symbol, 'lp': p.pool.lp, 'is_cl': p.pool.is_cl,
+                     'token0': {'symbol': p.pool.token0.symbol, 'decimals': p.pool.token0.decimals},
+                     'token1': {'symbol': p.pool.token1.symbol, 'decimals': p.pool.token1.decimals}}}
 
 def _find_position(c, *, pool=None, position=None):
-    """Find a wallet position. Identify by --position (CL) or --pool (basic; uses id=0)."""
+    """Find a wallet position. CL: --position=NFT_ID. Basic: --pool=LP_ADDR. --position=0 needs --pool."""
     pool = _addr(pool)
     if pool is None and position is None:
-        raise SystemExit('withdraw requires --pool (basic) or --position (CL)')
+        raise SystemExit('requires --pool (basic) or --position (CL)')
     tid = int(position) if position is not None else 0
+    if tid == 0 and pool is None:
+        raise SystemExit('--position=0 is ambiguous (every basic position has id=0); pass --pool too')
     match = next((p for p in c.get_positions() if p.id == tid and (pool is None or p.pool.lp.lower() == pool.lower())), None)
     if match is None: raise SystemExit('position not found')
     return match
@@ -89,92 +102,79 @@ def _find_position(c, *, pool=None, position=None):
 class CLI:
     """Sugar SDK command-line interface.
 
-    Default is dry-run (no broadcast). Pass --broadcast to send the tx.
-    Amounts are human-readable (e.g. `0.5` → `0.5 * 10^decimals`).
-    `--chain` takes a numeric chain id (10, 8453, 130, 1135).
+    Always outputs JSON-shaped unsigned transactions. The SDK never signs.
+    --wallet=0xADDRESS supplies the `from` field; sign + broadcast externally.
 
     Examples:
         # preview a basic deposit
-        python -m sugar deposit --chain=10 --pool=0xd25711... --amount0=0.0001 --amount1=1
+        python -m sugar deposit --chain=1135 --wallet=0xYou --pool=0x... --amount1=0.001
 
         # list wallet positions
-        python -m sugar positions --chain=10
+        python -m sugar positions --chain=1135 --wallet=0xYou
 
         # withdraw 50% of a basic position
-        python -m sugar withdraw --chain=10 --pool=0xd25711... --fraction=0.5 --broadcast"""
+        python -m sugar withdraw --chain=1135 --wallet=0xYou --pool=0x... --fraction=0.5"""
 
-    def deposit(self, *, chain: int, pool: str = None,
+    def deposit(self, *, chain: int, wallet: str, pool: str = None,
                 token0: str = None, token1: str = None, pool_type: str = None, tick_spacing=None,
                 amount0=None, amount1=None,
                 price_lower=None, price_upper=None, tick_lower=None, tick_upper=None,
                 initial_price=None, slippage: float = 0.01, deadline_minutes: float = 30,
-                broadcast: bool = False):
-        """Deposit liquidity. Dry-run returns unsigned tx(s); --broadcast returns the receipt."""
-        with get_chain(str(chain), threading_max_workers=1) as c:
+                use_decimals: bool = False):
+        """Deposit liquidity. Returns unsigned tx(s); sign + broadcast externally.
+
+        Amounts (--amount0, --amount1) default to raw wei — pipes back into other sugar calls.
+        Pass --use-decimals to interpret amounts as token units (e.g. `--amount0=0.5 --use-decimals`)."""
+        with _chain(chain, _addr(wallet)) as c:
             p = _resolve_pool(c, pool=pool, token0=token0, token1=token1,
                               pool_type=pool_type, tick_spacing=tick_spacing)
             q = _build_quote(c, p, amount0=amount0, amount1=amount1,
                              price_lower=price_lower, price_upper=price_upper,
                              tick_lower=tick_lower, tick_upper=tick_upper,
-                             initial_price=initial_price)
-            r = c.deposit(q, delay_in_minutes=deadline_minutes, slippage=slippage, dry_run=not broadcast)
-            if not broadcast: return r
-            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+                             initial_price=initial_price, use_decimals=use_decimals)
+            return c.deposit(q, delay_in_minutes=deadline_minutes, slippage=slippage)
 
-    def positions(self, *, chain: int, owner: str = None):
-        """List positions for `--owner` (defaults to the SUGAR_PK wallet)."""
-        with get_chain(str(chain), threading_max_workers=1) as c:
-            return [_position_dict(p) for p in c.get_positions(_addr(owner))]
+    def positions(self, *, chain: int, wallet: str = None, owner: str = None):
+        """List positions for `--owner` (defaults to --wallet)."""
+        target = _addr(owner) or _addr(wallet)
+        if target is None: raise SystemExit('positions requires --wallet or --owner')
+        with _chain(chain, target) as c:
+            return [_position_dict(p) for p in c.get_positions()]
 
-    def withdraw(self, *, chain: int, pool: str = None, position: int = None,
+    def withdraw(self, *, chain: int, wallet: str, pool: str = None, position: int = None,
                  fraction: float = 1.0, burn: bool = False, collect: bool = True,
                  unwrap_native: bool = False, slippage: float = 0.01,
-                 deadline_minutes: float = 30, broadcast: bool = False):
+                 deadline_minutes: float = 30):
         """Withdraw a position. Identify by --pool (basic) or --position (CL). Default --fraction=1.0."""
-        with get_chain(str(chain), threading_max_workers=1) as c:
+        with _chain(chain, _addr(wallet)) as c:
             p = _find_position(c, pool=pool, position=position)
             w = Withdrawal.from_position(p, fraction=float(fraction), burn=burn)
-            r = c.withdraw(w, delay_in_minutes=deadline_minutes, slippage=slippage,
-                           collect=collect, unwrap_native=unwrap_native, dry_run=not broadcast)
-            if not broadcast: return r
-            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+            return c.withdraw(w, delay_in_minutes=deadline_minutes, slippage=slippage,
+                              collect=collect, unwrap_native=unwrap_native)
 
-    def stake(self, *, chain: int, pool: str = None, position: int = None, broadcast: bool = False):
+    def stake(self, *, chain: int, wallet: str, pool: str = None, position: int = None):
         """Stake an unstaked position into the pool's gauge."""
-        with get_chain(str(chain), threading_max_workers=1) as c:
-            p = _find_position(c, pool=pool, position=position)
-            r = c.stake(p, dry_run=not broadcast)
-            if not broadcast: return r
-            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+        with _chain(chain, _addr(wallet)) as c:
+            return c.stake(_find_position(c, pool=pool, position=position))
 
-    def unstake(self, *, chain: int, pool: str = None, position: int = None,
-                amount: int = None, broadcast: bool = False):
+    def unstake(self, *, chain: int, wallet: str, pool: str = None, position: int = None,
+                amount: int = None):
         """Unstake from the pool's gauge. CL: full only. Basic: pass --amount for partial."""
-        with get_chain(str(chain), threading_max_workers=1) as c:
-            p = _find_position(c, pool=pool, position=position)
-            r = c.unstake(p, amount=amount, dry_run=not broadcast)
-            if not broadcast: return r
-            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+        with _chain(chain, _addr(wallet)) as c:
+            return c.unstake(_find_position(c, pool=pool, position=position), amount=amount)
 
-    def claim_emissions(self, *, chain: int, pool: str = None, position: int = None, broadcast: bool = False):
+    def claim_emissions(self, *, chain: int, wallet: str, pool: str = None, position: int = None):
         """Claim gauge emissions for a staked position."""
-        with get_chain(str(chain), threading_max_workers=1) as c:
-            p = _find_position(c, pool=pool, position=position)
-            r = c.claim_emissions(p, dry_run=not broadcast)
-            if not broadcast: return r
-            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+        with _chain(chain, _addr(wallet)) as c:
+            return c.claim_emissions(_find_position(c, pool=pool, position=position))
 
-    def claim_fees(self, *, chain: int, pool: str = None, position: int = None,
-                   burn: bool = False, unwrap_native: bool = False, broadcast: bool = False):
+    def claim_fees(self, *, chain: int, wallet: str, pool: str = None, position: int = None,
+                   burn: bool = False, unwrap_native: bool = False):
         """Claim LP fees. CL: NFPM multicall (collect + optional unwrap/burn). Basic: pool.claimFees()."""
-        with get_chain(str(chain), threading_max_workers=1) as c:
-            p = _find_position(c, pool=pool, position=position)
-            r = c.claim_fees(p, burn=burn, unwrap_native=unwrap_native, dry_run=not broadcast)
-            if not broadcast: return r
-            return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
+        with _chain(chain, _addr(wallet)) as c:
+            return c.claim_fees(_find_position(c, pool=pool, position=position),
+                                burn=burn, unwrap_native=unwrap_native)
 
-# %% ../src/cli.ipynb 5
+# %% ../src/cli.ipynb 6
 def main():
-    from dotenv import load_dotenv
-    load_dotenv()
-    fire.Fire(CLI)
+    fire.Fire(CLI, serialize=lambda x: json.dumps(x, indent=2, default=str))
