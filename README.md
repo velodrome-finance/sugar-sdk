@@ -11,6 +11,7 @@ Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
 - [Using Sugar](#using-sugar)
 - [Base Quickstart](#base-quickstart)
 - [OP Quickstart](#op-quickstart)
+- [CLI](#cli)
 - [Pools](#pools)
 - [Fees and Incentives](#fees-and-incentives)
 - [Swaps](#swaps)
@@ -66,6 +67,31 @@ with OPChain() as chain:
     for p in chain.get_prices(chain.get_all_tokens())[:5]:
         print(f"{p.token.symbol} price: {p.price}")
 ```
+
+## CLI
+
+The SDK ships a `sugar` CLI (backed by [python-fire](https://github.com/google/python-fire)) for shell-side use. After install the `sugar` binary is on `PATH`; `python -m sugar` works equivalently.
+
+Discover via `--help`:
+
+``` bash
+python -m sugar --help              # list subcommands
+python -m sugar deposit --help      # see flags for one
+```
+
+**Dry-run is the default.** Every action returns the unsigned transaction(s) without broadcasting. Pass `--broadcast` to sign and send.
+
+``` bash
+# preview (dry-run) — returns the unsigned tx(s)
+python -m sugar deposit --chain=10 --pool=0xd25711... --amount0=0.0001 --amount1=1
+
+# same call with --broadcast — returns the receipt
+python -m sugar deposit --chain=10 --pool=0xd25711... --amount0=0.0001 --amount1=1 --broadcast
+```
+
+Wallet signer is read from `SUGAR_PK`; RPC from `SUGAR_RPC_URI_<chain_id>` (same env contract as the Python SDK). `--chain` takes a numeric chain id.
+
+Adding new subcommands is just adding methods to the `CLI` class in `sugar/cli.py` — Fire derives the flag layout from the function signature. The `_resolve_pool` and `_build_quote` helpers in the same file are reusable across actions.
 
 ## Pools
 
