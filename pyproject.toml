@@ -9,3 +9,11 @@ dynamic = [ "keywords", "description", "version", "dependencies", "optional-depe
 
 [tool.uv]
 cache-keys = [{ file = "pyproject.toml" }, { file = "settings.ini" }, { file = "setup.py" }]
+
+[tool.pytest.ini_options]
+# pytest-asyncio isn't used (we wrap async tests in asyncio.run); disable to silence its config warnings
+addopts = "-p no:asyncio"
+filterwarnings = [
+    "ignore::DeprecationWarning:websockets.legacy",
+    "ignore:enable_cleanup_closed ignored:DeprecationWarning",
+]
