@@ -75,12 +75,12 @@ def _position_dict(p):
             'staked_token0': t0.to_float(p.staked_token0), 'staked_token1': t1.to_float(p.staked_token1),
             'unstaked_earned0': t0.to_float(p.unstaked_earned0), 'unstaked_earned1': t1.to_float(p.unstaked_earned1)}
 
-def _find_position(c, *, pool=None, token_id=None):
-    """Find a wallet position. Identify by --token-id (CL) or --pool (basic; uses id=0)."""
+def _find_position(c, *, pool=None, position=None):
+    """Find a wallet position. Identify by --position (CL) or --pool (basic; uses id=0)."""
     pool = _addr(pool)
-    if pool is None and token_id is None:
-        raise SystemExit('withdraw requires --pool (basic) or --token-id (CL)')
-    tid = int(token_id) if token_id is not None else 0
+    if pool is None and position is None:
+        raise SystemExit('withdraw requires --pool (basic) or --position (CL)')
+    tid = int(position) if position is not None else 0
     match = next((p for p in c.get_positions() if p.id == tid and (pool is None or p.pool.lp.lower() == pool.lower())), None)
     if match is None: raise SystemExit('position not found')
     return match
@@ -126,49 +126,49 @@ class CLI:
         with get_chain(str(chain), threading_max_workers=1) as c:
             return [_position_dict(p) for p in c.get_positions(_addr(owner))]
 
-    def withdraw(self, *, chain: int, pool: str = None, token_id: int = None,
+    def withdraw(self, *, chain: int, pool: str = None, position: int = None,
                  fraction: float = 1.0, burn: bool = False, collect: bool = True,
                  unwrap_native: bool = False, slippage: float = 0.01,
                  deadline_minutes: float = 30, broadcast: bool = False):
-        """Withdraw a position. Identify by --pool (basic) or --token-id (CL). Default --fraction=1.0."""
+        """Withdraw a position. Identify by --pool (basic) or --position (CL). Default --fraction=1.0."""
         with get_chain(str(chain), threading_max_workers=1) as c:
-            p = _find_position(c, pool=pool, token_id=token_id)
+            p = _find_position(c, pool=pool, position=position)
             w = Withdrawal.from_position(p, fraction=float(fraction), burn=burn)
             r = c.withdraw(w, delay_in_minutes=deadline_minutes, slippage=slippage,
                            collect=collect, unwrap_native=unwrap_native, dry_run=not broadcast)
             if not broadcast: return r
             return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
 
-    def stake(self, *, chain: int, pool: str = None, token_id: int = None, broadcast: bool = False):
+    def stake(self, *, chain: int, pool: str = None, position: int = None, broadcast: bool = False):
         """Stake an unstaked position into the pool's gauge."""
         with get_chain(str(chain), threading_max_workers=1) as c:
-            p = _find_position(c, pool=pool, token_id=token_id)
+            p = _find_position(c, pool=pool, position=position)
             r = c.stake(p, dry_run=not broadcast)
             if not broadcast: return r
             return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
 
-    def unstake(self, *, chain: int, pool: str = None, token_id: int = None,
+    def unstake(self, *, chain: int, pool: str = None, position: int = None,
                 amount: int = None, broadcast: bool = False):
         """Unstake from the pool's gauge. CL: full only. Basic: pass --amount for partial."""
         with get_chain(str(chain), threading_max_workers=1) as c:
-            p = _find_position(c, pool=pool, token_id=token_id)
+            p = _find_position(c, pool=pool, position=position)
             r = c.unstake(p, amount=amount, dry_run=not broadcast)
             if not broadcast: return r
             return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
 
-    def claim_emissions(self, *, chain: int, pool: str = None, token_id: int = None, broadcast: bool = False):
+    def claim_emissions(self, *, chain: int, pool: str = None, position: int = None, broadcast: bool = False):
         """Claim gauge emissions for a staked position."""
         with get_chain(str(chain), threading_max_workers=1) as c:
-            p = _find_position(c, pool=pool, token_id=token_id)
+            p = _find_position(c, pool=pool, position=position)
             r = c.claim_emissions(p, dry_run=not broadcast)
             if not broadcast: return r
             return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}
 
-    def claim_fees(self, *, chain: int, pool: str = None, token_id: int = None,
+    def claim_fees(self, *, chain: int, pool: str = None, position: int = None,
                    burn: bool = False, unwrap_native: bool = False, broadcast: bool = False):
         """Claim LP fees. CL: NFPM multicall (collect + optional unwrap/burn). Basic: pool.claimFees()."""
         with get_chain(str(chain), threading_max_workers=1) as c:
-            p = _find_position(c, pool=pool, token_id=token_id)
+            p = _find_position(c, pool=pool, position=position)
             r = c.claim_fees(p, burn=burn, unwrap_native=unwrap_native, dry_run=not broadcast)
             if not broadcast: return r
             return {'tx': r.transactionHash.hex(), 'status': r.status, 'gas': r.gasUsed, 'block': r.blockNumber}

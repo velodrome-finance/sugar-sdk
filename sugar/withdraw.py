@@ -22,15 +22,15 @@ class Withdrawal:
     amount_token0: int
     amount_token1: int
     # CL only — the NFT tokenId
-    token_id: Optional[int] = None
-    # CL only — when True, append nfpm.burn(token_id) to the multicall to clean up the empty NFT
+    position_id: Optional[int] = None
+    # CL only — when True, append nfpm.burn(position_id) to the multicall to clean up the empty NFT
     burn: bool = False
 
     def __post_init__(self):
-        if self.pool.is_cl and self.token_id is None:
-            raise ValueError("CL Withdrawal requires token_id")
-        if not self.pool.is_cl and self.token_id is not None:
-            raise ValueError("basic Withdrawal must not set token_id")
+        if self.pool.is_cl and self.position_id is None:
+            raise ValueError("CL Withdrawal requires position_id")
+        if not self.pool.is_cl and self.position_id is not None:
+            raise ValueError("basic Withdrawal must not set position_id")
         if self.liquidity <= 0: raise ValueError("liquidity must be positive")
         if self.burn and not self.pool.is_cl: raise ValueError("burn is CL-only")
 
@@ -56,6 +56,6 @@ class Withdrawal:
         return cls(
             pool=position.pool, liquidity=liquidity,
             amount_token0=a0, amount_token1=a1,
-            token_id=position.id if position.is_cl else None,
+            position_id=position.id if position.is_cl else None,
             burn=burn,
         )
