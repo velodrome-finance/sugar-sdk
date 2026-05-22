@@ -14,7 +14,7 @@ def test_cli_subcommand_chain_required():
 
 
 def test_addr_normalization():
-    assert _addr(None) == None
+    assert _addr(None) is None
     assert _addr('0xd25711EdfBf747efCE181442Cc1D8F5F8fc8a0D3') == '0xd25711EdfBf747efCE181442Cc1D8F5F8fc8a0D3'
     assert _addr(int('0xd25711EdfBf747efCE181442Cc1D8F5F8fc8a0D3', 16)) == '0xd25711EdfBf747efCE181442Cc1D8F5F8fc8a0D3'
 

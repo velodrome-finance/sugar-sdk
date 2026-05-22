@@ -12,7 +12,7 @@ def test_deposit_quote_construction_and_guards():
                               token1=SimpleNamespace(decimals=6))
 
     q = DepositQuote(pool=basic_pool, amount_token0=1_000, amount_token1=2_000)
-    assert q.tick_lower == None
+    assert q.tick_lower is None
     assert q.sqrt_price_x96 == 0
 
     with pytest.raises(Exception):

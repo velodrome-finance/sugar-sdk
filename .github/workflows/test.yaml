@@ -46,7 +46,9 @@ jobs:
           sleep 15
       - name: Test fork
         run: cast call 0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2 "MAX_TOKENS()(uint256)" --rpc-url http://localhost:4444
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check sugar/ tests/
       - name: Run tests
-        run: |
-          pip install -e ".[dev]"
-          pytest tests/
+        run: pytest tests/

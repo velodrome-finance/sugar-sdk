@@ -17,3 +17,11 @@ filterwarnings = [
     "ignore::DeprecationWarning:websockets.legacy",
     "ignore:enable_cleanup_closed ignored:DeprecationWarning",
 ]
+
+[tool.ruff]
+line-length = 160
+
+[tool.ruff.lint]
+select = ["F", "E711", "E712", "E721"]
+# project uses one-liners (`if x: y`) and multi-imports deliberately; don't fight that
+ignore = ["E701", "E702", "E731", "E401"]

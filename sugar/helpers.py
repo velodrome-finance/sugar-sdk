@@ -4,7 +4,6 @@ __all__ = ['ADDRESS_ZERO', 'MAX_UINT256', 'MAX_UINT128', 'MAX_ABS_TICK', 'normal
            'parse_ether', 'get_unique_str', 'get_salt', 'to_bytes32', 'to_bytes32_str', 'Pair', 'find_all_paths',
            'ICACallData', 'hash_ICA_calls', 'serialize_ica_calls', 'Timer', 'time_it', 'atime_it', 'require_supersim']
 
-from json import dumps
 from web3 import Web3, constants
 from eth_abi import encode
 from typing import List, Tuple, Optional, Callable

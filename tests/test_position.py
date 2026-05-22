@@ -42,4 +42,4 @@ def test_position_from_tuple():
 
     unknown_lp = normalize_address("0x9999999999999999999999999999999999999999")
     t_unknown = (1, unknown_lp, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ADDRESS_ZERO, 0, ADDRESS_ZERO)
-    assert Position.from_tuple(t_unknown, pools, "10", "Optimism") == None
+    assert Position.from_tuple(t_unknown, pools, "10", "Optimism") is None
