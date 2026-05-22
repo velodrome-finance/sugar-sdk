@@ -322,9 +322,13 @@ class AsyncChain(CommonChain):
         return self.prepare_tokens(await self.apaginate(get_tokens), listed_only)
     
     @require_async_context
-    async def get_token(self, address: str) -> Optional[Token]:
-        """Get token by address"""
-        return self.find_token_by_address(await self.get_all_tokens(), address)
+    async def get_token(self, ref) -> Optional[Token]:
+        """Resolve a token by 0x address, symbol (case-insensitive), or int (hex address as integer). Returns None if not found."""
+        if not ref: return None
+        if isinstance(ref, int): ref = '0x' + format(ref, '040x')
+        tokens = await self.get_all_tokens()
+        if ref.startswith("0x"): return self.find_token_by_address(tokens, ref)
+        return next((t for t in tokens if t.symbol.lower() == ref.lower()), None)
     
     @require_async_context
     async def get_pool_by_address(self, address: str) -> Optional[LiquidityPool]:
@@ -424,11 +428,21 @@ class AsyncChain(CommonChain):
         
     @require_async_context
     async def swap_from_quote(self, quote: Quote, slippage: Optional[float] = None):
-        swapper_contract_addr, from_token = self.settings.swapper_contract_addr, quote.from_token
-        planner = setup_planner(quote=quote, slippage=slippage if slippage is not None else self.settings.swap_slippage, account=self.signer_address, router_address=swapper_contract_addr)
-        await self.set_token_allowance(from_token, swapper_contract_addr, quote.input.amount_in)
-        value = quote.input.amount_in if from_token.wrapped_token_address else 0
-        return await self.build_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
+        """Build txs for a swap. Pools always route WETH, so the input side has two shapes:
+        - **Native (ETH)**: amount goes as `msg.value`; the swapper wraps to WETH internally. No approval.
+        - **WETH / ERC20**: requires the swapper to have an ERC20 allowance for `amount_in`; `value=0`.
+
+        Returns `[approve_tx, swap_tx]` for ERC20 input, or `[swap_tx]` for native (or when allowance already covers `amount_in`)."""
+        swapper, from_token = self.settings.swapper_contract_addr, quote.from_token
+        slippage = slippage if slippage is not None else self.settings.swap_slippage
+        planner = setup_planner(quote=quote, slippage=slippage, account=self.signer_address, router_address=swapper)
+        execute = self.swapper.functions.execute(planner.commands, planner.inputs)
+        if from_token.wrapped_token_address:  # native: swapper wraps msg.value to WETH
+            return [await self.build_tx(execute, value=quote.input.amount_in)]
+        # ERC20 (incl. WETH): approve the wrapped token to the swapper, then execute with value=0
+        approval_tx = await self.set_token_allowance(from_token, swapper, quote.input.amount_in)
+        main = await self.build_tx(execute)
+        return [t for t in (approval_tx, main) if t is not None]
 
     @require_async_context
     async def _approve_if_needed(self, erc20, spender: str, amount: int):
@@ -840,9 +854,13 @@ class Chain(CommonChain):
         return self.prepare_tokens(self.paginate(get_tokens), listed_only)
 
     @require_context
-    def get_token(self, address: str) -> Optional[Token]:
-        """Get token by address"""
-        return self.find_token_by_address(self.get_all_tokens(), address)
+    def get_token(self, ref) -> Optional[Token]:
+        """Resolve a token by 0x address, symbol (case-insensitive), or int (hex address as integer). Returns None if not found."""
+        if not ref: return None
+        if isinstance(ref, int): ref = '0x' + format(ref, '040x')
+        tokens = self.get_all_tokens()
+        if ref.startswith("0x"): return self.find_token_by_address(tokens, ref)
+        return next((t for t in tokens if t.symbol.lower() == ref.lower()), None)
     
     @require_context
     def get_pool_by_address(self, address: str) -> Optional[LiquidityPool]:
@@ -972,11 +990,21 @@ class Chain(CommonChain):
         
     @require_context
     def swap_from_quote(self, quote: Quote, slippage: Optional[float] = None):
-        swapper_contract_addr, from_token = self.settings.swapper_contract_addr, quote.from_token
-        planner = setup_planner(quote=quote, slippage=slippage if slippage is not None else self.settings.swap_slippage, account=self.signer_address, router_address=swapper_contract_addr)
-        self.set_token_allowance(from_token, swapper_contract_addr, quote.input.amount_in)
-        value = quote.input.amount_in if from_token.wrapped_token_address else 0
-        return self.build_tx(self.swapper.functions.execute(*[planner.commands, planner.inputs]), value=value)
+        """Build txs for a swap. Pools always route WETH, so the input side has two shapes:
+        - **Native (ETH)**: amount goes as `msg.value`; the swapper wraps to WETH internally. No approval.
+        - **WETH / ERC20**: requires the swapper to have an ERC20 allowance for `amount_in`; `value=0`.
+
+        Returns `[approve_tx, swap_tx]` for ERC20 input, or `[swap_tx]` for native (or when allowance already covers `amount_in`)."""
+        swapper, from_token = self.settings.swapper_contract_addr, quote.from_token
+        slippage = slippage if slippage is not None else self.settings.swap_slippage
+        planner = setup_planner(quote=quote, slippage=slippage, account=self.signer_address, router_address=swapper)
+        execute = self.swapper.functions.execute(planner.commands, planner.inputs)
+        if from_token.wrapped_token_address:  # native: swapper wraps msg.value to WETH
+            return [self.build_tx(execute, value=quote.input.amount_in)]
+        # ERC20 (incl. WETH): approve the wrapped token to the swapper, then execute with value=0
+        approval_tx = self.set_token_allowance(from_token, swapper, quote.input.amount_in)
+        main = self.build_tx(execute)
+        return [t for t in (approval_tx, main) if t is not None]
     @require_context
     def pool_spec(self, token0: Token, token1: Token, *,
                   tick_spacing: Optional[int] = None,
