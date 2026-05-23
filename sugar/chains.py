@@ -1,8 +1,8 @@
 __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_response', 'require_context', 'require_async_context',
            'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain', 'OPChain', 'BaseChainCommon',
            'AsyncBaseChain', 'BaseChain', 'LiskChainCommon', 'AsyncLiskChain', 'LiskChain', 'UniChainCommon',
-           'AsyncUniChain', 'UniChain', 'AsyncOPChainSimnet', 'OPChainSimnet', 'LiskChainSimnet',
-           'AsyncLiskChainSimnet', 'AsyncBaseChainSimnet', 'BaseChainSimnet', 'get_chain', 'get_async_chain',
+           'AsyncUniChain', 'UniChain', 'LiskChainSimnet', 'AsyncLiskChainSimnet',
+           'AsyncUniChainSimnet', 'UniChainSimnet', 'get_chain', 'get_async_chain',
            'get_simnet_chain', 'get_async_simnet_chain', 'get_chain_from_token', 'get_async_chain_from_token',
            'get_simnet_chain_from_token', 'get_async_simnet_chain_from_token']
 
@@ -55,6 +55,8 @@ def require_async_context(f: Callable[..., T]) -> Callable[..., T]:
     return wrapper
 
 class CommonChain:
+    is_simnet: bool = False  # simnet subclasses override to True; Superswap reads this to pick the simnet factory for read-side contexts
+
     @property
     def chain_id(self) -> str: return self.settings.chain_id
 
@@ -261,8 +263,9 @@ class AsyncChain(CommonChain):
         # XX: marking this API as "internal" for now
         # TODO: remove destination_domain when get domain API stabilizes and use destination_token instead
         c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=get_abi("bridge_transfer_remote"))
-        await self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount)
-        return await self.build_tx(c.functions.transferRemote(domain, to_bytes32(self.signer_address), amount), value=await self.get_bridge_fee(domain))
+        approval_tx = await self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount)
+        transfer_tx = self.build_tx(c.functions.transferRemote(domain, to_bytes32(self.signer_address), amount), value=await self.get_bridge_fee(domain))
+        return [t for t in (approval_tx, transfer_tx) if t is not None]
     
     @require_async_context
     async def get_xchain_fee(self, destination_domain: int) -> int:
@@ -789,8 +792,9 @@ class Chain(CommonChain):
         # XX: marking this API as "internal" for now
         # TODO: remove destination_domain when get domain API stabilizes and use destination_token instead
         c = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=get_abi("bridge_transfer_remote"))
-        self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount)
-        return self.build_tx(c.functions.transferRemote(domain, to_bytes32(self.signer_address), amount), value=self.get_bridge_fee(domain))
+        approval_tx = self.set_token_allowance(from_token, self.settings.bridge_contract_addr, amount)
+        transfer_tx = self.build_tx(c.functions.transferRemote(domain, to_bytes32(self.signer_address), amount), value=self.get_bridge_fee(domain))
+        return [t for t in (approval_tx, transfer_tx) if t is not None]
 
     @require_context
     def get_xchain_fee(self, destination_domain: int) -> int:
@@ -1315,6 +1319,7 @@ class LiskChain(Chain, LiskChainCommon):
     def __init__(self, **kwargs): super().__init__(make_lisk_chain_settings(**kwargs), **kwargs)
 
 class UniChainCommon():
+    eth: Token = Token(chain_id='130', chain_name='Uni', token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
     o_usdt: Token = Token(chain_id='130', chain_name='Uni', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
     usdc: Token = Token(chain_id='130', chain_name='Uni', token_address='0x078D782b760474a361dDA0AF3839290b0EF57AD6', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
     
@@ -1324,23 +1329,21 @@ class AsyncUniChain(AsyncChain, UniChainCommon):
 class UniChain(Chain, UniChainCommon):
     def __init__(self, **kwargs): super().__init__(make_uni_chain_settings(**kwargs), **kwargs)
 
-class AsyncOPChainSimnet(AsyncOPChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
-
-class OPChainSimnet(OPChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4444", **kwargs)
-
 class LiskChainSimnet(LiskChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
+    is_simnet = True
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", threading_max_workers=1, **kwargs)
 
 class AsyncLiskChainSimnet(AsyncLiskChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", **kwargs)
+    is_simnet = True
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4445", threading_max_workers=1, **kwargs)
 
-class AsyncBaseChainSimnet(AsyncBaseChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", **kwargs)
+class AsyncUniChainSimnet(AsyncUniChain):
+    is_simnet = True
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", threading_max_workers=1, **kwargs)
 
-class BaseChainSimnet(BaseChain):
-    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", **kwargs)
+class UniChainSimnet(UniChain):
+    is_simnet = True
+    def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", threading_max_workers=1, **kwargs)
 
 def get_chain(chain_id: str, **kwargs) -> Chain:
     if chain_id == '10': return OPChain(**kwargs)
@@ -1357,16 +1360,14 @@ def get_async_chain(chain_id: str, **kwargs) -> AsyncChain:
     else: raise ValueError(f"Unsupported chain ID: {chain_id}")
 
 def get_simnet_chain(chain_id: str, **kwargs) -> Chain:
-    if chain_id == '10': return OPChainSimnet(**kwargs)
-    elif chain_id == '8453': return BaseChainSimnet(**kwargs)
+    if chain_id == '130': return UniChainSimnet(**kwargs)
     elif chain_id == '1135': return LiskChainSimnet(**kwargs)
-    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+    else: raise ValueError(f"Unsupported simnet chain ID: {chain_id} (supported: 130, 1135)")
 
 def get_async_simnet_chain(chain_id: str, **kwargs) -> AsyncChain:
-    if chain_id == '10': return AsyncOPChainSimnet(**kwargs)
-    elif chain_id == '8453': return AsyncBaseChainSimnet(**kwargs)
+    if chain_id == '130': return AsyncUniChainSimnet(**kwargs)
     elif chain_id == '1135': return AsyncLiskChainSimnet(**kwargs)
-    else: raise ValueError(f"Unsupported chain ID: {chain_id}")
+    else: raise ValueError(f"Unsupported simnet chain ID: {chain_id} (supported: 130, 1135)")
 
 def get_chain_from_token(t: Token, **kwargs) -> Chain: return get_chain(t.chain_id, **kwargs)
 def get_async_chain_from_token(t: Token, **kwargs) -> AsyncChain: return get_async_chain(t.chain_id, **kwargs)

@@ -54,7 +54,8 @@ def test_factory_functions():
     for cid in ("10", "8453", "130", "1135"):
         assert get_chain(cid)
         assert get_async_chain(cid)
-    for cid in ("10", "8453", "1135"):
+    # simnet factory only covers chains we actively test against supersim (Lisk + Uni)
+    for cid in ("130", "1135"):
         assert get_simnet_chain(cid)
         assert get_async_simnet_chain(cid)
 

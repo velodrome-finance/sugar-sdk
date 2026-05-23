@@ -8,7 +8,7 @@ load_dotenv("/app/.env")
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "network: hits live chain RPCs (mainnet)")
-    config.addinivalue_line("markers", "supersim: requires a local supersim daemon on 127.0.0.1:4444")
+    config.addinivalue_line("markers", "supersim: requires a local supersim daemon (Lisk on :4445, Uni on :4446)")
 
 
 def _port_open(host: str, port: int, timeout: float = 1.0) -> bool:
@@ -21,9 +21,9 @@ def _port_open(host: str, port: int, timeout: float = 1.0) -> bool:
 
 
 def pytest_collection_modifyitems(config, items):
-    if _port_open("127.0.0.1", 4444):
+    if _port_open("127.0.0.1", 4445) and _port_open("127.0.0.1", 4446):
         return
-    skip = pytest.mark.skip(reason="supersim not running on 127.0.0.1:4444")
+    skip = pytest.mark.skip(reason="supersim not running (need Lisk on :4445 and Uni on :4446)")
     for item in items:
         if "supersim" in item.keywords:
             item.add_marker(skip)
