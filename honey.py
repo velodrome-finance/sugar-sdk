@@ -83,18 +83,15 @@ class Honey:
 honey_config = Honey.from_config()
 
 def check_supersim_ready(timeout_seconds=60):
-    """Check if supersim is ready by calling a test contract"""
+    """Check if supersim is ready by issuing a chain-agnostic RPC call (block-number)."""
     start_time = time.time()
     while time.time() - start_time < timeout_seconds:
         try:
             result = subprocess.run([
-                "cast", "call",
-                # TODO: figure out what this address is supposed to be
-                "0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2", 
-                "MAX_TOKENS()(uint256)", 
+                "cast", "block-number",
                 "--rpc-url", f"http://localhost:{honey_config.starting_port}"
             ], capture_output=True, text=True, timeout=10)
-            
+
             if result.returncode == 0 and result.stdout.strip(): return True
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError): pass
         time.sleep(2)
@@ -188,8 +185,15 @@ def add_tokens_by_address(wallet_address: str, token_requests: list) -> None:
                     "cast", "rpc", "anvil_impersonateAccount", large_holder,
                     "--rpc-url", f"http://localhost:{chain['port']}"
                 ], capture_output=True, text=True)
-                
+
                 if impersonate_result.returncode != 0: raise Exception(f"Failed to impersonate account {large_holder} on {chain_name}")
+
+                # Fund the impersonated holder with 1 ETH so it can pay gas — holders that exist on the source mainnet
+                # may have 0 ETH on a different fork (e.g. Uni-mainnet whales not active on Uni).
+                subprocess.run([
+                    "cast", "rpc", "anvil_setBalance", large_holder, "0xDE0B6B3A7640000",  # 1e18 wei
+                    "--rpc-url", f"http://localhost:{chain['port']}"
+                ], capture_output=True, text=True)
 
                 # Transfer tokens using raw amount
                 transfer_result = subprocess.run([

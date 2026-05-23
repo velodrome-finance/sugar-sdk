@@ -1,15 +1,39 @@
 __all__ = ['domains_abi', 'supported_chains', 'get_domain_async', 'get_domain', 'SuperswapRelayer', 'HTTPSuperswapRelayer',
-           'MockSuperswapRelayer', 'SuperswapCommon', 'Superswap', 'AsyncSuperswap']
+           'MockSuperswapRelayer', 'SuperswapCommon', 'Superswap', 'AsyncSuperswap', 'SuperswapTxs']
 
 import json, requests
+from dataclasses import dataclass
 from .swap import build_super_swap_data, SuperSwapData, setup_planner, SuperSwapDataInput
 from .token import Token
 from .quote import SuperswapQuote
 from .helpers import get_salt, serialize_ica_calls
 from .config import hyperlane_relay_url, hyperlane_relayers
-from .chains import get_chain_from_token, get_async_chain_from_token, AsyncChain, Chain, AsyncOPChain, OPChain
-from typing import List, Dict, Any, Optional, Union
+from .chains import (
+    AsyncChain, AsyncOPChain, Chain, OPChain,
+    get_async_chain_from_token, get_async_simnet_chain_from_token,
+    get_chain_from_token, get_simnet_chain_from_token,
+)
+from typing import List, Dict, Optional, Union
 from abc import ABC, abstractmethod
+
+
+@dataclass
+class SuperswapTxs:
+    """Output of a Superswap build. SDK never broadcasts — caller signs `txs` and submits in order.
+
+    `swap_data` is set only when a relayer step is required after broadcast (cross-chain ICA orchestration).
+    The caller uses `plan.relay_kwargs(commitment_dispatch_tx)` to assemble the args for `relayer.share_calls(...)`."""
+    txs: List[Dict]
+    swap_data: Optional[SuperSwapData]
+
+    def relay_kwargs(self, commitment_dispatch_tx: str) -> Dict:
+        """Return kwargs ready to splat into `relayer.share_calls(...)`. Only valid when `swap_data is not None`."""
+        return {
+            "calls": serialize_ica_calls(self.swap_data.calls),
+            "salt": self.swap_data.salt,
+            "commitment_dispatch_tx": commitment_dispatch_tx,
+            "origin_domain": self.swap_data.origin_domain,
+        }
 
 domains_abi = [
     {
@@ -57,17 +81,7 @@ class SuperswapRelayer(ABC):
 # TODO: add helper to inspect tx using https://explorer.hyperlane.xyz/?search
 
 class HTTPSuperswapRelayer(SuperswapRelayer):
-    """HTTP-based relayer implementation."""
     def share_calls(self, calls: List[dict], salt: str, commitment_dispatch_tx: str, origin_domain: int) -> None:
-        """
-        Share calls with private relayer.
-        
-        Args:
-            calls: List of call data dictionaries
-            salt: Hex string salt value
-            commitment_dispatch_tx: Transaction hash string
-            origin_domain: Domain number
-        """
         body = json.dumps({
             'commitmentDispatchTx': commitment_dispatch_tx,
             'originDomain': origin_domain,
@@ -76,37 +90,18 @@ class HTTPSuperswapRelayer(SuperswapRelayer):
             'relayers': hyperlane_relayers
         })
         resp = requests.post(hyperlane_relay_url, headers={'Content-Type': 'application/json'}, data=body)
-        print(f"Hyperlane response: {resp.status_code}: {resp.text}")
         if not resp.ok:
-            response_text = resp.text
-            error_msg = f"Failed to share calls with relayer: {resp.status_code} {response_text}"
-            print(f"Error: {error_msg}")
-            raise Exception(error_msg)
+            raise RuntimeError(f"Hyperlane relay failed: {resp.status_code} {resp.text}")
 
 class MockSuperswapRelayer(SuperswapRelayer):
-    """Mock relayer implementation for testing."""
-    
     def __init__(self):
-        self.calls_history: List[Dict[str, Any]] = []
-    
+        self.call_count = 0
+
     def share_calls(self, calls: List[dict], salt: str, commitment_dispatch_tx: str, origin_domain: int) -> None:
-        """Mock implementation that records calls for verification."""
-        call_data = {
-            'calls': calls,
-            'salt': salt,
-            'commitment_dispatch_tx': commitment_dispatch_tx,
-            'origin_domain': origin_domain
-        }
-        self.calls_history.append(call_data)
-        print(f"Mock relayer received call: {call_data}")
-    
-    def get_last_call(self) -> Optional[Dict[str, Any]]:
-        """Get the most recent call data."""
-        return self.calls_history[-1] if self.calls_history else None
-    
+        self.call_count += 1
+
     def get_call_count(self) -> int:
-        """Get the total number of calls made."""
-        return len(self.calls_history)                
+        return self.call_count
 
 supported_chains = ["OP", "Lisk", "Uni"]
 
@@ -126,7 +121,7 @@ class SuperswapCommon:
     ):
         swap_data = build_super_swap_data(SuperSwapDataInput.build(
             quote=quote,
-            account=from_chain.account.address,
+            account=from_chain.signer_address,
             user_ICA=user_ica_address,
             user_ICA_balance=user_ICA_balance,
             origin_domain=origin_domain,
@@ -167,31 +162,27 @@ class SuperswapCommon:
         message_fee = value + total_fee if quote.from_token.wrapped_token_address else total_fee
         return value, message_fee
 
-    def prepare_result(self, swap_data: SuperSwapData, tx) -> str:
-        if swap_data.needs_relay:
-            self.relayer.share_calls(
-                calls=serialize_ica_calls(swap_data.calls),
-                salt=swap_data.salt,
-                commitment_dispatch_tx=f'0x{tx["transactionHash"].hex()}',
-                origin_domain=swap_data.origin_domain
-            )
-        return f'0x{tx["transactionHash"].hex()}'
-
 class Superswap(SuperswapCommon):
     def __init__(self, relayer: Optional[SuperswapRelayer] = None, chain_for_writes: Optional[Chain] = None):
+        """`chain_for_writes` carries the signer for the on-chain ops. If it's a `*ChainSimnet` instance, all
+        read-side chain contexts opened internally also bind to supersim (auto-detected via `is_simnet`)."""
         self.chain_for_writes, self.relayer = chain_for_writes, relayer or HTTPSuperswapRelayer()
 
-    def bridge_from_quote(self, quote: SuperswapQuote) -> str:
+    @property
+    def _chain_factory(self):
+        return get_simnet_chain_from_token if getattr(self.chain_for_writes, "is_simnet", False) else get_chain_from_token
+
+    def bridge_from_quote(self, quote: SuperswapQuote) -> SuperswapTxs:
         assert quote.is_bridge, "bridge_from_quote can only be used for bridge quotes"
         self.check_chain_support(quote.from_token, quote.to_token)
-        chain = self.chain_for_writes or get_chain_from_token(quote.from_token)
-        if not chain.account: raise ValueError("Cannot bridge without an account. Please connect your wallet first.")
+        chain = self.chain_for_writes or self._chain_factory(quote.from_token)
+        if not chain.signer_address: raise ValueError("Cannot bridge without a signer. Pass signer_address to the chain constructor.")
         from_token, to_token, amount = quote.from_token, quote.to_token, quote.amount_in
         with chain:
-            tx = chain._internal_bridge_token(from_token, to_token, amount, get_domain(int(to_token.chain_id)))
-            return f'0x{tx["transactionHash"].hex()}'
+            txs = chain._internal_bridge_token(from_token, to_token, amount, get_domain(int(to_token.chain_id)))
+            return SuperswapTxs(txs=txs, swap_data=None)
 
-    def swap(self, from_token: Token, to_token: Token, amount: int, slippage: Optional[float] = None) -> str:
+    def swap(self, from_token: Token, to_token: Token, amount: int, slippage: Optional[float] = None) -> SuperswapTxs:
         self.check_chain_support(from_token, to_token)
         quote = self.get_super_quote(from_token=from_token, to_token=to_token, amount=amount)
 
@@ -201,7 +192,7 @@ class Superswap(SuperswapCommon):
 
     def get_super_quote(self, from_token: Token, to_token: Token, amount: int) -> Optional[SuperswapQuote]:
         q = None
-        with get_chain_from_token(from_token) as from_chain, get_chain_from_token(to_token) as to_chain:
+        with self._chain_factory(from_token) as from_chain, self._chain_factory(to_token) as to_chain:
             from_bridge_token, to_bridge_token = from_chain.get_bridge_token(), to_chain.get_bridge_token()
 
             # are we bridging?
@@ -229,15 +220,16 @@ class Superswap(SuperswapCommon):
                     amount_in=amount, origin_quote=o_q, destination_quote=d_q)
         return q
 
-    def swap_from_quote(self, quote: SuperswapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
+    def swap_from_quote(self, quote: SuperswapQuote, slippage: Optional[float] = None, salt: Optional[str] = None) -> SuperswapTxs:
         self.check_chain_support(quote.from_token, quote.to_token)
 
         if quote.is_bridge: return self.bridge_from_quote(quote)
 
         from_token, to_token = quote.from_token, quote.to_token
+        write_signer = self.chain_for_writes.signer_address if self.chain_for_writes else None
 
-        with get_chain_from_token(from_token) as from_chain, get_chain_from_token(to_token) as to_chain:
-            if not from_chain.account: raise ValueError("Cannot superswap without an account. Please connect your wallet first.")
+        with self._chain_factory(from_token, signer_address=write_signer) as from_chain, self._chain_factory(to_token) as to_chain:
+            if not from_chain.signer_address: raise ValueError("Cannot superswap without a signer. Pass a chain_for_writes with signer_address.")
             
             slippage = slippage if slippage is not None else from_chain.settings.swap_slippage
             
@@ -263,29 +255,36 @@ class Superswap(SuperswapCommon):
             )
             return self.write(quote, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
 
-    def write(self, quote: SuperswapQuote, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
-        chain = self.chain_for_writes or get_chain_from_token(quote.from_token)
+    def write(self, quote: SuperswapQuote, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> SuperswapTxs:
+        chain = self.chain_for_writes or self._chain_factory(quote.from_token)
         value, message_fee = self.prepare_write(quote, total_fee)
         with chain:
-            chain.set_token_allowance(quote.from_token, chain.settings.swapper_contract_addr, value)
-            tx = chain.sign_and_send_tx(chain.swapper.functions.execute(*[cmds, inputs]), value=message_fee)
-            return self.prepare_result(swap_data, tx)
+            approval_tx = chain.set_token_allowance(quote.from_token, chain.settings.swapper_contract_addr, value)
+            main = chain.build_tx(chain.swapper.functions.execute(*[cmds, inputs]), value=message_fee)
+            txs = [t for t in (approval_tx, main) if t is not None]
+            return SuperswapTxs(txs=txs, swap_data=swap_data if swap_data.needs_relay else None)
 
 class AsyncSuperswap(SuperswapCommon):
     def __init__(self, relayer: Optional[SuperswapRelayer] = None, chain_for_writes: Optional[AsyncChain] = None):
+        """`chain_for_writes` carries the signer. If it's an `Async*ChainSimnet` instance, all read-side contexts
+        opened internally also bind to supersim (auto-detected via `is_simnet`)."""
         self.chain_for_writes, self.relayer = chain_for_writes, relayer or HTTPSuperswapRelayer()
 
-    async def bridge_from_quote(self, quote: SuperswapQuote) -> str:
+    @property
+    def _chain_factory(self):
+        return get_async_simnet_chain_from_token if getattr(self.chain_for_writes, "is_simnet", False) else get_async_chain_from_token
+
+    async def bridge_from_quote(self, quote: SuperswapQuote) -> SuperswapTxs:
         assert quote.is_bridge, "bridge_from_quote can only be used for bridge quotes"
         self.check_chain_support(quote.from_token, quote.to_token)
-        chain = self.chain_for_writes or get_async_chain_from_token(quote.from_token)
-        if not chain.account: raise ValueError("Cannot bridge without an account. Please connect your wallet first.")
+        chain = self.chain_for_writes or self._chain_factory(quote.from_token)
+        if not chain.signer_address: raise ValueError("Cannot bridge without a signer. Pass signer_address to the chain constructor.")
         from_token, to_token, amount = quote.from_token, quote.to_token, quote.amount_in
         async with chain:
-            tx = await chain._internal_bridge_token(from_token, to_token, amount, await get_domain_async(int(to_token.chain_id)))
-            return f'0x{tx["transactionHash"].hex()}'
+            txs = await chain._internal_bridge_token(from_token, to_token, amount, await get_domain_async(int(to_token.chain_id)))
+            return SuperswapTxs(txs=txs, swap_data=None)
 
-    async def swap(self, from_token: Token, to_token: Token, amount: int, slippage: Optional[float] = None) -> str:
+    async def swap(self, from_token: Token, to_token: Token, amount: int, slippage: Optional[float] = None) -> SuperswapTxs:
         self.check_chain_support(from_token, to_token)
         quote = await self.get_super_quote(from_token=from_token, to_token=to_token, amount=amount)
 
@@ -295,7 +294,7 @@ class AsyncSuperswap(SuperswapCommon):
 
     async def get_super_quote(self, from_token: Token, to_token: Token, amount: int) -> Optional[SuperswapQuote]:
         q = None
-        async with get_async_chain_from_token(from_token) as from_chain, get_async_chain_from_token(to_token) as to_chain:
+        async with self._chain_factory(from_token) as from_chain, self._chain_factory(to_token) as to_chain:
             from_bridge_token, to_bridge_token = await from_chain.get_bridge_token(), await to_chain.get_bridge_token()
 
             # are we bridging?
@@ -324,15 +323,16 @@ class AsyncSuperswap(SuperswapCommon):
 
         return q
 
-    async def swap_from_quote(self, quote: SuperswapQuote, slippage: Optional[float] = None, salt: Optional[str] = None):
+    async def swap_from_quote(self, quote: SuperswapQuote, slippage: Optional[float] = None, salt: Optional[str] = None) -> SuperswapTxs:
         self.check_chain_support(quote.from_token, quote.to_token)
 
         if quote.is_bridge: return await self.bridge_from_quote(quote)
 
         from_token, to_token = quote.from_token, quote.to_token
+        write_signer = self.chain_for_writes.signer_address if self.chain_for_writes else None
 
-        async with get_async_chain_from_token(from_token) as from_chain, get_async_chain_from_token(to_token) as to_chain:
-            if not from_chain.account: raise ValueError("Cannot superswap without an account. Please connect your wallet first.")
+        async with self._chain_factory(from_token, signer_address=write_signer) as from_chain, self._chain_factory(to_token) as to_chain:
+            if not from_chain.signer_address: raise ValueError("Cannot superswap without a signer. Pass a chain_for_writes with signer_address.")
             
             slippage = slippage if slippage is not None else from_chain.settings.swap_slippage
             
@@ -359,10 +359,11 @@ class AsyncSuperswap(SuperswapCommon):
 
             return await self.write(quote, cmds=cmds, inputs=inputs, swap_data=swap_data, total_fee=total_fee)
 
-    async def write(self, quote: SuperswapQuote, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> str:
-        chain = self.chain_for_writes or get_async_chain_from_token(quote.from_token)
+    async def write(self, quote: SuperswapQuote, swap_data: SuperSwapData, cmds: str, inputs: List[bytes], total_fee: int) -> SuperswapTxs:
+        chain = self.chain_for_writes or self._chain_factory(quote.from_token)
         value, message_fee = self.prepare_write(quote, total_fee)
         async with chain:
-            await chain.set_token_allowance(quote.from_token, chain.settings.swapper_contract_addr, value)
-            tx = await chain.sign_and_send_tx(chain.swapper.functions.execute(*[cmds, inputs]), value=message_fee)
-            return self.prepare_result(swap_data, tx)
+            approval_tx = await chain.set_token_allowance(quote.from_token, chain.settings.swapper_contract_addr, value)
+            main = chain.build_tx(chain.swapper.functions.execute(*[cmds, inputs]), value=message_fee)
+            txs = [t for t in (approval_tx, main) if t is not None]
+            return SuperswapTxs(txs=txs, swap_data=swap_data if swap_data.needs_relay else None)
