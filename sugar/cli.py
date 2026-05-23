@@ -79,6 +79,21 @@ def _position_dict(p):
                      'token0': {'symbol': p.pool.token0.symbol, 'decimals': p.pool.token0.decimals},
                      'token1': {'symbol': p.pool.token1.symbol, 'decimals': p.pool.token1.decimals}}}
 
+def _pool_dict(p, full: bool):
+    """Compact = LiquidityPoolForSwap asdict + derived is_cl/is_stable flags (asdict strips @property).
+    Full = LiquidityPool flattened (nested Token/Amount → primitives)."""
+    if not full: return {**asdict(p), 'is_cl': p.is_cl, 'is_stable': p.is_stable}
+    return {
+        'chain_id': p.chain_id, 'chain_name': p.chain_name,
+        'lp': p.lp, 'symbol': p.symbol, 'type': p.type,
+        'is_cl': p.is_cl, 'is_stable': p.is_stable, 'pool_fee': p.pool_fee, 'tvl': p.tvl,
+        'token0': {'symbol': p.token0.symbol, 'address': p.token0.token_address, 'decimals': p.token0.decimals},
+        'token1': {'symbol': p.token1.symbol, 'address': p.token1.token_address, 'decimals': p.token1.decimals},
+        'reserve0': p.reserve0.as_float, 'reserve1': p.reserve1.as_float,
+        'gauge': p.gauge, 'gauge_alive': p.gauge_alive,
+        'weekly_emissions': p.weekly_emissions.as_float,
+    }
+
 def _find_position(c, *, pool=None, position=None):
     """Find a wallet position. CL: --position=NFT_ID. Basic: --pool=LP_ADDR. --position=0 needs --pool."""
     pool = _addr(pool)
@@ -133,6 +148,29 @@ class CLI:
         with get_chain(str(chain), signer_address=target) as c:
             return [_position_dict(p) for p in c.get_positions()]
 
+    def pools(self, *, chain: int, token0: str = None, token1: str = None,
+              pool_type: str = None, full: bool = False, limit: int = None):
+        """List pools on `--chain`. Compact view by default; --full adds TVL/reserves/fees/gauge/emissions (slower).
+        Filter by --token0 / --token1 (symbol or 0x address; when both given, pools must contain both,
+        order-independent) and --pool-type (cl|stable|volatile). --limit caps result count."""
+        type_preds = {'cl': lambda t: t > 0, 'stable': lambda t: t == 0, 'volatile': lambda t: t == -1}
+        if pool_type is not None and pool_type not in type_preds:
+            raise SystemExit(f'invalid --pool-type: {pool_type} (expected cl/stable/volatile)')
+        type_match = type_preds[pool_type] if pool_type else (lambda _t: True)
+        with get_chain(str(chain)) as c:
+            def _resolve(ref):
+                if ref is None: return None
+                t = c.get_token(ref)
+                if t is None: raise SystemExit(f'token not found: {ref}')
+                return t.token_address.lower()
+            wanted = {a for a in (_resolve(token0), _resolve(token1)) if a}
+            pools = c.get_pools() if full else c.get_pools_for_swaps()
+            addrs = ((lambda p: {p.token0.token_address.lower(), p.token1.token_address.lower()}) if full
+                     else (lambda p: {p.token0_address.lower(), p.token1_address.lower()}))
+            out = [p for p in pools if wanted.issubset(addrs(p)) and type_match(p.type)]
+            if limit is not None: out = out[:limit]
+            return [_pool_dict(p, full) for p in out]
+
     def withdraw(self, *, chain: int, wallet: str, pool: str = None, position: int = None,
                  fraction: float = 1.0, burn: bool = False, collect: bool = True,
                  unwrap_native: bool = False, slippage: float = 0.01,
@@ -184,4 +222,4 @@ class CLI:
 
 def main():
     load_dotenv()
-    fire.Fire(CLI, serialize=lambda x: json.dumps(x, indent=2, default=str))
+    fire.Fire(CLI, name='sugar', serialize=lambda x: json.dumps(x, indent=2, default=str))

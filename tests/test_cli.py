@@ -6,7 +6,7 @@ from sugar.cli import CLI, _addr, _one_side
 
 
 def test_cli_subcommand_chain_required():
-    subcommands = ['deposit', 'positions', 'withdraw', 'stake', 'unstake', 'claim_emissions', 'claim_fees', 'swap']
+    subcommands = ['deposit', 'positions', 'pools', 'withdraw', 'stake', 'unstake', 'claim_emissions', 'claim_fees', 'swap']
     for name in subcommands:
         assert hasattr(CLI, name), f'CLI missing {name}'
         sig = inspect.signature(getattr(CLI, name))
