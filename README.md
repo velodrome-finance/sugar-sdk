@@ -68,6 +68,12 @@ python -m sugar claim_emissions --chain=1135 --wallet=0xYou --position=12345
 
 # claim LP fees, unwrap WETH leg to native ETH
 python -m sugar claim_fees --chain=1135 --wallet=0xYou --position=12345 --unwrap-native
+
+# list pools — compact by default; --full adds TVL/reserves/fees/gauge/emissions (slower)
+python -m sugar pools --chain=1135 --token0=lsk --token1=weth --pool-type=cl --limit=5
+
+# preview a swap — returns [approve_tx, swap_tx] (or [swap_tx] for native input)
+python -m sugar swap --chain=1135 --wallet=0xYou --from-token=lsk --to-token=eth --amount=10 --use-decimals
 ```
 
 **Position identification.** `--pool=ADDR` for basic positions (one per wallet per pool, `id=0`); `--position=NFT_ID` for CL positions. The two can be combined to narrow a CL lookup within a specific pool.
@@ -130,40 +136,39 @@ For a single pool, use `chain.get_pool_epochs("0x...")`.
 
 ## Swaps
 
-Quote and swap:
+The SDK builds; the caller signs and broadcasts. `swap_from_quote` and `swap` both return a list of unsigned tx dicts — `[approve_tx, swap_tx]` for ERC20 input, or `[swap_tx]` for native (or when allowance already covers `amount_in`).
 
 ``` python
-async with AsyncOPChain() as op:
+async with AsyncOPChain(signer_address="0xYou") as op:
     quote = await op.get_quote(from_token=AsyncOPChain.velo, to_token=AsyncOPChain.eth,
                                amount=AsyncOPChain.velo.parse_units(10))
-    if quote:
-        await op.swap_from_quote(quote)
+    txs = await op.swap_from_quote(quote)
+    # sign & broadcast each tx in order
 ```
 
-"I'm Feeling Lucky" swap (quote + execute in one call):
+One-shot (quote + build in a single call):
 
 ``` python
-async with AsyncOPChain() as op:
-    await op.swap(from_token=AsyncOPChain.velo, to_token=AsyncOPChain.eth,
-                  amount=AsyncOPChain.velo.parse_units(10))
+txs = await op.swap(from_token=AsyncOPChain.velo, to_token=AsyncOPChain.eth,
+                    amount=AsyncOPChain.velo.parse_units(10))
 ```
 
 ## Superswaps
 
-Cross-chain swap via Velodrome's superswap infrastructure:
+Cross-chain swap via Velodrome's superswap infrastructure. Returns a `SuperswapTxs` plan: `plan.txs` is the unsigned-tx list to sign and broadcast in order; `plan.swap_data` is set when a relayer step is required after the last broadcast (cross-chain ICA orchestration).
 
 ``` python
-from sugar import OPChain, LiskChain, AsyncSuperswap
+from sugar import OPChain, LiskChain, AsyncOPChain, AsyncSuperswap, HTTPSuperswapRelayer
 
-quote = await AsyncSuperswap().get_super_quote(
-    from_token=OPChain.velo, to_token=LiskChain.lsk,
-    amount=OPChain.velo.parse_units(100),
-)
-await AsyncSuperswap().swap_from_quote(quote)
-
-# or one-shot
-await AsyncSuperswap().swap(from_token=OPChain.velo, to_token=LiskChain.lsk,
-                            amount=OPChain.velo.parse_units(100))
+async with AsyncOPChain(signer_address="0xYou") as from_chain:
+    plan = await AsyncSuperswap(chain_for_writes=from_chain).swap(
+        from_token=OPChain.velo, to_token=LiskChain.lsk,
+        amount=OPChain.velo.parse_units(100),
+    )
+    # sign & broadcast plan.txs in order; capture the final tx hash
+    last_tx_hash = "0x..."  # hash of the last broadcasted tx
+    if plan.swap_data is not None:
+        HTTPSuperswapRelayer().share_calls(**plan.relay_kwargs(commitment_dispatch_tx=last_tx_hash))
 ```
 
 ## Liquidity Deposits
