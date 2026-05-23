@@ -16,8 +16,6 @@ jobs:
       SUGAR_RPC_URI_8453: ${{ secrets.SUGAR_RPC_URI_8453 }}
       SUGAR_RPC_URI_130: ${{ secrets.SUGAR_RPC_URI_130 }}
       SUGAR_RPC_URI_1135: ${{ secrets.SUGAR_RPC_URI_1135 }}
-      SUPERSIM_RPC_URL_BASE: ${{ secrets.SUPERSIM_RPC_URL_BASE }}
-      SUPERSIM_RPC_URL_OP: ${{ secrets.SUPERSIM_RPC_URL_OP }}
 
     steps:
       - name: Checkout repository
@@ -44,8 +42,10 @@ jobs:
         run: |
           python honey.py > /dev/null 2>&1 &
           sleep 15
-      - name: Test fork
-        run: cast call 0x7F6D3A4c8a1111DDbFe282794f4D608aB7Cb23A2 "MAX_TOKENS()(uint256)" --rpc-url http://localhost:4444
+      - name: Confirm supersim L2s are listening
+        run: |
+          cast block-number --rpc-url http://127.0.0.1:4445
+          cast block-number --rpc-url http://127.0.0.1:4446
       - name: Install dependencies
         run: pip install -e ".[dev]"
       - name: Lint
