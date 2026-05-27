@@ -1,12 +1,14 @@
 import inspect
+from types import SimpleNamespace
 
 import pytest
 
-from sugar.cli import CLI, _addr, _one_side
+from sugar.cli import CLI, _addr, _one_side, _route_intermediaries
+from sugar.pool import pool_type_label
 
 
 def test_cli_subcommand_chain_required():
-    subcommands = ['deposit', 'positions', 'pools', 'withdraw', 'stake', 'unstake', 'claim_emissions', 'claim_fees', 'swap']
+    subcommands = ['deposit', 'positions', 'pools', 'quote', 'withdraw', 'stake', 'unstake', 'claim_emissions', 'claim_fees', 'swap']
     for name in subcommands:
         assert hasattr(CLI, name), f'CLI missing {name}'
         sig = inspect.signature(getattr(CLI, name))
@@ -28,3 +30,27 @@ def test_one_side():
     assert _one_side(100, None, 'ctx') == {'amount_token0': 100}
     with pytest.raises(SystemExit, match='exactly one'):
         _one_side(100, 200, 'ctx')
+
+
+def test_pool_type_label():
+    assert pool_type_label(-1) == 'volatile'
+    assert pool_type_label(0) == 'stable'
+    assert pool_type_label(1) == 'cl-1'
+    assert pool_type_label(200) == 'cl-200'
+
+
+def test_route_intermediaries_direct_swap_empty():
+    """A 1-hop path (direct swap) has no intermediaries between from_token and to_token."""
+    pool = SimpleNamespace(token0_address='0xA', token1_address='0xB', lp='0xLP', type=0)
+    quote = SimpleNamespace(path=[(pool, False)])
+    assert _route_intermediaries(None, quote) == []  # `c` unused when path is direct
+
+
+def test_route_intermediaries_multi_hop():
+    """For an N-pool path, the route lists N-1 intermediate tokens (output of each non-final hop)."""
+    p1 = SimpleNamespace(token0_address='0xA', token1_address='0xB', lp='0xLP1', type=-1)
+    p2 = SimpleNamespace(token0_address='0xB', token1_address='0xC', lp='0xLP2', type=200)
+    quote = SimpleNamespace(path=[(p1, False), (p2, False)])
+    fake_chain = SimpleNamespace(get_token=lambda addr: SimpleNamespace(symbol=f'sym{addr}'))
+    route = _route_intermediaries(fake_chain, quote)
+    assert route == [{'symbol': 'sym0xB', 'address': '0xB', 'lp': '0xLP1', 'type_label': 'volatile'}]

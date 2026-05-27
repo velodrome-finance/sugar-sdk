@@ -34,6 +34,7 @@ SDK but is **not** exposed by the CLI — do not offer it.
 # read-only
 scripts/sugar-run.sh pools     --chain=1135 --token0=lsk --token1=weth --pool-type=cl --limit=5
 scripts/sugar-run.sh positions --chain=1135 --wallet=0xYou
+scripts/sugar-run.sh quote     --chain=1135 --from-token=lsk --to-token=eth --amount=10 --use-decimals
 
 # swap — returns an array [approve_tx, swap_tx]
 scripts/sugar-run.sh swap --chain=1135 --wallet=0xYou --from-token=lsk --to-token=eth --amount=10 --use-decimals

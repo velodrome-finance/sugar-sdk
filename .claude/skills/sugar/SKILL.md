@@ -66,6 +66,7 @@ Supported chains (pass the id to `--chain`):
 Read-only (no wallet needed):
 - `pools` — list/filter pools (`--token0`, `--token1`, `--pool-type`, `--limit`, `--full`).
 - `positions` — list a wallet's LP positions (`--wallet`/`--owner`).
+- `quote` — preview a swap (amount in/out, derived price, oracle prices, price impact vs oracle, route). No wallet needed.
 
 Tx-building (require `--wallet=0xADDRESS`; output is unsigned):
 - `swap` — swap one token for another.

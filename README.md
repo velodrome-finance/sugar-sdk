@@ -81,6 +81,9 @@ python -m sugar claim_fees --chain=1135 --wallet=0xYou --position=12345 --unwrap
 # list pools — compact by default; --full adds TVL/reserves/fees/gauge/emissions (slower)
 python -m sugar pools --chain=1135 --token0=lsk --token1=weth --pool-type=cl --limit=5
 
+# quote a swap (read-only) — returns amount_in/out, derived price, oracle prices, price impact, route
+python -m sugar quote --chain=1135 --from-token=lsk --to-token=eth --amount=10 --use-decimals
+
 # preview a swap — returns [approve_tx, swap_tx] (or [swap_tx] for native input)
 python -m sugar swap --chain=1135 --wallet=0xYou --from-token=lsk --to-token=eth --amount=10 --use-decimals
 ```
