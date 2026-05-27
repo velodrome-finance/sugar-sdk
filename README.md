@@ -16,6 +16,15 @@ pip install git+https://github.com/velodrome-finance/sugar-sdk.git@v0.4.0
 
 Take it for a spin on [CodeSandbox](https://codesandbox.io/p/sandbox/sugar-sdk-playground-7c4z7g).
 
+## Claude Code skill
+
+For agentic workflows, this repo ships a self-contained Claude Code skill at
+[`.claude/skills/sugar/`](.claude/skills/sugar/SKILL.md). It wraps the `sugar` CLI with
+a safety boundary baked in — the agent builds unsigned transactions and surfaces them
+for you to sign and broadcast externally; private keys are refused. The bundled
+`scripts/sugar-run.sh` handles installation via `uvx`/`pipx`/managed venv on first use,
+so the skill works without a global install.
+
 ## Quickstart
 
 ``` python
