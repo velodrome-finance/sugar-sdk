@@ -93,9 +93,7 @@ def _resolve_quote(c, from_token, to_token, amount, use_decimals):
     return q
 
 def _oracle_prices(c, from_token, to_token):
-    """Return (from_price_usd, to_price_usd) via the chain's oracle. `get_prices` requires the native +
-    stable reference tokens in the input set for USD math, so we bracket the request with them.
-    Returns (None, None) when the oracle path can't resolve — quote degrades gracefully."""
+    """USD prices for from/to. Brackets with native+stable (oracle needs them). `(None, None)` on failure."""
     native, stable = c.get_token(c.settings.native_token_symbol), c.get_token(c.settings.stable_token_addr)
     tokens = list({t.token_address: t for t in [from_token, to_token, native, stable] if t}.values())
     try:
@@ -104,8 +102,7 @@ def _oracle_prices(c, from_token, to_token):
     except (KeyError, AttributeError): return None, None
 
 def _route_intermediaries(c, q):
-    """Tokens visited between from_token and to_token (exclusive on both ends). Empty for a direct swap.
-    Each entry is the OUTPUT token of the hop plus the `lp` and `type_label` of the pool that produced it."""
+    """Hop outputs between from_token and to_token, exclusive. Empty for a direct swap."""
     if len(q.path) <= 1: return []
     out = []
     for pool, reversed_ in q.path[:-1]:
@@ -118,9 +115,7 @@ def _route_intermediaries(c, q):
     return out
 
 def _quote_dict(q, from_price_usd=None, to_price_usd=None, route=None):
-    """Serialize a Quote for CLI: identifies from/to tokens, surfaces both raw-wei and decimal
-    amounts (raw is pipe-stable, decimal is human-readable), the derived effective price, oracle
-    spot prices, the price-impact vs oracle (positive = pool worse than oracle), and route intermediaries."""
+    """Quote → JSON. `price_impact` sign: positive = pool worse than oracle."""
     ft, tt = q.from_token, q.to_token
     in_dec, out_dec = ft.to_float(q.amount_in), tt.to_float(q.amount_out)
     # impact = (oracle-expected out - actual out) / oracle-expected out; positive = cost to trader

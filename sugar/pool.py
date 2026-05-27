@@ -46,8 +46,7 @@ def symbol(token0: Token, token1: Token, pool_type: int) -> str:
     return f"CL{pool_type}-{token0.symbol}/{token1.symbol}" if pool_type > 0  else f"{'s' if pool_type == 0 else 'v'}AMM-{token0.symbol}/{token1.symbol}"
 
 def pool_type_label(pool_type: int) -> str:
-    """Human-readable label for the raw `type` integer: 'cl-<N>' (N=tick spacing, type>0), 'stable' (type=0), 'volatile' (type=-1).
-    Matches the `--pool-type` CLI input enum and the `vAMM`/`sAMM`/`CL<N>` symbol prefix convention."""
+    """Raw `type` int → 'cl-<N>' (>0), 'stable' (=0), or 'volatile' (=-1)."""
     if pool_type > 0: return f"cl-{pool_type}"
     return "stable" if pool_type == 0 else "volatile"
 

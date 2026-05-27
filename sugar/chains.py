@@ -196,10 +196,38 @@ class CommonChain:
         # filter out paths with excluded tokens
         return list(filter(lambda p: len(set(map(lambda t: t[0], p)) & exclude_tokens_set) == 0, paths))
 
-    def get_pool_paginator(self, batch_size = 5) -> List[List[Tuple]]:
-        limit, upper_bound = self.settings.pool_page_size, self.settings.pools_count_upper_bound
+    def calculate_optimal_batch_size(self, pool_count: int) -> int:
+        """Per-batch page size targeting ~target_calls reads, clamped to [min, max]."""
+        target_calls = self.settings.pool_pagination_target_calls
+        min_size, max_size = self.settings.pool_pagination_min_size, self.settings.pool_pagination_max_size
+        return max(min_size, min(pool_count // target_calls, max_size))
+
+    def get_pool_paginator(self, pool_count: int, batch_size: int = 5) -> List[List[Tuple]]:
+        upper_bound, limit = pool_count + 10, self.calculate_optimal_batch_size(pool_count)
         return chunk(list(map(lambda x: (x, limit), list(range(0, upper_bound, limit)))), batch_size)
-    
+
+    def get_price_connectors(self) -> List[str]:
+        """Oracle routing tokens + stable (so stable-paired tokens still resolve)."""
+        return list(dict.fromkeys(self.settings.connector_tokens_addrs + [self.settings.stable_token_addr]))
+
+    def get_price_request_tokens(self, tokens: List[Token]) -> List[Token]:
+        """Native/listed/emerging tokens only, deduped by address."""
+        return list({t.token_address: t for t in tokens if t.is_native or t.listed or t.emerging}.values())
+
+    def get_latest_epoch_price_tokens(self, epochs: List[Tuple], raw_pools: List[Tuple], tokens: List[Token]) -> List[Token]:
+        """Tokens the latest-epoch view prices: stable, native, per-pool token0/1/emissions, per-reward."""
+        tokens_by_address = {t.token_address: t for t in tokens}
+        needed = {self.settings.stable_token_addr}
+        native = next((t for t in tokens if t.is_native), None)
+        if native is not None: needed.add(native.token_address)
+        for pool in raw_pools:
+            needed.update([normalize_address(pool[7]), normalize_address(pool[10]), normalize_address(pool[20])])
+        for epoch in epochs:
+            needed.update(normalize_address(addr) for addr, _ in epoch[4])
+            needed.update(normalize_address(addr) for addr, _ in epoch[5])
+        return [t for addr, t in tokens_by_address.items()
+                if addr in needed and (t.is_native or t.listed or t.emerging)]
+
     def prepare_price_batcher(self, tokens: List[Token], batch: RequestBatcher):
         batches = chunk(tokens, self.settings.price_batch_size)
         for b in batches:
@@ -247,12 +275,19 @@ class AsyncChain(CommonChain):
         return None
 
     async def apaginate(self, f: Callable):
+        pool_count = await self.get_pool_count()
         async def process_batch(batch: List[Tuple]):
             async with self.web3.batch_requests() as batcher:
                 for offset, limit in batch: batcher.add(f(limit, offset))
                 return sum(await batcher.async_execute(), [])
-        return sum(await asyncio.gather(*[process_batch(batch) for batch in self.get_pool_paginator()]), [])
-    
+        return sum(await asyncio.gather(*[process_batch(batch) for batch in self.get_pool_paginator(pool_count)]), [])
+
+    @require_async_context
+    @alru_cache(maxsize=None)
+    async def get_pool_count(self) -> int:
+        """Pool count, cached per chain instance."""
+        return await self.sugar.functions.count().call()
+
     @require_async_context
     async def get_bridge_fee(self, domain: int) -> int:
         contract = self.web3.eth.contract(address=self.settings.bridge_contract_addr, abi=get_abi("bridge_get_fee"))
@@ -350,16 +385,17 @@ class AsyncChain(CommonChain):
     async def get_bridge_token(self) -> Token: return self._get_bridge_token(await self.get_all_tokens())
 
     async def _get_prices(self, tokens: Tuple[Token], max_retries: int = 3) -> List[int]:
-        """Batched price oracle reads. Retries any failed chunks; raises with context if any remain after retries."""
-        chunks = list(chunk(list(tokens), self.settings.price_batch_size))
+        """Batched oracle reads, filtered to priceable tokens. Result is mapped back to input order (filtered tokens get 0)."""
+        request_tokens = self.get_price_request_tokens(list(tokens))
+        chunks = list(chunk(request_tokens, self.settings.price_batch_size))
         async def _exec(cs):
             async with self.web3.batch_requests() as b:
                 for c in cs:
                     b.add(self.prices.functions.getManyRatesToEthWithCustomConnectors(
                         [t.wrapped_token_address or t.token_address for t in c],
-                        False, self.settings.connector_tokens_addrs, 10))
+                        False, self.get_price_connectors(), self.settings.price_threshold_filter))
                 return await b.async_execute()
-        results = await _exec(chunks)
+        results = await _exec(chunks) if chunks else []
         for _ in range(max_retries):
             failed = [i for i, r in enumerate(results) if not isinstance(r, list)]
             if not failed: break
@@ -369,7 +405,8 @@ class AsyncChain(CommonChain):
         if bad:
             i, e = bad[0]
             raise RuntimeError(f"price oracle batch failed: {len(bad)}/{len(results)} chunks unresolved after {max_retries} retries (chunk #{i}: {type(e).__name__}: {e})")
-        return sum(results, [])
+        rates = {t.token_address: r for c, rs in zip(chunks, results) for t, r in zip(c, rs)}
+        return [rates.get(t.token_address, 0) for t in tokens]
 
     @require_async_context
     async def get_prices(self, tokens: List[Token]) -> List[Price]:
@@ -400,9 +437,14 @@ class AsyncChain(CommonChain):
     @require_async_context
     @alru_cache(maxsize=None)
     async def get_latest_pool_epochs(self) -> List[LiquidityPoolEpoch]:
-        tokens, pools = await self.get_all_tokens(listed_only=False), await self.get_pools()
-        prices = await self.get_prices(tokens)
-        return self.prepare_pool_epochs(await self.apaginate(self.sugar_rewards.functions.epochsLatest), pools, tokens, prices)
+        raw_epochs = await self.apaginate(self.sugar_rewards.functions.epochsLatest)
+        if not raw_epochs: return []
+        tokens = await self.get_all_tokens(listed_only=False)
+        epoch_lp_addresses = {normalize_address(epoch[1]) for epoch in raw_epochs}
+        raw_pools = [p for p in await self.get_raw_pools(False) if normalize_address(p[0]) in epoch_lp_addresses]
+        prices = await self.get_prices(self.get_latest_epoch_price_tokens(raw_epochs, raw_pools, tokens))
+        pools = self.prepare_pools(raw_pools, tokens, prices)
+        return self.prepare_pool_epochs(raw_epochs, pools, tokens, prices)
     
     @require_async_context
     async def get_pools_for_swaps(self) -> List[LiquidityPoolForSwap]: return await self.get_pools(for_swaps=True)
@@ -761,7 +803,8 @@ class Chain(CommonChain):
         return None
     
     def paginate(self, f: Callable):
-        results, batches = [], self.get_pool_paginator()
+        pool_count = self.get_pool_count()
+        results, batches = [], self.get_pool_paginator(pool_count)
 
         def process_batch(batch: List[Tuple]):
             with self.web3.batch_requests() as batcher:
@@ -781,6 +824,12 @@ class Chain(CommonChain):
                     continue
 
         return results
+
+    @require_context
+    @lru_cache(maxsize=None)
+    def get_pool_count(self) -> int:
+        """Pool count, cached per chain instance."""
+        return self.sugar.functions.count().call()
 
     @require_context
     def get_bridge_fee(self, domain: int) -> int:
@@ -889,16 +938,17 @@ class Chain(CommonChain):
     def get_bridge_token(self) -> Token: return self._get_bridge_token(self.get_all_tokens())
 
     def _get_prices(self, tokens: Tuple[Token], max_retries: int = 3) -> List[int]:
-        """Batched price oracle reads. Retries any failed chunks; raises with context if any remain after retries."""
-        chunks = list(chunk(list(tokens), self.settings.price_batch_size))
+        """Batched oracle reads, filtered to priceable tokens. Result is mapped back to input order (filtered tokens get 0)."""
+        request_tokens = self.get_price_request_tokens(list(tokens))
+        chunks = list(chunk(request_tokens, self.settings.price_batch_size))
         def _exec(cs):
             with self.web3.batch_requests() as b:
                 for c in cs:
                     b.add(self.prices.functions.getManyRatesToEthWithCustomConnectors(
                         [t.wrapped_token_address or t.token_address for t in c],
-                        False, self.settings.connector_tokens_addrs, 10))
+                        False, self.get_price_connectors(), self.settings.price_threshold_filter))
                 return b.execute()
-        results = _exec(chunks)
+        results = _exec(chunks) if chunks else []
         for _ in range(max_retries):
             failed = [i for i, r in enumerate(results) if not isinstance(r, list)]
             if not failed: break
@@ -908,7 +958,8 @@ class Chain(CommonChain):
         if bad:
             i, e = bad[0]
             raise RuntimeError(f"price oracle batch failed: {len(bad)}/{len(results)} chunks unresolved after {max_retries} retries (chunk #{i}: {type(e).__name__}: {e})")
-        return sum(results, [])
+        rates = {t.token_address: r for c, rs in zip(chunks, results) for t, r in zip(c, rs)}
+        return [rates.get(t.token_address, 0) for t in tokens]
 
     @require_context
     def get_prices(self, tokens: List[Token]) -> List[Price]:
@@ -942,9 +993,14 @@ class Chain(CommonChain):
     @require_context
     @lru_cache(maxsize=None)
     def get_latest_pool_epochs(self) -> List[LiquidityPoolEpoch]:
-        tokens, pools = self.get_all_tokens(listed_only=False), self.get_pools()
-        prices = self.get_prices(tokens)
-        return self.prepare_pool_epochs(self.paginate(self.sugar_rewards.functions.epochsLatest), pools, tokens, prices)
+        raw_epochs = self.paginate(self.sugar_rewards.functions.epochsLatest)
+        if not raw_epochs: return []
+        tokens = self.get_all_tokens(listed_only=False)
+        epoch_lp_addresses = {normalize_address(epoch[1]) for epoch in raw_epochs}
+        raw_pools = [p for p in self.get_raw_pools(False) if normalize_address(p[0]) in epoch_lp_addresses]
+        prices = self.get_prices(self.get_latest_epoch_price_tokens(raw_epochs, raw_pools, tokens))
+        pools = self.prepare_pools(raw_pools, tokens, prices)
+        return self.prepare_pool_epochs(raw_epochs, pools, tokens, prices)
 
     @require_context
     def _get_quotes_for_paths(self, from_token: Token, to_token: Token, amount_in: int, pools: List[LiquidityPoolForSwap], paths: List[List[Tuple]]) -> List[Optional[Quote]]:
