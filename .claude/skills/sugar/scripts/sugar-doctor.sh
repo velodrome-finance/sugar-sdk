@@ -5,7 +5,7 @@
 # Usage: sugar-doctor.sh
 set -euo pipefail
 
-SUGAR_SDK_REF="${SUGAR_SDK_REF:-v0.4.0}"
+SUGAR_SDK_REF="${SUGAR_SDK_REF:-v0.4.1}"
 
 echo "🍭 sugar CLI doctor (ref ${SUGAR_SDK_REF})"
 echo "----------------------------------------"

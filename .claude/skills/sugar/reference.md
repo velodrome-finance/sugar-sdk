@@ -56,5 +56,5 @@ scripts/sugar-run.sh claim_fees      --chain=1135 --wallet=0xYou --position=1234
 ## Config & overrides
 
 - If a public default RPC rate-limits, set `SUGAR_RPC_URI_<chain_id>` and retry.
-- Override the installed version with `SUGAR_SDK_REF=<git-ref>` (default `v0.4.0`), or point at an
+- Override the installed version with `SUGAR_SDK_REF=<git-ref>` (default `v0.4.1`), or point at an
   existing binary with `SUGAR_BIN=/path/to/sugar`.

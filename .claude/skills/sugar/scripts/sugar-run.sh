@@ -10,10 +10,10 @@
 #
 # Overrides:
 #   SUGAR_BIN       path to a `sugar` binary you already have (skips detection)
-#   SUGAR_SDK_REF   git ref/tag to install (default: v0.4.0)
+#   SUGAR_SDK_REF   git ref/tag to install (default: v0.4.1)
 set -euo pipefail
 
-SUGAR_SDK_REF="${SUGAR_SDK_REF:-v0.4.0}"
+SUGAR_SDK_REF="${SUGAR_SDK_REF:-v0.4.1}"
 SPEC="git+https://github.com/velodrome-finance/sugar-sdk.git@${SUGAR_SDK_REF}"
 
 log() { printf '%s\n' "sugar-run: $*" >&2; }

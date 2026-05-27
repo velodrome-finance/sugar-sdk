@@ -34,7 +34,7 @@ Invoke the bundled runner (paths are relative to this skill directory):
 scripts/sugar-run.sh <subcommand> --flag=value ...
 ```
 
-It auto-detects the easiest runner (`uvx` → `pipx` → managed venv), pinned to sugar-sdk `v0.4.0`.
+It auto-detects the easiest runner (`uvx` → `pipx` → managed venv), pinned to sugar-sdk `v0.4.1`.
 **The first run downloads dependencies (~30s); later runs are cached.** Diagnostics go to stderr,
 so stdout is clean JSON you can pipe into `jq`.
 
