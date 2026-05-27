@@ -15,9 +15,10 @@ base_default_settings = {
   "price_batch_size": int(os.getenv("SUGAR_PRICE_BATCH_SIZE","40")),
   "price_threshold_filter": int(os.getenv("SUGAR_PRICE_THRESHOLD_FILTER","10")),
   "pagination_limit": int(os.getenv("SUGAR_PAGINATION_LIMIT","2000")),
-  "pool_page_size": int(os.getenv("SUGAR_POOL_PAGE_SIZE","500")),
-  # XX: dealing with Schrödinger's paginator this is likely to be ignored in the future with new sugar helpers
-  "pools_count_upper_bound": 2500,
+  # adaptive pool pagination: page = pool_count // target_calls, clamped to [min, max]
+  "pool_pagination_target_calls": int(os.getenv("SUGAR_POOL_PAGINATION_TARGET_CALLS","90")),
+  "pool_pagination_min_size": int(os.getenv("SUGAR_POOL_PAGINATION_MIN_SIZE","10")),
+  "pool_pagination_max_size": int(os.getenv("SUGAR_POOL_PAGINATION_MAX_SIZE","400")),
   "native_token_symbol": "ETH",
   "native_token_decimals": 18,
   "swap_slippage": 0.01,
@@ -61,8 +62,9 @@ class ChainSettings:
     price_batch_size: int
     price_threshold_filter: int
     pagination_limit: int
-    pools_count_upper_bound: int
-    pool_page_size: int
+    pool_pagination_target_calls: int
+    pool_pagination_min_size: int
+    pool_pagination_max_size: int
     native_token_symbol: str
     native_token_decimals: int
     # how often to check for new prices
@@ -88,8 +90,9 @@ class ChainSettings:
 def validate_settings(settings: ChainSettings) -> ChainSettings:
     # TODO: this should actually validate stuff, duh
     floats = ["swap_slippage"]
-    ints = ["price_batch_size", "price_threshold_filter", "pagination_limit", "pool_page_size", "native_token_decimals",
-            "pricing_cache_timeout_seconds", "pools_count_upper_bound", "threading_max_workers"]
+    ints = ["price_batch_size", "price_threshold_filter", "pagination_limit", "native_token_decimals",
+            "pricing_cache_timeout_seconds", "threading_max_workers",
+            "pool_pagination_target_calls", "pool_pagination_min_size", "pool_pagination_max_size"]
     for k in floats: setattr(settings, k, float(getattr(settings, k)))
     for k in ints: setattr(settings, k, int(getattr(settings, k)))
     return settings
@@ -146,7 +149,6 @@ def make_op_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings
 def make_base_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
     d = {
         "rpc_uri": "https://mainnet.base.org",
-        "pools_count_upper_bound": 9000,
         "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",
         "sugar_contract_addr": "0x69dD9db6d8f8E7d83887A704f447b1a584b599A1",
         "sugar_rewards_contract_addr": "0xD4aD2EeeB3314d54212A92f4cBBE684195dEfe3E",
@@ -167,7 +169,6 @@ def make_base_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettin
 def make_lisk_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
     d = {
         "rpc_uri": "https://lisk.drpc.org",
-        "pools_count_upper_bound": 100,
         "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",
         "interchain_router_contract_addr": "0xE59592a179c4f436d5d2e4caA6e2750beA4E3166",
         "bridge_contract_addr": "0x910FF91a92c9141b8352Ad3e50cF13ef9F3169A1",
@@ -191,7 +192,6 @@ def make_lisk_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettin
 def make_uni_chain_settings(get_env: GetEnv = get_env, **kwargs) -> ChainSettings:
     d = {
         "rpc_uri": "https://unichain.drpc.org",
-        "pools_count_upper_bound": 20,
         "wrapped_native_token_addr": "0x4200000000000000000000000000000000000006",
         "interchain_router_contract_addr": "0x43320f6B410322Bf5ca326a0DeAaa6a2FC5A021B",
         "bridge_contract_addr": "0x4A8149B1b9e0122941A69D01D23EaE6bD1441b4f",
