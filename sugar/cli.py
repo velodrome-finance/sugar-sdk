@@ -5,6 +5,7 @@ from dotenv import find_dotenv, load_dotenv
 from dataclasses import asdict
 from .chains import get_chain
 from .deposit import DepositQuote
+from .pool import pool_type_label
 from .withdraw import Withdrawal
 from .helpers import ADDRESS_ZERO, normalize_address
 
@@ -16,10 +17,14 @@ def _addr(v):
         v = '0x' + format(v, '040x')
     return normalize_address(v)
 
+def _require_token(c, ref, label='token'):
+    """Resolve `ref` (address or symbol) to a Token via the chain context, raising SystemExit if missing."""
+    t = c.get_token(ref)
+    if t is None: raise SystemExit(f'{label} not found: {ref}')
+    return t
+
 def _new_pool_spec(c, token0, token1, pool_type, tick_spacing):
-    t0, t1 = c.get_token(token0), c.get_token(token1)
-    if t0 is None: raise SystemExit(f'token0 not found: {token0}')
-    if t1 is None: raise SystemExit(f'token1 not found: {token1}')
+    t0, t1 = _require_token(c, token0, 'token0'), _require_token(c, token1, 'token1')
     pool_type = str(pool_type).lower()
     if pool_type == 'cl':
         if tick_spacing is None: raise SystemExit('--pool-type cl requires --tick-spacing N')
@@ -79,13 +84,69 @@ def _position_dict(p):
                      'token0': {'symbol': p.pool.token0.symbol, 'decimals': p.pool.token0.decimals},
                      'token1': {'symbol': p.pool.token1.symbol, 'decimals': p.pool.token1.decimals}}}
 
+def _resolve_quote(c, from_token, to_token, amount, use_decimals):
+    """Resolve tokens, parse amount (wei or decimals), fetch a quote. Raises SystemExit on any missing piece."""
+    ft, tt = _require_token(c, from_token, 'from-token'), _require_token(c, to_token, 'to-token')
+    amt = ft.parse_units(float(amount)) if use_decimals else int(amount)
+    q = c.get_quote(from_token=ft, to_token=tt, amount=amt)
+    if q is None: raise SystemExit(f'no quote found for {ft.symbol} -> {tt.symbol}')
+    return q
+
+def _oracle_prices(c, from_token, to_token):
+    """Return (from_price_usd, to_price_usd) via the chain's oracle. `get_prices` requires the native +
+    stable reference tokens in the input set for USD math, so we bracket the request with them.
+    Returns (None, None) when the oracle path can't resolve — quote degrades gracefully."""
+    native, stable = c.get_token(c.settings.native_token_symbol), c.get_token(c.settings.stable_token_addr)
+    tokens = list({t.token_address: t for t in [from_token, to_token, native, stable] if t}.values())
+    try:
+        m = {p.token.token_address: p.price for p in c.get_prices(tokens)}
+        return m.get(from_token.token_address), m.get(to_token.token_address)
+    except (KeyError, AttributeError): return None, None
+
+def _route_intermediaries(c, q):
+    """Tokens visited between from_token and to_token (exclusive on both ends). Empty for a direct swap.
+    Each entry is the OUTPUT token of the hop plus the `lp` and `type_label` of the pool that produced it."""
+    if len(q.path) <= 1: return []
+    out = []
+    for pool, reversed_ in q.path[:-1]:
+        addr = pool.token0_address if reversed_ else pool.token1_address
+        t = c.get_token(addr)
+        out.append({
+            'symbol': t.symbol if t else None, 'address': addr,
+            'lp': pool.lp, 'type_label': pool_type_label(pool.type),
+        })
+    return out
+
+def _quote_dict(q, from_price_usd=None, to_price_usd=None, route=None):
+    """Serialize a Quote for CLI: identifies from/to tokens, surfaces both raw-wei and decimal
+    amounts (raw is pipe-stable, decimal is human-readable), the derived effective price, oracle
+    spot prices, the price-impact vs oracle (positive = pool worse than oracle), and route intermediaries."""
+    ft, tt = q.from_token, q.to_token
+    in_dec, out_dec = ft.to_float(q.amount_in), tt.to_float(q.amount_out)
+    # impact = (oracle-expected out - actual out) / oracle-expected out; positive = cost to trader
+    impact = None
+    if from_price_usd and to_price_usd:
+        est_out = in_dec * from_price_usd / to_price_usd
+        impact = (est_out - out_dec) / est_out if est_out else None
+    return {
+        'from_token': {'symbol': ft.symbol, 'address': ft.token_address, 'decimals': ft.decimals},
+        'to_token': {'symbol': tt.symbol, 'address': tt.token_address, 'decimals': tt.decimals},
+        'amount_in': q.amount_in, 'amount_out': q.amount_out,
+        'amount_in_decimal': in_dec, 'amount_out_decimal': out_dec,
+        'price': out_dec / in_dec if in_dec else 0,
+        'from_price_usd': from_price_usd, 'to_price_usd': to_price_usd,
+        'price_impact': impact,
+        'price_impact_pct': impact * 100 if impact is not None else None,
+        'route': route or [],
+    }
+
 def _pool_dict(p, full: bool):
-    """Compact = LiquidityPoolForSwap asdict + derived is_cl/is_stable flags (asdict strips @property).
+    """Compact = LiquidityPoolForSwap asdict + derived is_cl/is_stable/type_label (asdict strips @property).
     Full = LiquidityPool flattened (nested Token/Amount → primitives)."""
-    if not full: return {**asdict(p), 'is_cl': p.is_cl, 'is_stable': p.is_stable}
+    if not full: return {**asdict(p), 'is_cl': p.is_cl, 'is_stable': p.is_stable, 'type_label': pool_type_label(p.type)}
     return {
         'chain_id': p.chain_id, 'chain_name': p.chain_name,
-        'lp': p.lp, 'symbol': p.symbol, 'type': p.type,
+        'lp': p.lp, 'symbol': p.symbol, 'type': p.type, 'type_label': pool_type_label(p.type),
         'is_cl': p.is_cl, 'is_stable': p.is_stable, 'pool_fee': p.pool_fee, 'tvl': p.tvl,
         'token0': {'symbol': p.token0.symbol, 'address': p.token0.token_address, 'decimals': p.token0.decimals},
         'token1': {'symbol': p.token1.symbol, 'address': p.token1.token_address, 'decimals': p.token1.decimals},
@@ -217,6 +278,17 @@ class CLI:
             return c.claim_fees(_find_position(c, pool=pool, position=position),
                                 burn=burn, unwrap_native=unwrap_native)
 
+    def quote(self, *, chain: int, from_token: str, to_token: str, amount, use_decimals: bool = False):
+        """Quote a swap (read-only — no wallet required). Returns from/to tokens, amount_in/out
+        (raw wei + decimal), derived effective price, oracle spot prices, price impact vs oracle
+        (positive = pool worse than oracle), and route intermediaries. Same token/amount semantics
+        as `swap`: --from-token / --to-token accept address or symbol; --amount defaults to raw wei
+        (pass --use-decimals to interpret as token units)."""
+        with get_chain(str(chain)) as c:
+            q = _resolve_quote(c, from_token, to_token, amount, use_decimals)
+            from_price, to_price = _oracle_prices(c, q.from_token, q.to_token)
+            return _quote_dict(q, from_price_usd=from_price, to_price_usd=to_price, route=_route_intermediaries(c, q))
+
     def swap(self, *, chain: int, wallet: str, from_token: str, to_token: str, amount,
              slippage: float = None, use_decimals: bool = False):
         """Swap `from_token` → `to_token` for `amount`. Returns `[approve_tx, swap_tx]` (approval omitted for native or sufficient allowance).
@@ -224,13 +296,7 @@ class CLI:
         --from-token / --to-token accept either a 0x address or a symbol (e.g. ETH, LSK).
         --amount defaults to raw wei; pass --use-decimals to interpret as token units."""
         with get_chain(str(chain), signer_address=_addr(wallet)) as c:
-            ft, tt = c.get_token(from_token), c.get_token(to_token)
-            if ft is None: raise SystemExit(f'from-token not found: {from_token}')
-            if tt is None: raise SystemExit(f'to-token not found: {to_token}')
-            amt = ft.parse_units(float(amount)) if use_decimals else int(amount)
-            q = c.get_quote(from_token=ft, to_token=tt, amount=amt)
-            if q is None: raise SystemExit(f'no quote found for {ft.symbol} -> {tt.symbol}')
-            return c.swap_from_quote(q, slippage=slippage)
+            return c.swap_from_quote(_resolve_quote(c, from_token, to_token, amount, use_decimals), slippage=slippage)
 
 def main():
     load_dotenv(find_dotenv(usecwd=True))
