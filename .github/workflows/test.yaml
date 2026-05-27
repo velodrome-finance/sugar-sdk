@@ -51,4 +51,5 @@ jobs:
       - name: Lint
         run: ruff check sugar/ tests/
       - name: Run tests
-        run: pytest tests/
+        # simnet tests need a local supersim daemon (flaky in CI); skip them here
+        run: pytest tests/ -m "not supersim"
