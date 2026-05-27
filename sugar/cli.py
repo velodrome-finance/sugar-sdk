@@ -1,7 +1,7 @@
 __all__ = ['CLI', 'main']
 
 import fire, json
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from dataclasses import asdict
 from .chains import get_chain
 from .deposit import DepositQuote
@@ -233,5 +233,5 @@ class CLI:
             return c.swap_from_quote(q, slippage=slippage)
 
 def main():
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     fire.Fire(CLI, name='sugar', serialize=lambda x: json.dumps(x, indent=2, default=str))
