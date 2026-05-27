@@ -130,6 +130,15 @@ class CLI:
                 use_decimals: bool = False):
         """Deposit liquidity. Returns unsigned tx(s); sign + broadcast externally.
 
+        Pool: target an existing pool with --pool=0xLP, or a new/derived pool with
+        --token0 --token1 --pool-type {cl,stable,volatile} (CL also needs --tick-spacing). The two
+        modes are mutually exclusive.
+
+        Basic pools: pass --amount0 and/or --amount1 (a brand-new basic pool needs both); CL-only
+        flags (--price-*, --tick-*, --initial-price) are rejected.
+        CL pools: pass exactly one of --amount0/--amount1, plus a range as --price-lower/--price-upper
+        or --tick-lower/--tick-upper; a new/uninitialized CL pool also needs --initial-price.
+
         Amounts (--amount0, --amount1) default to raw wei — pipes back into other sugar calls.
         Pass --use-decimals to interpret amounts as token units (e.g. `--amount0=0.5 --use-decimals`)."""
         with get_chain(str(chain), signer_address=_addr(wallet)) as c:
@@ -142,7 +151,7 @@ class CLI:
             return c.deposit(q, delay_in_minutes=deadline_minutes, slippage=slippage)
 
     def positions(self, *, chain: int, wallet: str = None, owner: str = None):
-        """List positions for `--owner` (defaults to --wallet)."""
+        """List positions for --owner (defaults to --wallet). One of --wallet/--owner is required."""
         target = _addr(owner) or _addr(wallet)
         if target is None: raise SystemExit('positions requires --wallet or --owner')
         with get_chain(str(chain), signer_address=target) as c:
@@ -175,7 +184,9 @@ class CLI:
                  fraction: float = 1.0, burn: bool = False, collect: bool = True,
                  unwrap_native: bool = False, slippage: float = 0.01,
                  deadline_minutes: float = 30):
-        """Withdraw a position. Identify by --pool (basic) or --position (CL). Default --fraction=1.0."""
+        """Withdraw a position. Identify by --pool (basic) or --position (CL). --fraction defaults to
+        1.0 (100%). --burn removes the drained position; --collect (default true) also collects owed
+        fees; --unwrap-native returns native ETH instead of WETH."""
         with get_chain(str(chain), signer_address=_addr(wallet)) as c:
             p = _find_position(c, pool=pool, position=position)
             w = Withdrawal.from_position(p, fraction=float(fraction), burn=burn)
@@ -189,7 +200,7 @@ class CLI:
 
     def unstake(self, *, chain: int, wallet: str, pool: str = None, position: int = None,
                 amount: int = None):
-        """Unstake from the pool's gauge. CL: full only. Basic: pass --amount for partial."""
+        """Unstake from the pool's gauge. CL: full only. Basic: pass --amount (raw wei) for a partial unstake."""
         with get_chain(str(chain), signer_address=_addr(wallet)) as c:
             return c.unstake(_find_position(c, pool=pool, position=position), amount=amount)
 
@@ -200,7 +211,8 @@ class CLI:
 
     def claim_fees(self, *, chain: int, wallet: str, pool: str = None, position: int = None,
                    burn: bool = False, unwrap_native: bool = False):
-        """Claim LP fees. CL: NFPM multicall (collect + optional unwrap/burn). Basic: pool.claimFees()."""
+        """Claim LP fees. CL: NFPM multicall (collect + optional --unwrap-native/--burn). Basic: pool.claimFees().
+        A staked position must be unstaked before its fees can be claimed."""
         with get_chain(str(chain), signer_address=_addr(wallet)) as c:
             return c.claim_fees(_find_position(c, pool=pool, position=position),
                                 burn=burn, unwrap_native=unwrap_native)
