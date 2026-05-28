@@ -135,6 +135,35 @@ def _quote_dict(q, from_price_usd=None, to_price_usd=None, route=None):
         'route': route or [],
     }
 
+_POOL_TYPE_PREDS = {'cl': lambda t: t > 0, 'stable': lambda t: t == 0, 'volatile': lambda t: t == -1}
+
+def _pool_type_match(pool_type):
+    if pool_type is None: return lambda _t: True
+    if pool_type not in _POOL_TYPE_PREDS:
+        raise SystemExit(f'invalid --pool-type: {pool_type} (expected cl/stable/volatile)')
+    return _POOL_TYPE_PREDS[pool_type]
+
+def _amount_dict(a):
+    if a is None: return None
+    return {'token': a.token.symbol, 'address': a.token.token_address,
+            'amount': a.as_float, 'amount_in_stable': a.amount_in_stable}
+
+def _epoch_filter(pool_type):
+    if pool_type is None: return lambda _e: True
+    type_match = _pool_type_match(pool_type)
+    return lambda e: e.pool is not None and type_match(e.pool.type)
+
+def _epoch_dict(e):
+    pool = ({'symbol': e.pool.symbol, 'type': e.pool.type, 'type_label': pool_type_label(e.pool.type),
+             'is_cl': e.pool.is_cl, 'is_stable': e.pool.is_stable,
+             'gauge': e.pool.gauge, 'gauge_alive': e.pool.gauge_alive}
+            if e.pool is not None else None)
+    return {'ts': e.ts, 'epoch_date': e.epoch_date.isoformat(), 'lp': e.lp, 'pool': pool,
+            'votes': e.votes, 'emissions': e.emissions,
+            'total_fees': e.total_fees, 'total_incentives': e.total_incentives,
+            'fees': [_amount_dict(f) for f in e.fees],
+            'incentives': [_amount_dict(i) for i in e.incentives]}
+
 def _pool_dict(p, full: bool):
     """Compact = LiquidityPoolForSwap asdict + derived is_cl/is_stable/type_label (asdict strips @property).
     Full = LiquidityPool flattened (nested Token/Amount → primitives)."""
@@ -218,10 +247,7 @@ class CLI:
         """List pools on `--chain`. Compact view by default; --full adds TVL/reserves/fees/gauge/emissions (slower).
         Filter by --token0 / --token1 (symbol or 0x address; when both given, pools must contain both,
         order-independent) and --pool-type (cl|stable|volatile). --limit caps result count."""
-        type_preds = {'cl': lambda t: t > 0, 'stable': lambda t: t == 0, 'volatile': lambda t: t == -1}
-        if pool_type is not None and pool_type not in type_preds:
-            raise SystemExit(f'invalid --pool-type: {pool_type} (expected cl/stable/volatile)')
-        type_match = type_preds[pool_type] if pool_type else (lambda _t: True)
+        type_match = _pool_type_match(pool_type)
         with get_chain(str(chain)) as c:
             def _resolve(ref):
                 if ref is None: return None
@@ -235,6 +261,25 @@ class CLI:
             out = [p for p in pools if wanted.issubset(addrs(p)) and type_match(p.type)]
             if limit is not None: out = out[:limit]
             return [_pool_dict(p, full) for p in out]
+
+    def epochs_latest(self, *, chain: int, pool_type: str = None):
+        """Latest epoch for every gauged pool on `--chain` (epochsLatest). Filter by
+        --pool-type (cl|stable|volatile). Each entry includes votes, emissions, and
+        fees+incentives as both raw amounts and USD (amount_in_stable) via the on-chain
+        price oracle, plus the pool's gauge_alive flag."""
+        match = _epoch_filter(pool_type)
+        with get_chain(str(chain)) as c:
+            return [_epoch_dict(e) for e in c.get_latest_pool_epochs() if match(e)]
+
+    def epochs(self, *, chain: int, lp: str, pool_type: str = None,
+               limit: int = 10, offset: int = 0):
+        """Historical epochs for a single pool (epochsByAddress). --lp is required; paginate
+        with --limit (default 10) / --offset. Filter by --pool-type (cl|stable|volatile).
+        For latest epoch across all pools, use `sugar epochs-latest`."""
+        match = _epoch_filter(pool_type)
+        with get_chain(str(chain)) as c:
+            epochs = c.get_pool_epochs(_addr(lp), offset=int(offset), limit=int(limit))
+            return [_epoch_dict(e) for e in epochs if match(e)]
 
     def withdraw(self, *, chain: int, wallet: str, pool: str = None, position: int = None,
                  fraction: float = 1.0, burn: bool = False, collect: bool = True,

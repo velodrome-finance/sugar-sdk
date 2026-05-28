@@ -67,6 +67,8 @@ Read-only (no wallet needed):
 - `pools` — list/filter pools (`--token0`, `--token1`, `--pool-type`, `--limit`, `--full`).
 - `positions` — list a wallet's LP positions (`--wallet`/`--owner`).
 - `quote` — preview a swap (amount in/out, derived price, oracle prices, price impact vs oracle, route). No wallet needed.
+- `epochs-latest` — latest epoch for every gauged pool on `--chain` (votes, emissions, fees+incentives with USD via on-chain oracle). `--pool-type=cl|stable|volatile` to filter. Raw output — aggregate with `jq`. This is the right view for reproducing `aerodrome.finance/vote`-style totals (closer to the frontend than summing `pool.total_fees` over all pools).
+- `epochs --lp=0xPOOL` — historical epochs for a single pool (`--limit`, `--offset` for pagination; default limit=10). Same per-entry shape as `epochs-latest`.
 
 Tx-building (require `--wallet=0xADDRESS`; output is unsigned):
 - `swap` — swap one token for another.
