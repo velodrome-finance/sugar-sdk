@@ -2,7 +2,14 @@ __all__ = ['original_format_batched_response', 'T', 'safe_format_batched_respons
            'CommonChain', 'AsyncChain', 'Chain', 'OPChainCommon', 'AsyncOPChain', 'OPChain', 'BaseChainCommon',
            'AsyncBaseChain', 'BaseChain', 'LiskChainCommon', 'AsyncLiskChain', 'LiskChain', 'UniChainCommon',
            'AsyncUniChain', 'UniChain', 'LiskChainSimnet', 'AsyncLiskChainSimnet',
-           'AsyncUniChainSimnet', 'UniChainSimnet', 'get_chain', 'get_async_chain',
+           'AsyncUniChainSimnet', 'UniChainSimnet',
+           'ModeChainCommon', 'AsyncModeChain', 'ModeChain',
+           'FraxtalChainCommon', 'AsyncFraxtalChain', 'FraxtalChain',
+           'InkChainCommon', 'AsyncInkChain', 'InkChain',
+           'SoneiumChainCommon', 'AsyncSoneiumChain', 'SoneiumChain',
+           'SuperseedChainCommon', 'AsyncSuperseedChain', 'SuperseedChain',
+           'CeloChainCommon', 'AsyncCeloChain', 'CeloChain',
+           'get_chain', 'get_async_chain',
            'get_simnet_chain', 'get_async_simnet_chain', 'get_chain_from_token', 'get_async_chain_from_token',
            'get_simnet_chain_from_token', 'get_async_simnet_chain_from_token']
 
@@ -17,6 +24,8 @@ from web3.eth.async_eth import AsyncContract
 from web3.eth import Contract
 from web3.manager import RequestManager, RequestBatcher
 from .config import ChainSettings, make_op_chain_settings, make_base_chain_settings, make_uni_chain_settings, make_lisk_chain_settings
+from .config import make_mode_chain_settings, make_fraxtal_chain_settings, make_ink_chain_settings
+from .config import make_soneium_chain_settings, make_superseed_chain_settings, make_celo_chain_settings
 from .config import XCHAIN_GAS_LIMIT_UPPERBOUND
 from .helpers import normalize_address, MAX_UINT128, apply_slippage, get_future_timestamp, ADDRESS_ZERO, chunk, Pair
 from .helpers import find_all_paths, to_bytes32, price_to_tick, nearest_tick, sqrt_ratio_x96_from_price
@@ -172,7 +181,9 @@ class CommonChain:
         inputs = []
         for i, path in enumerate(paths):
             p = [(p, p.token0_address != path[i][0]) for i, p in enumerate(pools[i])]
-            q = QuoteInput(from_token=from_token, to_token=to_token, amount_in=amount_in, path=p)
+            q = QuoteInput(from_token=from_token, to_token=to_token, amount_in=amount_in, path=p,
+                           slipstream_factory_addr=self.settings.slipstream_factory_addr,
+                           old_slipstream_factory_addr=self.settings.old_slipstream_factory_addr)
             batcher.add(self.quoter.functions.quoteExactInput(q.route.encoded, amount_in))
             inputs.append(q)
         return batcher, inputs
@@ -480,7 +491,9 @@ class AsyncChain(CommonChain):
         Returns `[approve_tx, swap_tx]` for ERC20 input, or `[swap_tx]` for native (or when allowance already covers `amount_in`)."""
         swapper, from_token = self.settings.swapper_contract_addr, quote.from_token
         slippage = slippage if slippage is not None else self.settings.swap_slippage
-        planner = setup_planner(quote=quote, slippage=slippage, account=self.signer_address, router_address=swapper)
+        planner = setup_planner(quote=quote, slippage=slippage, account=self.signer_address, router_address=swapper,
+                                slipstream_factory_addr=self.settings.slipstream_factory_addr,
+                                old_slipstream_factory_addr=self.settings.old_slipstream_factory_addr)
         execute = self.swapper.functions.execute(planner.commands, planner.inputs)
         if from_token.wrapped_token_address:  # native: swapper wraps msg.value to WETH
             return [await self.build_tx(execute, value=quote.input.amount_in)]
@@ -1057,7 +1070,9 @@ class Chain(CommonChain):
         Returns `[approve_tx, swap_tx]` for ERC20 input, or `[swap_tx]` for native (or when allowance already covers `amount_in`)."""
         swapper, from_token = self.settings.swapper_contract_addr, quote.from_token
         slippage = slippage if slippage is not None else self.settings.swap_slippage
-        planner = setup_planner(quote=quote, slippage=slippage, account=self.signer_address, router_address=swapper)
+        planner = setup_planner(quote=quote, slippage=slippage, account=self.signer_address, router_address=swapper,
+                                slipstream_factory_addr=self.settings.slipstream_factory_addr,
+                                old_slipstream_factory_addr=self.settings.old_slipstream_factory_addr)
         execute = self.swapper.functions.execute(planner.commands, planner.inputs)
         if from_token.wrapped_token_address:  # native: swapper wraps msg.value to WETH
             return [self.build_tx(execute, value=quote.input.amount_in)]
@@ -1401,11 +1416,84 @@ class UniChainSimnet(UniChain):
     is_simnet = True
     def __init__(self,  **kwargs): super().__init__(rpc_uri="http://127.0.0.1:4446", threading_max_workers=1, **kwargs)
 
+class ModeChainCommon():
+    eth: Token = Token(chain_id='34443', chain_name='Mode', token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    o_usdt: Token = Token(chain_id='34443', chain_name='Mode', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
+    usdc: Token = Token(chain_id='34443', chain_name='Mode', token_address='0xd988097fb8612cc24eec14542bc03424c656005f', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
+
+class AsyncModeChain(AsyncChain, ModeChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_mode_chain_settings(**kwargs), **kwargs)
+
+class ModeChain(Chain, ModeChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_mode_chain_settings(**kwargs), **kwargs)
+
+class FraxtalChainCommon():
+    frax: Token = Token(chain_id='252', chain_name='Fraxtal', token_address='FRAX', symbol='FRAX', decimals=18, listed=True, wrapped_token_address='0xfc00000000000000000000000000000000000006')
+    o_usdt: Token = Token(chain_id='252', chain_name='Fraxtal', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
+    frxusd: Token = Token(chain_id='252', chain_name='Fraxtal', token_address='0xfc00000000000000000000000000000000000001', symbol='frxUSD', decimals=18, listed=True, wrapped_token_address=None)
+
+class AsyncFraxtalChain(AsyncChain, FraxtalChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_fraxtal_chain_settings(**kwargs), **kwargs)
+
+class FraxtalChain(Chain, FraxtalChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_fraxtal_chain_settings(**kwargs), **kwargs)
+
+class InkChainCommon():
+    eth: Token = Token(chain_id='57073', chain_name='Ink', token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    o_usdt: Token = Token(chain_id='57073', chain_name='Ink', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
+    usdc: Token = Token(chain_id='57073', chain_name='Ink', token_address='0xf1815bd50389c46847f0bda824ec8da914045d14', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
+
+class AsyncInkChain(AsyncChain, InkChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_ink_chain_settings(**kwargs), **kwargs)
+
+class InkChain(Chain, InkChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_ink_chain_settings(**kwargs), **kwargs)
+
+class SoneiumChainCommon():
+    eth: Token = Token(chain_id='1868', chain_name='Soneium', token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    o_usdt: Token = Token(chain_id='1868', chain_name='Soneium', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
+    usdc: Token = Token(chain_id='1868', chain_name='Soneium', token_address='0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
+
+class AsyncSoneiumChain(AsyncChain, SoneiumChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_soneium_chain_settings(**kwargs), **kwargs)
+
+class SoneiumChain(Chain, SoneiumChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_soneium_chain_settings(**kwargs), **kwargs)
+
+class SuperseedChainCommon():
+    eth: Token = Token(chain_id='5330', chain_name='Superseed', token_address='ETH', symbol='ETH', decimals=18, listed=True, wrapped_token_address='0x4200000000000000000000000000000000000006')
+    o_usdt: Token = Token(chain_id='5330', chain_name='Superseed', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
+    usdc: Token = Token(chain_id='5330', chain_name='Superseed', token_address='0xc316c8252b5f2176d0135ebb0999e99296998f2e', symbol='USDC', decimals=6, listed=True, wrapped_token_address=None)
+
+class AsyncSuperseedChain(AsyncChain, SuperseedChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_superseed_chain_settings(**kwargs), **kwargs)
+
+class SuperseedChain(Chain, SuperseedChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_superseed_chain_settings(**kwargs), **kwargs)
+
+class CeloChainCommon():
+    celo: Token = Token(chain_id='42220', chain_name='Celo', token_address='0x471ece3750da237f93b8e339c536989b8978a438', symbol='CELO', decimals=18, listed=True, wrapped_token_address=None)
+    o_usdt: Token = Token(chain_id='42220', chain_name='Celo', token_address='0x1217BfE6c773EEC6cc4A38b5Dc45B92292B6E189', symbol='oUSDT', decimals=6, listed=True, wrapped_token_address=None)
+    usdt: Token = Token(chain_id='42220', chain_name='Celo', token_address='0x48065fbbe25f71c9282ddf5e1cd6d6a887483d5e', symbol='USDT', decimals=6, listed=True, wrapped_token_address=None)
+    weth: Token = Token(chain_id='42220', chain_name='Celo', token_address='0xd221812de1bd094f35587ee8e174b07b6167d9af', symbol='WETH', decimals=18, listed=True, wrapped_token_address=None)
+
+class AsyncCeloChain(AsyncChain, CeloChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_celo_chain_settings(**kwargs), **kwargs)
+
+class CeloChain(Chain, CeloChainCommon):
+    def __init__(self, **kwargs): super().__init__(make_celo_chain_settings(**kwargs), **kwargs)
+
 def get_chain(chain_id: str, **kwargs) -> Chain:
     if chain_id == '10': return OPChain(**kwargs)
     elif chain_id == '8453': return BaseChain(**kwargs)
     elif chain_id == '130': return UniChain(**kwargs)
     elif chain_id == '1135': return LiskChain(**kwargs)
+    elif chain_id == '34443': return ModeChain(**kwargs)
+    elif chain_id == '252': return FraxtalChain(**kwargs)
+    elif chain_id == '57073': return InkChain(**kwargs)
+    elif chain_id == '1868': return SoneiumChain(**kwargs)
+    elif chain_id == '5330': return SuperseedChain(**kwargs)
+    elif chain_id == '42220': return CeloChain(**kwargs)
     else: raise ValueError(f"Unsupported chain ID: {chain_id}")
 
 def get_async_chain(chain_id: str, **kwargs) -> AsyncChain:
@@ -1413,6 +1501,12 @@ def get_async_chain(chain_id: str, **kwargs) -> AsyncChain:
     elif chain_id == '8453': return AsyncBaseChain(**kwargs)
     elif chain_id == '130': return AsyncUniChain(**kwargs)
     elif chain_id == '1135': return AsyncLiskChain(**kwargs)
+    elif chain_id == '34443': return AsyncModeChain(**kwargs)
+    elif chain_id == '252': return AsyncFraxtalChain(**kwargs)
+    elif chain_id == '57073': return AsyncInkChain(**kwargs)
+    elif chain_id == '1868': return AsyncSoneiumChain(**kwargs)
+    elif chain_id == '5330': return AsyncSuperseedChain(**kwargs)
+    elif chain_id == '42220': return AsyncCeloChain(**kwargs)
     else: raise ValueError(f"Unsupported chain ID: {chain_id}")
 
 def get_simnet_chain(chain_id: str, **kwargs) -> Chain:
