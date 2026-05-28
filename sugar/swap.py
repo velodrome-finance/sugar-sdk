@@ -151,11 +151,18 @@ class RoutePlanner:
 # Constants
 CONTRACT_BALANCE = int("0x8000000000000000000000000000000000000000000000000000000000000000", 16)
 
-def setup_planner(quote: Quote, slippage: float, account: str, router_address: str) -> RoutePlanner:
+def setup_planner(quote: Quote, slippage: float, account: str, router_address: str,
+                  slipstream_factory_addr: Optional[str] = None,
+                  old_slipstream_factory_addr: Optional[str] = None) -> RoutePlanner:
     """Setup route planner with the given quote and chain"""
 
     route_planner = RoutePlanner()
     min_amount_out = apply_slippage(quote.amount_out, slippage)
+    # fall back to QuoteInput's factory pair if caller didn't pass them
+    if slipstream_factory_addr is None: slipstream_factory_addr = quote.input.slipstream_factory_addr
+    if old_slipstream_factory_addr is None: old_slipstream_factory_addr = quote.input.old_slipstream_factory_addr
+    pp_kwargs = dict(slipstream_factory_addr=slipstream_factory_addr,
+                     old_slipstream_factory_addr=old_slipstream_factory_addr)
 
     tokens_come_from_contract = quote.input.amount_in == CONTRACT_BALANCE
     
@@ -191,7 +198,7 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
                 router_address if quote.to_token.wrapped_token_address else account,
                 quote.amount_in,
                 min_amount_out,
-                pack_path(nodes, for_swap=True).encoded,
+                pack_path(nodes, for_swap=True, **pp_kwargs).encoded,
                 not tokens_come_from_contract,
                 False, # isUni
             ]
@@ -212,7 +219,7 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
                 router_address if is_first_batch_v2 else next_batch[0][0].lp,
                 quote.amount_in,
                 0,  # No expectations on min amount out for first batch
-                pack_path(first_batch, for_swap=True).encoded,
+                pack_path(first_batch, for_swap=True, **pp_kwargs).encoded,
                 not tokens_come_from_contract,
                 False,  # isUni
             ]
@@ -229,7 +236,7 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
                     router_address if is_batch_v2 else next_batch[0][0].lp,
                     0 if is_batch_v2 else CONTRACT_BALANCE,
                     0,  # No expectations for middle batches
-                    pack_path(batch, for_swap=True).encoded,
+                    pack_path(batch, for_swap=True, **pp_kwargs).encoded,
                     False,  # Money comes from contract
                     False,  # isUni
                 ]
@@ -244,7 +251,7 @@ def setup_planner(quote: Quote, slippage: float, account: str, router_address: s
                 router_address if quote.to_token.wrapped_token_address else account,
                 0 if is_last_batch_v2 else CONTRACT_BALANCE,
                 min_amount_out,
-                pack_path(last_batch, for_swap=True).encoded,
+                pack_path(last_batch, for_swap=True, **pp_kwargs).encoded,
                 False,  # Money comes from contract
                 False,  # isUni
             ]

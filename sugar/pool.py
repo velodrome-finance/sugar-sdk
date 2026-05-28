@@ -60,6 +60,7 @@ class LiquidityPoolForSwap:
     type: int
     token0_address: str
     token1_address: str
+    factory: Optional[str] = None
 
     @property
     def is_cl(self) -> bool:
@@ -79,13 +80,15 @@ class LiquidityPoolForSwap:
     @classmethod
     def from_tuple(cls, t: Tuple, chain_id: str, chain_name: str) -> "LiquidityPoolForSwap":
         token0, token1, pool_type = normalize_address(t[2]), normalize_address(t[3]), t[1]
+        factory = normalize_address(t[4]) if len(t) > 4 and t[4] else None
         return LiquidityPoolForSwap(
             chain_id=chain_id,
             chain_name=chain_name,
             lp=normalize_address(t[0]),
             type=pool_type,
             token0_address=token0,
-            token1_address=token1
+            token1_address=token1,
+            factory=factory
         )
 
 @dataclass(frozen=True)
